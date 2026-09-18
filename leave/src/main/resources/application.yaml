@@ -1,3 +1,68 @@
 spring:
   application:
     name: leave
+
+  profiles:
+    default: local
+
+  config:
+    import:
+      # 비밀값은 yaml 에 쓰지 않고 .env 에서 읽는다. .env 는 .gitignore 에 있다.
+      # 파일이 없으면 무시한다(optional). 항목은 .env.example 참고.
+      # ./  = leave/.env   (gradlew bootRun 의 작업 디렉터리)
+      # ../ = 저장소 루트 .env (docker compose 와 공용)
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 스키마는 Flyway 가 관리한다. Hibernate 는 검증만 수행.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 50
+          time_zone: Asia/Seoul
+        order_inserts: true
+        order_updates: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        transport:
+          protocol: smtp
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  servlet:
+    multipart:
+      # 엑셀 임포트용 (Apache POI)
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+server:
+  servlet:
+    session:
+      # 세션 방식 인증
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax

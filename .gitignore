@@ -1,1 +1,7 @@
 .idea/
+
+# 로컬 환경변수
+.env
+
+# Docker 호스트 볼륨 (MySQL 데이터)
+/docker/mysql/data/
