@@ -1,0 +1,5 @@
+# 개발용 폼 로그인 및 기초 계정 생성. 실행 시 --spring.profiles.active=dev 지정.
+# DB 접속·로그는 기존 local 설정을 재사용한다.
+spring:
+  config:
+    import: classpath:application-local.yaml

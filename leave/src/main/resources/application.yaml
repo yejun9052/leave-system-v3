@@ -3,7 +3,7 @@ spring:
     name: leave
 
   profiles:
-    default: local
+    default: dev
 
   config:
     import:
@@ -61,8 +61,11 @@ spring:
 server:
   servlet:
     session:
-      # 세션 방식 인증
-      timeout: 30m
+      # 세션 방식 인증. 만료 기준은 "마지막 요청 이후 유휴 시간".
+      # 화면이 30초~1분 주기로 폴링(설계 4장, 9.1)하므로 탭을 열어두면 계속 갱신된다.
+      # 짧게 잡아도 자리 비움 로그아웃 효과가 없어 근무일 1일 기준으로 둔다.
+      # 최종 만료 정책은 인증 설계 시 확정 (설계 14.1 "로그인 상세").
+      timeout: 8h
       cookie:
         http-only: true
         same-site: lax
