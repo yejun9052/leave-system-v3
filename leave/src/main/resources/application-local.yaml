@@ -14,5 +14,6 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug
-    org.hibernate.orm.jdbc.bind: trace
+    # 인증 정보의 해시를 포함한 바인딩 값을 로그에 남기지 않는다.
+    org.hibernate.orm.jdbc.bind: off
     org.flywaydb: info

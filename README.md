@@ -54,7 +54,7 @@ leave-system/
 │       └── resources/
 │           ├── application.yaml         # 공통 설정
 │           ├── application-local.yaml   # 로컬 DB 설정
-│           ├── application-dev.yaml     # 개발 폼 로그인 (기본)
+│           ├── application-dev.yaml     # 개발 DB 설정 재사용 (기본)
 │           ├── application-prod.yaml    # 운영 프로파일
 │           ├── db/migration/            # Flyway 마이그레이션
 │           ├── templates/               # Thymeleaf 메일 템플릿
@@ -69,12 +69,14 @@ leave-system/
 
 ### 1. MySQL 기동
 
+먼저 `.env.example`을 `.env`로 복사하고 아래의 최초 관리자 값을 채운다.
+
 ```bash
 docker compose up -d
 ```
 
 - 기본값: 포트 `3306`, DB `leave`, 계정 `leave` / `leave`, root 비밀번호 `root`
-- 바꾸려면 `.env.example`을 `.env`로 복사 후 수정
+- DB 접속 정보를 바꾸려면 `.env`의 MySQL과 Spring 항목을 함께 수정
 - 데이터는 호스트 경로 `./docker/mysql/data`에 저장됨 (named volume 아님)
 
 ### 2. 백엔드
@@ -83,10 +85,10 @@ docker compose up -d
 cd leave && ./gradlew bootRun
 ```
 
-- 기본 프로파일은 `dev` (`spring.profiles.default`), 로컬 DB 설정을 재사용하며 테스트 폼 로그인을 활성화한다.
+- 기본 프로파일은 `dev` (`spring.profiles.default`)이며 로컬 DB 설정을 재사용한다. 인증은 모든 프로파일에서 동일한 DB 계정·세션 방식이다.
 - 기동 시 Flyway가 `db/migration`의 마이그레이션을 자동 적용
 - Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
-- 아래 테스트 계정으로 로그인하려면 `dev` 프로파일로 실행한다. 운영 Google OAuth는 별도 구현 대상이다.
+- 첫 기동 전 아래의 시스템 관리자 발급 환경변수를 설정한다. 운영 Google OAuth와 사원 로그인은 별도 구현 대상이다.
 
 ### 3. 프론트엔드
 
@@ -94,54 +96,32 @@ cd leave && ./gradlew bootRun
 cd leave-web && npm install && npm run dev
 ```
 
-### 기초 사원 계정
+### 최초 시스템 관리자 발급
 
-`dev` 프로파일 기동 시 `InitialEmployeeSeeder`가 다음 이메일을 대소문자 구분 없이 조회하고,
-없는 계정만 생성한다. 재기동해도 기존 계정의 정보·권한·비활성 상태는 변경하지 않는다.
+루트의 `.env.example`을 `.env`로 복사하고 `INITIAL_ADMIN_LOGIN_ID`,
+`INITIAL_ADMIN_OWNER`, `INITIAL_ADMIN_PASSWORD`를 입력한다. 비밀번호는 8자 이상으로 정한다.
+`INITIAL_ADMIN_OWNER`에는 실제 계정 사용자를 기록한다. `dev`와 `prod` 모두 첫 기동 시
+발급된 `SYS_ADMIN` 계정이 전혀 없다면 이 값으로 계정 하나를 생성한다. 비밀번호는 BCrypt
+해시로 DB에 저장한다. 이미 발급된 계정이 있으면 비활성 상태여도 재기동으로 다시
+활성화하거나 비밀번호·소유자를 바꾸지 않는다. 값이 빠진 상태에서 발급된 계정도 없으면
+앱은 명확한 오류와 함께 기동을 멈춘다.
 
+계정은 `employee` 테이블의 `SYS_ADMIN` 행으로 보관한다. 이 행은 이메일·입사일이 없는
+운영 계정이며 사원 수·연차 대상에서 제외해야 한다. DB는 활성 `SYS_ADMIN`을 최대
+1개로 제한한다. 기존 별도 테이블의 계정은 V5 마이그레이션에서 이관한다.
+회원가입과 사원 로그인은 이 단계의 범위 밖이다. 이전의 개발용 고정 비밀번호와 자동
+샘플 사원 생성은 로그인 경로에서 사용하지 않는다.
 
-| 이메일                      | 이름     | 역할          |
-| ------------------------ | ------ | ----------- |
-| `leaveAdmin@company.com` | 휴가관리자  | `HR_ADMIN`  |
-| `admin@company.com`      | 시스템관리자 | `SYS_ADMIN` |
-| `manager@company.com`    | 팀장     | `LEADER`    |
-| `employee@company.com`   | 사원     | `MEMBER`    |
+### 관리자 세션 로그인
 
+MySQL과 백엔드를 실행한 뒤 [로그인 폼](http://localhost:8080/login)에서 `.env`에
+설정한 로그인 ID와 비밀번호를 입력한다. Spring Security가 `POST /api/auth/login`으로
+인증하고 세션을 발급한다. 성공하면 `/api/auth/me`에서 로그인 ID와 `ROLE_SYS_ADMIN`을
+확인할 수 있고, 이후 브라우저는 `JSESSIONID` 쿠키로 세션을 유지한다.
 
-신규 계정은 재직 상태, 부서 미지정, 입사일은 생성 당일(Asia/Seoul)로 저장한다.
-실제 사용 전 부서와 입사일을 설정해야 한다. `dev`에서만 실행하며 `prod`가 함께 활성화돼도 실행하지 않는다.
-기초 계정을 삭제하면 다음 기동 때 다시 생성된다. 사용 중지는 비활성화로 처리한다.
-비밀번호는 개발 설정에서 BCrypt로 인코딩해 메모리에만 보관한다. DB에는 비밀번호 컬럼을 추가하지 않는다.
-기존 `ADMIN` 역할은 저장된 V01 데이터 호환을 위해 유지한다.
-
-### 개발용 세션 로그인
-
-MySQL을 실행한 뒤 PowerShell에서:
-
-```powershell
-cd C:\projects\leave-system\leave
-.\gradlew.bat bootRun --args="--spring.profiles.active=dev"
-```
-
-`dev`는 `application-local.yaml`의 DB 설정을 재사용한다. 브라우저에서
-[로그인 폼](http://localhost:8080/login)을 열고 다음 값을 입력한다.
-
-| Username | Password |
-| --- | --- |
-| `leaveAdmin` 또는 `leaveAdmin@company.com` | `leaveAdmin` |
-| `admin` 또는 `admin@company.com` | `admin` |
-| `manager` 또는 `manager@company.com` | `manager` |
-| `employee` 또는 `employee@company.com` | `employee` |
-
-로그인 ID는 대소문자를 구분하지 않고 비밀번호는 구분한다. DB에 해당 사원이 있어야 하며
-비활성 계정은 거부한다. 역할은 DB 값을 사용하고 기존 사원의 역할을 덮어쓰지 않는다.
-성공하면 `/api/auth/me`에서 이메일·역할을 확인하고, 이후 `JSESSIONID` 쿠키로 세션을 유지한다.
-폼은 `POST /api/auth/login`에 `username`, `password`, CSRF 토큰을 전송한다.
-로그아웃은 CSRF 토큰을 포함한 `POST /api/auth/logout`이며 세션과 쿠키를 제거한다.
-일반 실행은 기본 `dev` 프로파일을 사용한다. IDE나 환경변수에서 명시적으로 `local`을 지정하면 이 테스트 로그인이 활성화되지 않으므로 해당 지정을 제거하거나 `dev`로 바꾼다.
-
-Notion은 dev 사원을 Flyway 시드로 넣는 방향이고 현재 구현은 기존 이메일별 생성 러너를
-dev로 제한한 방식이다. 사용자 지정 계정명·비밀번호는 위 표를 기준으로 한다.
+폼 요청에는 CSRF 토큰이 포함된다. JSON 클라이언트는 `GET /api/auth/csrf`에서 토큰을
+받아 로그인·로그아웃 요청에 전달할 수 있다. 로그아웃은 CSRF 토큰을 포함한
+`POST /api/auth/logout`이며 세션과 쿠키를 제거한다.
 
 ---
 
@@ -152,7 +132,7 @@ dev로 제한한 방식이다. 사용자 지정 계정명·비밀번호는 위 �
 
 | 프로파일    | 용도         | DB 접속 정보                                                  |
 | ------- | ---------- | --------------------------------------------------------- |
-| `dev` | 개발 폼 로그인 (기본) | local의 DB 설정 재사용 |
+| `dev` | 개발 실행 (기본) | local의 DB 설정 재사용, 관리자 DB 로그인 |
 | `local` | 로컬 DB 설정 | 환경변수 없으면 `localhost:3306/leave` 기본값 사용 |
 | `prod`  | 운영         | `DB_HOST`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` **필수** |
 

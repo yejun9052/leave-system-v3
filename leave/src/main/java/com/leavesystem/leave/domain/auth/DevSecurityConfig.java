@@ -1,9 +1,9 @@
 package com.leavesystem.leave.domain.auth;
 
 import com.leavesystem.leave.domain.employee.EmployeeRepository;
+import com.leavesystem.leave.domain.employee.Role;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
@@ -13,55 +13,36 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
-import java.util.Locale;
-import java.util.Map;
-import java.util.stream.Collectors;
-
-/** 개발 환경에서만 사용하는 폼 로그인. 비밀번호는 DB에 저장하지 않는다. */
+/** employee 테이블의 단일 시스템 관리자 계정으로 세션 로그인한다. */
 @Configuration(proxyBeanMethods = false)
-@Profile("dev & !prod")
 public class DevSecurityConfig {
 
     @Bean
-    PasswordEncoder devPasswordEncoder() {
+    PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
     @Bean
-    UserDetailsService devUserDetailsService(EmployeeRepository employees, PasswordEncoder encoder) {
-        Map<String, String> passwords = Map.of(
-                "leaveadmin@company.com", "leaveAdmin",
-                "admin@company.com", "admin",
-                "manager@company.com", "manager",
-                "employee@company.com", "employee"
-        ).entrySet().stream().collect(Collectors.toUnmodifiableMap(
-                Map.Entry::getKey, entry -> encoder.encode(entry.getValue())));
-
+    UserDetailsService adminUserDetailsService(EmployeeRepository employees) {
         return username -> {
-            String email = username.trim().toLowerCase(Locale.ROOT);
-            if (!email.contains("@")) {
-                email += "@company.com";
+            var account = employees.findByLoginIdIgnoreCase(username.trim())
+                    .orElseThrow(() -> new UsernameNotFoundException("등록되지 않은 관리자 계정입니다."));
+            if (account.getRole() != Role.SYS_ADMIN || account.getPasswordHash() == null) {
+                throw new UsernameNotFoundException("등록되지 않은 관리자 계정입니다.");
             }
-            String password = passwords.get(email);
-            if (password == null) {
-                throw new UsernameNotFoundException("등록되지 않은 개발 계정입니다.");
-            }
-            var employee = employees.findByEmailIgnoreCase(email)
-                    .orElseThrow(() -> new UsernameNotFoundException("사원 정보가 없습니다."));
-
-            return User.withUsername(employee.getEmail())
-                    .password(password)
-                    .roles(employee.getRole().name())
-                    .disabled(!employee.isActive())
+            return User.withUsername(account.getLoginId())
+                    .password(account.getPasswordHash())
+                    .roles("SYS_ADMIN")
+                    .disabled(!account.isActive())
                     .build();
         };
     }
 
     @Bean
-    SecurityFilterChain devSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/login", "/error").permitAll()
+                        .requestMatchers("/login", "/api/auth/csrf", "/error").permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form
                         .loginProcessingUrl("/api/auth/login")

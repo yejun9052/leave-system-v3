@@ -23,13 +23,13 @@ import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
 
 /**
- * 사원. 설계 문서 7장.
+ * 사원과 단일 시스템 관리자 계정. 설계 문서 7장.
  *
- * <p>사번은 사용하지 않고 이메일을 식별자로 쓴다. 퇴사자는 삭제하지 않고
+ * <p>실제 사원은 사번 대신 이메일을 식별자로 쓴다. 퇴사자는 삭제하지 않고
  * {@code active=false} 로 비활성화하여 기존 신청·원장·이력을 보존한다.
  *
- * <p>로그인 수단(자체 비밀번호 / 사내 계정 연동)은 설계 문서 14.1 의 미결 사항이므로
- * 인증 관련 필드는 아직 두지 않는다.
+ * <p>SYS_ADMIN 행은 운영용 로그인 계정이며 실제 사원 수와 연차 대상에서 제외한다.
+ * 이 행에는 이메일과 입사일 대신 별도 로그인 ID와 비밀번호 해시가 들어간다.
  */
 @Entity
 @Getter
@@ -42,14 +42,20 @@ public class Employee extends BaseTimeEntity {
     @Column(name = "id")
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 50)
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "email", nullable = false, length = 150, unique = true)
+    @Column(name = "email", length = 150, unique = true)
     private String email;
 
+    @Column(name = "login_id", length = 80, unique = true)
+    private String loginId;
+
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
     /** 입사일. 연차 자동 부여·소멸의 기준이다(5.2). */
-    @Column(name = "hire_date", nullable = false)
+    @Column(name = "hire_date")
     private LocalDate hireDate;
 
     @Enumerated(EnumType.STRING)
@@ -74,5 +80,12 @@ public class Employee extends BaseTimeEntity {
         this.role = role;
         this.department = department;
         this.active = active;
+    }
+
+    public static Employee systemAdmin(String ownerName, String loginId, String passwordHash) {
+        Employee account = new Employee(ownerName, null, null, Role.SYS_ADMIN, null, true);
+        account.loginId = loginId;
+        account.passwordHash = passwordHash;
+        return account;
     }
 }

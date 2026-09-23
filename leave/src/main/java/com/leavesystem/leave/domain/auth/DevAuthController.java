@@ -1,16 +1,15 @@
 package com.leavesystem.leave.domain.auth;
 
 import com.leavesystem.leave.common.response.ApiResponse;
-import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 개발용 로그인 결과 및 세션 유지 확인 API. */
+/** 세션 로그인 상태와 폼/API 요청용 CSRF 토큰을 제공한다. */
 @RestController
-@Profile("dev & !prod")
 public class DevAuthController {
 
     @GetMapping("/api/auth/me")
@@ -20,6 +19,15 @@ public class DevAuthController {
                         .map(authority -> authority.getAuthority()).toList()));
     }
 
-    public record CurrentUser(String email, List<String> roles) {
+    @GetMapping("/api/auth/csrf")
+    public ApiResponse<CsrfValue> csrf(CsrfToken token) {
+        return ApiResponse.success(new CsrfValue(token.getHeaderName(), token.getParameterName(),
+                token.getToken()));
+    }
+
+    public record CurrentUser(String loginId, List<String> roles) {
+    }
+
+    public record CsrfValue(String headerName, String parameterName, String token) {
     }
 }
