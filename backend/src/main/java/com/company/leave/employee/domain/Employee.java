@@ -66,6 +66,10 @@ public class Employee extends BaseTimeEntity {
     @Column(name = "system_account", nullable = false)
     private boolean systemAccount = false;
 
+    /** true 면 비밀번호를 바꾸기 전까지 대부분의 API 사용 불가(임시 비밀번호 발급·기존 계정 이관 직후). */
+    @Column(name = "password_change_required", nullable = false)
+    private boolean passwordChangeRequired = false;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "employee_roles", joinColumns = @JoinColumn(name = "employee_id"))
     @Enumerated(EnumType.STRING)
@@ -96,8 +100,21 @@ public class Employee extends BaseTimeEntity {
 
     // --- 도메인 동작 ---
 
-    public void changePassword(String newHash) {
+    /** 서버가 발급한 임시 비밀번호로 설정 → 다음 로그인 후 변경 강제. */
+    public void setTemporaryPassword(String temporaryHash) {
+        this.passwordHash = temporaryHash;
+        requirePasswordChange();
+    }
+
+    /** 비밀번호 변경을 요구 상태로 만든다. */
+    public void requirePasswordChange() {
+        this.passwordChangeRequired = true;
+    }
+
+    /** 본인이 정한 비밀번호로 변경(직접 변경·재설정 링크) → 변경 요구 해제. */
+    public void setOwnPassword(String newHash) {
         this.passwordHash = newHash;
+        this.passwordChangeRequired = false;
     }
 
     public void updateProfile(String name, String position, String phone) {
@@ -205,6 +222,10 @@ public class Employee extends BaseTimeEntity {
 
     public boolean isSystemAccount() {
         return systemAccount;
+    }
+
+    public boolean isPasswordChangeRequired() {
+        return passwordChangeRequired;
     }
 
     public static final class Builder {

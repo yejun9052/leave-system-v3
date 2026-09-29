@@ -1,5 +1,8 @@
 package com.company.leave.employee;
 
+import com.company.leave.auth.SessionTerminator;
+import com.company.leave.auth.password.PasswordResetService;
+import com.company.leave.auth.password.TemporaryPasswordGenerator;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.department.domain.Department;
@@ -12,6 +15,7 @@ import com.company.leave.employee.dto.EmployeeResponse;
 import com.company.leave.employee.dto.EmployeeSearchCondition;
 import com.company.leave.employee.repository.EmployeeRepository;
 import com.company.leave.license.LicenseService;
+import com.company.leave.mail.AccountMailEvents;
 import com.company.leave.security.SecurityUtils;
 import com.company.leave.security.UserPrincipal;
 import java.time.LocalDate;
@@ -29,25 +33,31 @@ import org.springframework.util.StringUtils;
 @Service
 public class EmployeeService {
 
-    /** 관리자가 초기 비밀번호를 지정하지 않은 경우 사용하는 기본값. */
-    public static final String DEFAULT_PASSWORD = "welcome1234!";
-
     private final EmployeeRepository employeeRepository;
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
     private final LicenseService licenseService;
+    private final SessionTerminator sessionTerminator;
+    private final TemporaryPasswordGenerator temporaryPasswordGenerator;
+    private final PasswordResetService passwordResetService;
 
     public EmployeeService(EmployeeRepository employeeRepository,
                            DepartmentRepository departmentRepository,
                            PasswordEncoder passwordEncoder,
                            ApplicationEventPublisher eventPublisher,
-                           LicenseService licenseService) {
+                           LicenseService licenseService,
+                           SessionTerminator sessionTerminator,
+                           TemporaryPasswordGenerator temporaryPasswordGenerator,
+                           PasswordResetService passwordResetService) {
         this.employeeRepository = employeeRepository;
         this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
         this.licenseService = licenseService;
+        this.sessionTerminator = sessionTerminator;
+        this.temporaryPasswordGenerator = temporaryPasswordGenerator;
+        this.passwordResetService = passwordResetService;
     }
 
     @Transactional(readOnly = true)
@@ -96,12 +106,12 @@ public class EmployeeService {
         validateEmailUnique(req.email(), null);
         validateEmployeeNoUnique(req.employeeNo(), null);
 
-        String rawPassword = StringUtils.hasText(req.initialPassword())
-                ? req.initialPassword() : DEFAULT_PASSWORD;
+        // 초기 비밀번호는 서버가 생성해 메일로만 전달(관리자는 값을 알 수 없음) → 첫 로그인 시 변경 강제
+        String temporaryPassword = temporaryPasswordGenerator.generate();
 
         Employee employee = Employee.builder()
                 .email(req.email())
-                .passwordHash(passwordEncoder.encode(rawPassword))
+                .passwordHash(passwordEncoder.encode(temporaryPassword))
                 .name(req.name())
                 .employeeNo(emptyToNull(req.employeeNo()))
                 .department(resolveDepartment(req.departmentId()))
@@ -110,10 +120,14 @@ public class EmployeeService {
                 .hireDate(req.hireDate())
                 .roles(resolveRoles(req.roles()))
                 .build();
+        employee.requirePasswordChange();
         Employee saved = employeeRepository.save(employee);
 
         // 연차 엔진에 신규 입사자 알림 → 초기 연차 부여 (Phase 3)
         eventPublisher.publishEvent(new EmployeeCreatedEvent(saved.getId()));
+        // 계정 생성 메일(임시 비밀번호) — 커밋 후 발송
+        eventPublisher.publishEvent(new AccountMailEvents.AccountCreated(
+                saved.getEmail(), saved.getName(), temporaryPassword));
         return EmployeeResponse.from(saved);
     }
 
@@ -136,6 +150,8 @@ public class EmployeeService {
     public void resign(Long id, LocalDate resignedDate) {
         Employee employee = getManageable(id);
         employee.resign(resignedDate != null ? resignedDate : LocalDate.now());
+        // 퇴사자의 로그인 세션 즉시 폐기 (이후 요청은 AccountStateFilter 에서도 차단됨)
+        sessionTerminator.terminateAll(employee.getId());
     }
 
     @Transactional
@@ -143,18 +159,20 @@ public class EmployeeService {
         getManageable(id).reactivate();
     }
 
+    /** 관리자 초기화: 비밀번호를 바꾸지 않고 본인에게 재설정 링크 메일만 보낸다. */
     @Transactional
-    public void resetPassword(Long id, String newPassword) {
-        getManageable(id).changePassword(passwordEncoder.encode(newPassword));
+    public void sendPasswordResetMail(Long id) {
+        passwordResetService.issue(getManageable(id));
     }
 
+    /** 본인 비밀번호 변경. 성공하면 변경 요구 해제(세션 처리는 호출부에서). */
     @Transactional
     public void changeMyPassword(Long employeeId, String currentPassword, String newPassword) {
         Employee employee = getEntity(employeeId);
         if (!passwordEncoder.matches(currentPassword, employee.getPasswordHash())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "현재 비밀번호가 올바르지 않습니다.");
         }
-        employee.changePassword(passwordEncoder.encode(newPassword));
+        employee.setOwnPassword(passwordEncoder.encode(newPassword));
     }
 
     @Transactional

@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
-    private static final String BEARER = "bearerAuth";
+    private static final String SESSION = "sessionCookie";
 
     @Bean
     public OpenAPI openAPI() {
@@ -20,11 +20,12 @@ public class OpenApiConfig {
                         .title("연차관리 시스템 API")
                         .description("Annual Leave Management System REST API")
                         .version("v0.1.0"))
-                .addSecurityItem(new SecurityRequirement().addList(BEARER))
-                .components(new Components().addSecuritySchemes(BEARER,
+                // 인증: POST /api/auth/login 성공 시 발급되는 세션 쿠키(SESSION). 같은 출처에서 자동 전송.
+                .addSecurityItem(new SecurityRequirement().addList(SESSION))
+                .components(new Components().addSecuritySchemes(SESSION,
                         new SecurityScheme()
-                                .type(SecurityScheme.Type.HTTP)
-                                .scheme("bearer")
-                                .bearerFormat("JWT")));
+                                .type(SecurityScheme.Type.APIKEY)
+                                .in(SecurityScheme.In.COOKIE)
+                                .name("SESSION")));
     }
 }

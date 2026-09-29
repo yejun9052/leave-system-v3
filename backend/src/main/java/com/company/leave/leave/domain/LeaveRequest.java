@@ -107,6 +107,18 @@ public class LeaveRequest extends BaseTimeEntity {
         this.status = LeaveRequestStatus.CANCELLED;
     }
 
+    /** 공휴일 추가 등으로 일수를 다시 계산한 값으로 덮어쓴다(차감 전·후 모두 새 값 기준). */
+    public void adjustDays(BigDecimal days, BigDecimal deductedDays) {
+        this.days = days;
+        this.deductedDays = deductedDays;
+    }
+
+    /** 시스템 자동 취소(예: 기간 전체가 공휴일이 됨). 사유를 남긴다. */
+    public void autoCancel(String reason) {
+        this.status = LeaveRequestStatus.CANCELLED;
+        this.cancelReason = reason;
+    }
+
     /** 승인된 휴가에 대한 취소 요청 (팀장 재승인 대기). */
     public void requestCancel(String reason) {
         this.status = LeaveRequestStatus.CANCEL_REQUESTED;

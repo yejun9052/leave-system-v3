@@ -21,6 +21,11 @@ public enum ErrorCode {
     ACCOUNT_INACTIVE(HttpStatus.FORBIDDEN, "비활성화된 계정입니다."),
     TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS,
             "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요."),
+    PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN, "비밀번호를 변경한 뒤 이용할 수 있습니다."),
+    HOLIDAY_SYNC_FAILED(HttpStatus.BAD_GATEWAY, "공휴일 동기화에 실패했습니다. 잠시 후 다시 시도하세요."),
+    // 400: 로그인 없이 쓰는 재설정 화면에서 401(→ 로그인 화면 이동)과 구분
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST,
+            "링크가 만료되었거나 이미 사용되었습니다. 비밀번호 찾기를 다시 요청하세요."),
 
     // 사용자
     EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),

@@ -50,6 +50,7 @@ public class CoreDataInitializer implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         if (employeeRepository.countAll() > 0) {
+            releaseLocalAdminPasswordChange();
             return;
         }
 
@@ -74,6 +75,9 @@ public class CoreDataInitializer implements ApplicationRunner {
                 .roles(EnumSet.of(Role.SUPER_ADMIN))
                 .systemAccount(true)
                 .build();
+        if (random) {
+            admin.requirePasswordChange(); // 운영: 로그에 한 번 표시된 초기 비밀번호는 첫 로그인 때 변경 강제
+        }
         employeeRepository.save(admin);
 
         // 무작위 생성 시에만, 최초 1회 로그로 안내(운영자가 확인 후 즉시 변경).
@@ -88,6 +92,22 @@ public class CoreDataInitializer implements ApplicationRunner {
             log.info("=== 초기 관리자 계정 생성: {} (지정된 초기 비밀번호 사용 — 즉시 변경 권장) ===",
                     ADMIN_EMAIL);
         }
+    }
+
+    /**
+     * 로컬/테스트(app.admin.initial-password 지정) 초기 관리자는 비밀번호 변경을 강제하지 않는다.
+     * V12 가 기존 계정 전부를 변경 대상으로 표시하므로, 이미 있던 로컬 관리자는 여기서 해제한다.
+     */
+    private void releaseLocalAdminPasswordChange() {
+        if (!StringUtils.hasText(environment.getProperty("app.admin.initial-password"))) {
+            return;
+        }
+        employeeRepository.findByEmail(ADMIN_EMAIL)
+                .filter(Employee::isPasswordChangeRequired)
+                .ifPresent(admin -> {
+                    admin.setOwnPassword(admin.getPasswordHash());
+                    log.info("로컬 초기 관리자({})의 비밀번호 변경 요구를 해제했습니다.", ADMIN_EMAIL);
+                });
     }
 
     /** 안전한 무작위 초기 비밀번호(영숫자 16자). */

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CalendarCheck2, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,12 @@ export default function LoginPage() {
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               로그인
             </Button>
+            <Link
+              to="/forgot-password"
+              className="block text-center text-sm text-muted-foreground hover:text-foreground"
+            >
+              비밀번호를 잊으셨나요?
+            </Link>
           </form>
         </CardContent>
       </Card>

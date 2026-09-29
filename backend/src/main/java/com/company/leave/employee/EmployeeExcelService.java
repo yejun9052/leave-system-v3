@@ -111,8 +111,7 @@ public class EmployeeExcelService {
                             cell(row, 4),
                             cell(row, 5),
                             parseDate(cell(row, 6)),
-                            parseRoles(cell(row, 7)),
-                            null);
+                            parseRoles(cell(row, 7)));
                     employeeService.create(req);
                     created++;
                 } catch (Exception ex) {

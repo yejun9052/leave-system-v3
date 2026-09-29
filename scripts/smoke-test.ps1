@@ -1,12 +1,30 @@
+# Local/test DB only: sets QA account passwords directly in the DB (docker required)
 $base="http://localhost:8080/api"
+$DbContainer = "annual-leave-db"
+$DbUser = "leave"
+$DbName = "annual_leave"
 $pass=0; $fail=0
 function Check($name, $cond, $extra="") {
   if ($cond) { $script:pass++; "  [PASS] $name $extra" }
   else { $script:fail++; "  [FAIL] $name $extra" }
 }
-function Req($method, $url, $headers, $body=$null) {
+$baseUri = [Uri]$base
+function XsrfToken($sess) {
+  $c = $sess.Cookies.GetCookies($baseUri) | ? { $_.Name -eq "XSRF-TOKEN" } | Select-Object -First 1
+  if ($c) { return $c.Value }
+  return $null
+}
+function NewSession() {
+  $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+  try { Invoke-WebRequest -Uri "$base/auth/csrf" -WebSession $s -UseBasicParsing | Out-Null } catch {}
+  return $s
+}
+function Req($method, $url, $sess, $body=$null) {
   try {
-    $p = @{ Method=$method; Uri=$url; Headers=$headers; UseBasicParsing=$true }
+    if ($sess -eq $null) { $sess = NewSession }
+    $h = @{}
+    if ($method -ne "GET") { $tok = XsrfToken $sess; if ($tok) { $h["X-XSRF-TOKEN"] = $tok } }
+    $p = @{ Method=$method; Uri=$url; Headers=$h; WebSession=$sess; UseBasicParsing=$true }
     if ($body -ne $null) { $p.ContentType="application/json;charset=utf-8"; $p.Body=$body }
     $r = Invoke-WebRequest @p
     return @{ ok=$true; status=[int]$r.StatusCode; data=($r.Content | ConvertFrom-Json) }
@@ -17,15 +35,53 @@ function Req($method, $url, $headers, $body=$null) {
   }
 }
 function Login($email,$pw) {
-  $r = Req POST "$base/auth/login" @{} (@{email=$email;password=$pw}|ConvertTo-Json)
+  $s = NewSession
+  $r = Req POST "$base/auth/login" $s (@{email=$email;password=$pw}|ConvertTo-Json)
   if (-not $r.ok) { return $null }
-  return @{ Authorization = "Bearer " + $r.data.data.accessToken }
+  try { Invoke-WebRequest -Uri "$base/auth/csrf" -WebSession $s -UseBasicParsing | Out-Null } catch {}
+  return $s
 }
 
+# dates relative to base monday $mon (chosen after admin login, see below)
+function D($n) { return $mon.AddDays($n).ToString("yyyy-MM-dd", [Globalization.CultureInfo]::InvariantCulture) }
+
+# BCrypt hash of qatest1234! (single quotes: no $ interpolation)
+$QaHash = '$2a$10$O85JOhayUuxPLKsejBBat.3j17Brhut6tH8Lo4.wT7eDsYPNhS3Ve'
+function SetQaPassword($email) {
+  $sql = "UPDATE employees SET password_hash='" + $QaHash + "', password_change_required=false WHERE email='" + $email + "'"
+  $out = docker exec $DbContainer psql -U $DbUser -d $DbName -c $sql
+  Write-Host "  [INFO] set password $email : $out"
+}
 "===== 1. Auth / RBAC ====="
 $admin = Login "admin@company.com" "admin1234!"
 Check "admin login" ($admin -ne $null)
-$bad = Req POST "$base/auth/login" @{} (@{email="admin@company.com";password="nope"}|ConvertTo-Json)
+# pick base monday: first Monday on/after today+14 whose used dates avoid blackouts, holidays and weekends
+$blackouts = @((Req GET "$base/policy/blackouts" $admin).data.data)
+$holidays = @(docker exec $DbContainer psql -U $DbUser -d $DbName -Atc "select holiday_date from holidays" | ? { $_ -match '^\d{4}-\d{2}-\d{2}$' })
+$offsets = @(0,1,3,21,22,23,24,25,42,43,44)
+$mon = (Get-Date).Date.AddDays(14)
+while ($mon.DayOfWeek -ne [DayOfWeek]::Monday) { $mon = $mon.AddDays(1) }
+$found = $false
+for ($try = 0; $try -lt 52; $try++) {
+  $conflict = $false
+  foreach ($o in $offsets) {
+    $day = $mon.AddDays($o); $ds = D $o
+    if ($day.DayOfWeek -eq [DayOfWeek]::Saturday -or $day.DayOfWeek -eq [DayOfWeek]::Sunday) { $conflict = $true }
+    if ($holidays -contains $ds) { $conflict = $true }
+    foreach ($bo0 in $blackouts) {
+      if ($bo0) {
+        $bs = ([datetime]$bo0.startDate).ToString("yyyy-MM-dd", [Globalization.CultureInfo]::InvariantCulture)
+        $be = ([datetime]$bo0.endDate).ToString("yyyy-MM-dd", [Globalization.CultureInfo]::InvariantCulture)
+        if ($ds -ge $bs -and $ds -le $be) { $conflict = $true }
+      }
+    }
+  }
+  if (-not $conflict) { $found = $true; break }
+  $mon = $mon.AddDays(7)
+}
+if (-not $found) { "[ERROR] no free week"; exit 1 }
+"  [INFO] base monday = $($mon.ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture))"
+$bad = Req POST "$base/auth/login" $null (@{email="admin@company.com";password="nope"}|ConvertTo-Json)
 Check "wrong password -> 401" ($bad.status -eq 401) "(status=$($bad.status))"
 $me = Req GET "$base/auth/me" $admin
 Check "me = SUPER_ADMIN" ($me.data.data.roles -contains "SUPER_ADMIN")
@@ -40,12 +96,14 @@ $moveBad = Req PATCH "$base/departments/$($qa.id)/move" $admin (@{newParentId=$q
 Check "cycle move blocked" ($moveBad.status -eq 400 -and $moveBad.data.error.code -eq "DEPARTMENT_CYCLE") "(status=$($moveBad.status))"
 
 "===== 3. Employee create + seniority accrual ====="
-$leadBody = @{email="qa.lead@test.local";name="QA_Lead";departmentId=$qa.id;position="lead";hireDate="2019-03-01";roles=@("TEAM_LEAD");initialPassword="qatest1234!"}|ConvertTo-Json
+$leadBody = @{email="qa.lead@test.local";name="QA_Lead";departmentId=$qa.id;position="lead";hireDate="2019-03-01";roles=@("TEAM_LEAD")}|ConvertTo-Json
 $lead = (Req POST "$base/employees" $admin $leadBody).data.data
 Check "create team lead" ($lead.id -ne $null)
-$empBody = @{email="qa.emp@test.local";name="QA_Emp";departmentId=$qa.id;position="staff";hireDate="2024-01-02";roles=@("EMPLOYEE");initialPassword="qatest1234!"}|ConvertTo-Json
+$empBody = @{email="qa.emp@test.local";name="QA_Emp";departmentId=$qa.id;position="staff";hireDate="2024-01-02";roles=@("EMPLOYEE")}|ConvertTo-Json
 $emp = (Req POST "$base/employees" $admin $empBody).data.data
 Check "create staff" ($emp.id -ne $null)
+SetQaPassword "qa.lead@test.local"
+SetQaPassword "qa.emp@test.local"
 Req PUT "$base/departments/$($qa.id)" $admin (@{name="QA_Team";leadId=$lead.id;sortOrder=0}|ConvertTo-Json) | Out-Null
 $leadBal = (Req GET "$base/leave-requests/balances/$($lead.id)" $admin).data.data
 $empBal = (Req GET "$base/leave-requests/balances/$($emp.id)" $admin).data.data
@@ -56,7 +114,7 @@ Check "staff grant (2024 -> 15)" ($empBal.granted -eq 15) "(granted=$($empBal.gr
 $empH = Login "qa.emp@test.local" "qatest1234!"
 $leadH = Login "qa.lead@test.local" "qatest1234!"
 $annualId = ((Req GET "$base/leave-types" $empH).data.data | ? {$_.code -eq "ANNUAL"}).id
-$reqBody = @{leaveTypeId=$annualId;startDate="2026-07-20";endDate="2026-07-21";reason="qa annual"}|ConvertTo-Json
+$reqBody = @{leaveTypeId=$annualId;startDate=(D 0);endDate=(D 1);reason="qa annual"}|ConvertTo-Json
 $lr = (Req POST "$base/leave-requests" $empH $reqBody).data.data
 Check "annual request (2d, PENDING)" ($lr.status -eq "PENDING" -and $lr.days -eq 2) "(days=$($lr.days))"
 $pend = (Req GET "$base/leave-requests/pending" $leadH).data.data
@@ -65,7 +123,7 @@ $appr = (Req POST "$base/leave-requests/$($lr.id)/approve" $leadH).data.data
 Check "lead approve -> APPROVED" ($appr.status -eq "APPROVED")
 $empBal2 = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "balance used=2" ($empBal2.used -eq 2) "(used=$($empBal2.used))"
-$cal = (Req GET "$base/calendar/events?start=2026-07-01&end=2026-07-31" $empH).data.data
+$cal = (Req GET "$base/calendar/events?start=$(D -1)&end=$(D 7)" $empH).data.data
 Check "calendar reflects leave" (($cal | ? {$_.source -eq "LEAVE_REQUEST" -and $_.title -like "*QA_Emp*"}) -ne $null)
 
 "===== 5. Cancel re-approval workflow ====="
@@ -81,30 +139,30 @@ $capp = (Req POST "$base/leave-requests/$($lr.id)/cancel/approve" $leadH).data.d
 Check "cancel approve -> CANCELLED" ($capp.status -eq "CANCELLED")
 $empBal3 = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "balance restored (used=0)" ($empBal3.used -eq 0) "(used=$($empBal3.used))"
-$cal2 = (Req GET "$base/calendar/events?start=2026-07-01&end=2026-07-31" $empH).data.data
+$cal2 = (Req GET "$base/calendar/events?start=$(D -1)&end=$(D 7)" $empH).data.data
 Check "calendar cleared" (($cal2 | ? {$_.title -like "*QA_Emp*"}) -eq $null)
 
 "===== 6. Half day ====="
 $amId = ((Req GET "$base/leave-types" $empH).data.data | ? {$_.code -eq "HALF_AM"}).id
-$half = (Req POST "$base/leave-requests" $empH (@{leaveTypeId=$amId;startDate="2026-07-23";endDate="2026-07-23"}|ConvertTo-Json)).data.data
+$half = (Req POST "$base/leave-requests" $empH (@{leaveTypeId=$amId;startDate=(D 3);endDate=(D 3)}|ConvertTo-Json)).data.data
 Check "half-day request (0.5d)" ($half.days -eq 0.5) "(days=$($half.days))"
 Req POST "$base/leave-requests/$($half.id)/approve" $leadH | Out-Null
 $empBal4 = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "half-day used=0.5" ($empBal4.used -eq 0.5) "(used=$($empBal4.used))"
 
 "===== 7. Usage control - blackout ====="
-$bo = (Req POST "$base/policy/blackouts" $admin (@{startDate="2026-08-10";endDate="2026-08-14";name="QA_Blackout"}|ConvertTo-Json)).data.data
+$bo = (Req POST "$base/policy/blackouts" $admin (@{startDate=(D 21);endDate=(D 25);name="QA_Blackout"}|ConvertTo-Json)).data.data
 Check "create blackout" ($bo.id -ne $null)
-$blocked = Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate="2026-08-11";endDate="2026-08-12"}|ConvertTo-Json)
+$blocked = Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate=(D 22);endDate=(D 23)}|ConvertTo-Json)
 Check "request in blackout blocked" ($blocked.status -eq 409 -and $blocked.data.error.code -eq "LEAVE_BLACKOUT") "(status=$($blocked.status))"
 Req DELETE "$base/policy/blackouts/$($bo.id)" $admin | Out-Null
-$okAfter = Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate="2026-08-11";endDate="2026-08-12"}|ConvertTo-Json)
+$okAfter = Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate=(D 22);endDate=(D 23)}|ConvertTo-Json)
 Check "request ok after blackout removed" ($okAfter.ok -eq $true)
 if ($okAfter.ok) { Req POST "$base/leave-requests/$($okAfter.data.data.id)/cancel" $empH | Out-Null }
 
 "===== 8. Overlap prevention ====="
-Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate="2026-09-01";endDate="2026-09-02"}|ConvertTo-Json) | Out-Null
-$dup = Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate="2026-09-02";endDate="2026-09-03"}|ConvertTo-Json)
+Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate=(D 42);endDate=(D 43)}|ConvertTo-Json) | Out-Null
+$dup = Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate=(D 43);endDate=(D 44)}|ConvertTo-Json)
 Check "overlap blocked" ($dup.status -eq 409 -and $dup.data.error.code -eq "LEAVE_DATE_OVERLAP") "(status=$($dup.status))"
 
 "===== 9. RBAC isolation ====="

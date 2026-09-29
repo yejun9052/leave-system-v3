@@ -118,7 +118,7 @@ ls        # docker-compose.prod.yml, backend, frontend 등이 보이면 OK
 
 ## 6. 환경설정 (`.env` + 비밀정보 시크릿)
 
-> DB 비밀번호·JWT 서명키는 **`.env` 평문이 아니라 Docker secret 파일**로 관리합니다(보안 강화). `.env` 에는 접속주소·DB명·라이선스만 둡니다.
+> DB 비밀번호는 **`.env` 평문이 아니라 Docker secret 파일**로 관리합니다(보안 강화). `.env` 에는 접속주소·DB명·라이선스만 둡니다.
 
 ### 6-1. `.env` 만들기
 ```bash
@@ -142,15 +142,50 @@ POSTGRES_DB=annual_leave
 POSTGRES_USER=leave
 LICENSE_KEY=<발급받은 라이선스 문자열>
 LICENSE_HOST=<라이선스 발급 host>
+SESSION_COOKIE_SECURE=false
 ```
+> 모드 B(HTTP)로 운영할 때는 `SESSION_COOKIE_SECURE=false` 를 반드시 추가해야 로그인됩니다(기본값 true).
+
 저장: `Ctrl+O` → `Enter` → `Ctrl+X`
 
-### 6-2. 비밀정보(시크릿) 생성 — DB 비밀번호 · JWT 서명키
+### 6-1-1. 메일(SMTP) 설정
+백엔드는 회사 SMTP 로 계정 메일(계정 생성 시 임시 비밀번호, 비밀번호 재설정 링크)을 보냅니다. 트랜잭션 커밋 후 비동기로 발송하며, 발송이 실패해도 API 는 정상 응답하고 로그만 남깁니다(메일 본문의 임시 비밀번호·토큰은 로그에 남기지 않음). `.env` 에 아래 항목을 추가합니다.
+
+| 변수 | 의미 | 기본값 |
+|------|------|--------|
+| `MAIL_HOST` | SMTP 서버 주소 | `localhost` |
+| `MAIL_PORT` | SMTP 포트 | `587` |
+| `MAIL_USERNAME` | SMTP 계정 | (빈 값) |
+| `MAIL_AUTH` | SMTP 인증 사용 여부 | `true` |
+| `MAIL_STARTTLS` | STARTTLS 사용 여부 | `true` |
+| `MAIL_FROM` | 발신 주소 | `no-reply@annual-leave.local` |
+
+- SMTP 비밀번호는 `.env` 가 아니라 Docker secret `secrets/mail_password` 로 관리합니다(6-2 참고).
+- SMTP 설정이 틀리면 발송이 실패하고 백엔드 로그에 "메일 발송 실패"가 남습니다(API 는 정상 동작). 계정 생성·비밀번호 재설정에 메일이 필요하므로 운영 시 SMTP 설정은 필수입니다.
+- `MAIL_FROM` 은 회사 SMTP 가 허용하는 발신 주소로 지정하세요.
+- 메일 속 링크는 `.env` 의 `APP_ORIGIN` 주소 기준으로 만들어집니다.
+
+### 6-1-2. 공휴일 API 설정
+공공데이터포털 한국천문연구원 특일 정보 API(`getRestDeInfo`)로 공휴일을 `holidays` 테이블에 동기화합니다.
+- 공공데이터포털에서 발급받은 **Decoding 키**를 사용하세요(Encoding 키를 넣으면 이중 인코딩 오류가 납니다).
+- 키는 `.env` 가 아니라 Docker secret `secrets/holiday_api_key` 로 관리합니다(6-2 참고).
+- 매일 00:10(Asia/Seoul)에 올해·내년 공휴일을 자동 동기화하며, 관리자 화면 **정책 · 휴가종류 > 공휴일** 탭에서 연도별 조회와 수동 **동기화**도 할 수 있습니다.
+- 새 공휴일이 이미 신청된 휴가 기간에 걸리면 차감 일수를 자동 재계산해 잔액을 환원하고 직원에게 알립니다(기간 전체가 공휴일이면 자동 취소).
+- 키가 비어 있으면 동기화하지 않고(경고 로그) 기존 `holidays` 데이터만 사용합니다.
+
+### 6-2. 비밀정보(시크릿) 생성 — DB 비밀번호 · SMTP 비밀번호 · 공휴일 API 키
 `install.sh` 를 쓰면 **자동 생성**됩니다. 수동 생성은:
 ```bash
 mkdir -p secrets
 printf '%s' "$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-28)" > secrets/db_password
-printf '%s' "$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-64)" > secrets/jwt_secret
+# 메일(SMTP)을 쓰는 경우: SMTP 비밀번호 입력
+printf '%s' '<SMTP 비밀번호>' > secrets/mail_password
+# 메일을 쓰지 않는 경우: 빈 파일 생성(compose 가 파일을 요구하므로 반드시 있어야 함)
+# : > secrets/mail_password
+# 공휴일 API 키를 쓰는 경우: 공공데이터포털 Decoding 키 입력
+printf '%s' '<공휴일 API Decoding 키>' > secrets/holiday_api_key
+# 공휴일 API 를 쓰지 않는 경우: 빈 파일 생성(compose 가 파일을 요구하므로 반드시 있어야 함)
+# : > secrets/holiday_api_key
 chmod 700 secrets && chmod 644 secrets/*   # 파일 644: 컨테이너 비-root 사용자 읽기용(디렉터리 700 이 보호)
 ```
 - 값은 `secrets/` 파일 안에만 존재하고 컨테이너 내부 `/run/secrets/` 로만 주입됩니다(postgres·backend 공용).
@@ -205,9 +240,11 @@ docker compose -f docker-compose.prod.yml logs backend | grep -A4 "초기 관리
 이메일: admin@company.com
 초기 비밀번호: (위 로그의 "초기 비밀번호" 값)
 ```
-1. 로그인 후 **비밀번호 즉시 변경**(운영 전 필수). 관리자 계정은 사용자 목록에 노출되지 않으며, 우상단 **[내 정보 → 비밀번호 변경]** 으로 변경합니다.
+1. 로그인 후 **비밀번호 변경 화면이 강제로 표시**되며 변경 전에는 다른 기능을 쓸 수 없습니다(운영 전 필수). 관리자 계정은 사용자 목록에 노출되지 않으며, 우상단 **[내 정보 → 비밀번호 변경]** 으로 변경합니다.
 2. 부서 → 사용자 등록 순으로 시작
+   - 사용자 등록 시 서버가 임시 비밀번호를 생성해 **계정 생성 메일로만** 발송합니다(관리자는 값을 볼 수 없음, SMTP 설정 필수 — 6-1-1). 사용자는 첫 로그인 때 비밀번호를 변경해야 합니다.
 3. 최초 기동 시 기본 정책·휴가종류·2026 공휴일·포상/경조사 규칙이 자동 시드됩니다
+4. 비밀번호를 잊은 경우: 로그인 화면의 **"비밀번호 찾기"** 를 쓰거나, 관리자가 사용자 관리에서 **재설정 메일 발송**을 실행합니다(재설정 링크는 30분 유효·1회용).
 
 > 초기 비밀번호를 지정하고 싶으면(테스트 등) `.env` 없이 컨테이너 env 로 `APP_ADMIN_INITIAL_PASSWORD=원하는값` 을 주면 그 값으로 생성됩니다(운영 비권장).
 
@@ -269,6 +306,7 @@ scp "$env:USERPROFILE\Desktop\annual-leave-deploy.tar.gz" 사용자명@서버IP:
 tar xzf annual-leave-deploy.tar.gz && cd annual-leave
 docker compose -f docker-compose.prod.yml up -d --build   # Flyway가 스키마 자동 마이그레이션(데이터 보존)
 ```
+> 이번 버전으로 업그레이드하면 **기존 계정은 모두 첫 로그인 때 비밀번호 변경이 요구됩니다**(사용자에게 사전 공지 권장).
 > 프론트 화면 수정도 이 한 번의 빌드에 포함됩니다(별도 프론트 배포 불필요). 자세한 빌드/검증 절차는 [OBFUSCATION.md](OBFUSCATION.md) 참고.
 
 ---
@@ -325,11 +363,12 @@ LICENSE_HOST=leave.고객도메인.com     # 발급 때 지정한 host 와 동�
 ## 14. 배포 전 보안 체크리스트
 
 - [ ] `admin@company.com` 기본 비밀번호 변경
-- [ ] DB 비번·JWT 서명키는 **`secrets/` 파일**(무작위·강력), `chmod 600`
+- [ ] DB 비번은 **`secrets/` 파일**(무작위·강력), `chmod 600`
 - [ ] `secrets/`·`.env` 는 git·백업 공유에서 제외
 - [ ] 방화벽 80/443/22만 개방 (5432·8080은 외부 미노출 — 기본 구성상 안전)
 - [ ] 정기 DB 백업(cron)
 - [ ] 가능하면 모드 A(HTTPS)로 운영
+- [ ] SMTP 설정 후 테스트 메일 수신·스팸함 확인
 
 ---
 
@@ -341,7 +380,9 @@ LICENSE_HOST=leave.고객도메인.com     # 발급 때 지정한 host 와 동�
 | 502 Bad Gateway | 백엔드 기동 전 접속 → `logs backend`에서 `Started ...` 확인 |
 | DB 연결 실패 | `.env` `POSTGRES_PASSWORD` 확인 후 `... up -d` |
 | 포트 충돌(80/443) | 서버의 기존 nginx/apache 중지: `sudo systemctl stop nginx` |
-| 로그인 후 401 반복 | `JWT_SECRET` 변경 후 재배포 시 → 재로그인 |
+| 업그레이드 후 로그인 풀림 | 재로그인(세션 테이블 호환성) |
+| 메일이 안 옴 | SMTP 설정(`MAIL_*`, `secrets/mail_password`) 확인, 백엔드 로그(`logs backend`)의 "메일 발송 실패" 확인 |
+| 공휴일이 안 들어옴 | 키(Decoding 키인지) 확인, 백엔드 로그(`logs backend`)의 "공휴일 동기화 실패" 확인 |
 | (모드 B) 앱 설치 안 됨 | HTTP에선 PWA/서비스워커 비활성 — 정상. 앱 기능엔 지장 없음 |
 
 ---

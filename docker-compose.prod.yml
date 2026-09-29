@@ -43,14 +43,26 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DB_USERNAME: ${POSTGRES_USER}
-      # DB_PASSWORD, JWT_SECRET 은 Docker secret 파일로 주입 (아래 secrets)
+      # DB_PASSWORD 는 Docker secret 파일로 주입 (아래 secrets)
       CORS_ORIGINS: ${APP_ORIGIN}
       LICENSE_KEY: ${LICENSE_KEY}
       LICENSE_HOST: ${LICENSE_HOST}
+      # 세션 쿠키 Secure 속성. HTTP 로 운영하는 모드 B 에서만 .env 에 false 지정
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      # 메일 속 링크(로그인·비밀번호 재설정)의 기준 주소
+      APP_ORIGIN: ${APP_ORIGIN}
+      # 회사 SMTP (비밀번호는 Docker secret mail_password). 계정 메일 발송에 필수
+      MAIL_HOST: ${MAIL_HOST:-localhost}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_AUTH: ${MAIL_AUTH:-true}
+      MAIL_STARTTLS: ${MAIL_STARTTLS:-true}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@annual-leave.local}
       TZ: Asia/Seoul
     secrets:
       - db_password
-      - jwt_secret
+      - mail_password
+      - holiday_api_key
     security_opt:
       - no-new-privileges:true
     deploy:
@@ -86,8 +98,12 @@ services:
 secrets:
   db_password:
     file: ./secrets/db_password
-  jwt_secret:
-    file: ./secrets/jwt_secret
+  # SMTP 비밀번호. SMTP 미사용이어도 파일은 있어야 함(빈 파일 가능)
+  mail_password:
+    file: ./secrets/mail_password
+  # 공공데이터포털 특일 정보 API 서비스 키(Decoding 키). 미사용이어도 파일은 있어야 함(빈 파일 가능)
+  holiday_api_key:
+    file: ./secrets/holiday_api_key
 
 volumes:
   pgdata:

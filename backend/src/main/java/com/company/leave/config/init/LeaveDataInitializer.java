@@ -1,6 +1,7 @@
 package com.company.leave.config.init;
 
 import com.company.leave.calendar.domain.Holiday;
+import com.company.leave.calendar.holiday.HolidayApiProperties;
 import com.company.leave.calendar.repository.HolidayRepository;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.repository.LeaveTypeRepository;
@@ -34,17 +35,20 @@ public class LeaveDataInitializer implements ApplicationRunner {
     private final PolicyService policyService;
     private final ServiceAwardRuleRepository awardRuleRepository;
     private final SpecialLeaveRuleRepository specialRuleRepository;
+    private final HolidayApiProperties holidayApiProperties;
 
     public LeaveDataInitializer(LeaveTypeRepository leaveTypeRepository,
                                 HolidayRepository holidayRepository,
                                 PolicyService policyService,
                                 ServiceAwardRuleRepository awardRuleRepository,
-                                SpecialLeaveRuleRepository specialRuleRepository) {
+                                SpecialLeaveRuleRepository specialRuleRepository,
+                                HolidayApiProperties holidayApiProperties) {
         this.leaveTypeRepository = leaveTypeRepository;
         this.holidayRepository = holidayRepository;
         this.policyService = policyService;
         this.awardRuleRepository = awardRuleRepository;
         this.specialRuleRepository = specialRuleRepository;
+        this.holidayApiProperties = holidayApiProperties;
     }
 
     @Override
@@ -63,9 +67,10 @@ public class LeaveDataInitializer implements ApplicationRunner {
             log.info("기본 휴가 종류 6종 생성");
         }
 
-        if (holidayRepository.count() == 0) {
+        // 공휴일 API 키가 있으면 HolidayStartupSync 가 API 로 채운다. 하드코딩 2026년 시드는 키가 없을 때(로컬 개발)만 쓰는 대체 수단
+        if (holidayRepository.count() == 0 && !holidayApiProperties.configured()) {
             seedHolidays2026();
-            log.info("2026년 공휴일 시드 완료");
+            log.info("2026년 공휴일 시드 완료(공휴일 API 키 없음 → 하드코딩 대체 데이터)");
         }
 
         if (awardRuleRepository.count() == 0) {

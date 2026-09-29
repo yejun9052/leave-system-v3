@@ -1,11 +1,11 @@
 buildscript {
     repositories { mavenCentral() }
-    dependencies { classpath("com.guardsquare:proguard-gradle:7.6.1") }
+    dependencies { classpath("com.guardsquare:proguard-gradle:7.10.0") }
 }
 
 plugins {
     java
-    id("org.springframework.boot") version "3.5.16"
+    id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -28,37 +28,33 @@ repositories {
     mavenCentral()
 }
 
-val queryDslVersion = "6.12"   // OpenFeign 유지보수 포크(io.github.openfeign.querydsl), CVE-2024-49203 수정
-val jjwtVersion = "0.12.6"
+val queryDslVersion = "7.7"    // OpenFeign 유지보수 포크(io.github.openfeign.querydsl), CVE-2024-49203 수정, Hibernate 7 대응
 val mapstructVersion = "1.6.3"
 val poiVersion = "5.4.0"
 
-// 보안 패치: BOM 관리 버전을 CVE 수정본으로 상향
-extra["jackson-bom.version"] = "2.21.5"      // CVE-2026-54515
-extra["commons-lang3.version"] = "3.18.0"    // CVE-2025-48924
+// 보안 패치 고정값(jackson 2.21.5 / commons-lang3 3.18.0)은 Boot 4.1.1 관리 버전
+// (jackson-2-bom 2.21.5, commons-lang3 3.20.0)이 이미 충족하므로 제거.
 
 dependencies {
     // Spring Boot starters
-    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-mail")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.boot:spring-boot-starter-aop")
+    implementation("org.springframework.boot:spring-boot-starter-aspectj")
 
-    // Database & migration
-    implementation("org.flywaydb:flyway-core")
+    // Database & migration (Boot 4: Flyway 자동 구성은 전용 스타터 필요)
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
     // API documentation
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
 
-    // JWT
-    implementation("io.jsonwebtoken:jjwt-api:$jjwtVersion")
-    runtimeOnly("io.jsonwebtoken:jjwt-impl:$jjwtVersion")
-    runtimeOnly("io.jsonwebtoken:jjwt-jackson:$jjwtVersion")
+    // 서버 세션: PostgreSQL 저장(Spring Session JDBC). 스키마는 Flyway(V11)가 관리
+    implementation("org.springframework.boot:spring-boot-starter-session-jdbc")
 
     // QueryDSL — OpenFeign 유지보수 포크(패키지 com.querydsl.* 호환, jakarta 기본)
     implementation("io.github.openfeign.querydsl:querydsl-jpa:$queryDslVersion")
@@ -84,16 +80,11 @@ dependencies {
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.springframework.security:spring-security-test")
-    testImplementation("org.testcontainers:junit-jupiter")
-    testImplementation("org.testcontainers:postgresql")
+    testImplementation("org.springframework.boot:spring-boot-starter-security-test")
+    // Testcontainers 2.x(Boot 관리 버전): 모듈명에 testcontainers- 접두사
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-}
-
-dependencyManagement {
-    imports {
-        mavenBom("org.testcontainers:testcontainers-bom:1.20.4")
-    }
 }
 
 // Generated QueryDSL Q-classes location

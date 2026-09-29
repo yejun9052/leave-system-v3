@@ -1,11 +1,11 @@
 package com.company.leave.config;
 
-import com.company.leave.security.JwtAuthenticationFilter;
-import com.company.leave.security.JwtProperties;
+import com.company.leave.security.AccountStateFilter;
+import com.company.leave.security.CustomUserDetailsService;
 import com.company.leave.security.RestAuthEntryPoints;
+import com.company.leave.security.SessionTolerantSecurityContextRepository;
 import java.util.Arrays;
 import java.util.List;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -13,11 +13,16 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
+import org.springframework.security.web.context.DelegatingSecurityContextRepository;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -26,12 +31,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableMethodSecurity
-@EnableConfigurationProperties(JwtProperties.class)
 public class SecurityConfig {
 
     private static final String[] PUBLIC_PATHS = {
             "/api/auth/login",
-            "/api/auth/refresh",
+            "/api/auth/csrf",
+            "/api/auth/password-reset/**",
             "/api/license",
             "/swagger-ui/**",
             "/swagger-ui.html",
@@ -39,24 +44,31 @@ public class SecurityConfig {
             "/actuator/health",
     };
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthEntryPoints authEntryPoints;
+    private final CustomUserDetailsService userDetailsService;
     private final Environment environment;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          RestAuthEntryPoints authEntryPoints,
+    public SecurityConfig(RestAuthEntryPoints authEntryPoints,
+                          CustomUserDetailsService userDetailsService,
                           Environment environment) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authEntryPoints = authEntryPoints;
+        this.userDetailsService = userDetailsService;
         this.environment = environment;
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http,
+                                           SecurityContextRepository securityContextRepository,
+                                           CsrfTokenRepository csrfTokenRepository) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                // SPA 방식 CSRF: XSRF-TOKEN 쿠키로 발급 → 프론트가 X-XSRF-TOKEN 헤더로 전송.
+                // 저장소는 로그인/로그아웃 시 토큰 교체에도 쓰도록 빈으로 공유(spa() 의 기본 저장소와 동일 설정).
+                .csrf(csrf -> csrf
+                        .spa()
+                        .csrfTokenRepository(csrfTokenRepository))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // 로그인 API 가 세션에 명시 저장하는 저장소와 동일 인스턴스로 요청마다 인증을 복원
+                .securityContext(sc -> sc.securityContextRepository(securityContextRepository))
                 .headers(headers -> headers
                         // 기본(X-Frame-Options:DENY, X-Content-Type-Options:nosniff, HSTS-over-HTTPS)에 더해
                         .contentSecurityPolicy(csp -> csp.policyDirectives(
@@ -81,8 +93,27 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(authEntryPoints.authenticationEntryPoint())
                         .accessDeniedHandler(authEntryPoints.accessDeniedHandler()))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                // 세션 인증 사용자의 재직 상태·역할을 매 요청 DB 로 재확인 (인가 판단 전)
+                .addFilterBefore(new AccountStateFilter(userDetailsService, authEntryPoints),
+                        AnonymousAuthenticationFilter.class);
         return http.build();
+    }
+
+    /**
+     * 요청 속성 + HttpSession(=Spring Session JDBC) 저장소(Spring Security 기본 구성과 동일)에,
+     * 역직렬화할 수 없는 세션은 폐기하고 미인증 처리하는 보호막을 씌운다.
+     */
+    @Bean
+    public SecurityContextRepository securityContextRepository() {
+        return new SessionTolerantSecurityContextRepository(new DelegatingSecurityContextRepository(
+                new RequestAttributeSecurityContextRepository(),
+                new HttpSessionSecurityContextRepository()));
+    }
+
+    /** csrf.spa() 가 쓰는 것과 같은 쿠키 저장소(XSRF-TOKEN, JS 읽기 허용). */
+    @Bean
+    public CsrfTokenRepository csrfTokenRepository() {
+        return CookieCsrfTokenRepository.withHttpOnlyFalse();
     }
 
     @Bean
@@ -94,7 +125,8 @@ public class SecurityConfig {
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Content-Disposition"));
-        // 인증은 Authorization 헤더(JWT) 기반이라 쿠키 자격증명이 필요 없음 → false (CWE-942 완화)
+        // 프론트는 같은 출처(운영: Caddy 뒤 동일 도메인, 개발: Vite 프록시)로만 호출하므로
+        // 교차 출처 쿠키 자격증명을 허용할 필요 없음 → false (CWE-942 완화)
         config.setAllowCredentials(false);
         config.setMaxAge(3600L);
 

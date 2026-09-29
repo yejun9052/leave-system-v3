@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { extractErrorMessage } from "@/api/client";
+import HolidayTab from "./HolidayTab";
 
 export default function PolicyPage() {
   return (
@@ -50,6 +51,7 @@ export default function PolicyPage() {
           <TabsTrigger value="types">휴가 종류</TabsTrigger>
           <TabsTrigger value="rules">포상 · 경조사</TabsTrigger>
           <TabsTrigger value="blackout">블랙아웃</TabsTrigger>
+          <TabsTrigger value="holidays">공휴일</TabsTrigger>
           <TabsTrigger value="promotion">촉진 · 미사용</TabsTrigger>
         </TabsList>
         <TabsContent value="policy">
@@ -63,6 +65,9 @@ export default function PolicyPage() {
         </TabsContent>
         <TabsContent value="blackout">
           <BlackoutTab />
+        </TabsContent>
+        <TabsContent value="holidays">
+          <HolidayTab />
         </TabsContent>
         <TabsContent value="promotion">
           <PromotionTab />

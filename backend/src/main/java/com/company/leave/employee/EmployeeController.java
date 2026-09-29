@@ -1,5 +1,6 @@
 package com.company.leave.employee;
 
+import com.company.leave.auth.SessionTerminator;
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.employee.domain.EmployeeStatus;
 import com.company.leave.employee.dto.EmployeeRequests;
@@ -8,6 +9,7 @@ import com.company.leave.employee.dto.EmployeeSearchCondition;
 import com.company.leave.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.LocalDate;
@@ -37,10 +39,13 @@ public class EmployeeController {
 
     private final EmployeeService employeeService;
     private final EmployeeExcelService excelService;
+    private final SessionTerminator sessionTerminator;
 
-    public EmployeeController(EmployeeService employeeService, EmployeeExcelService excelService) {
+    public EmployeeController(EmployeeService employeeService, EmployeeExcelService excelService,
+                              SessionTerminator sessionTerminator) {
         this.employeeService = employeeService;
         this.excelService = excelService;
+        this.sessionTerminator = sessionTerminator;
     }
 
     @Operation(summary = "사용자 목록/검색 (페이지)")
@@ -96,12 +101,12 @@ public class EmployeeController {
         return ApiResponse.ok();
     }
 
-    @Operation(summary = "비밀번호 초기화(관리자)")
+    @Operation(summary = "비밀번호 재설정 메일 발송(관리자)",
+            description = "비밀번호는 바꾸지 않고, 본인에게 1회용 재설정 링크(30분 유효)를 메일로 보낸다.")
     @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
     @PatchMapping("/{id}/password")
-    public ApiResponse<Void> resetPassword(
-            @PathVariable Long id, @Valid @RequestBody EmployeeRequests.ResetPassword req) {
-        employeeService.resetPassword(id, req.newPassword());
+    public ApiResponse<Void> resetPassword(@PathVariable Long id) {
+        employeeService.sendPasswordResetMail(id);
         return ApiResponse.ok();
     }
 
@@ -114,12 +119,14 @@ public class EmployeeController {
         return ApiResponse.ok(employeeService.updateMyProfile(SecurityUtils.currentEmployeeId(), req));
     }
 
-    @Operation(summary = "내 비밀번호 변경")
+    @Operation(summary = "내 비밀번호 변경", description = "성공 시 현재 세션 ID 재발급, 다른 기기 세션 종료.")
     @PatchMapping("/me/password")
     public ApiResponse<Void> changeMyPassword(
-            @Valid @RequestBody EmployeeRequests.ChangeMyPassword req) {
-        employeeService.changeMyPassword(
-                SecurityUtils.currentEmployeeId(), req.currentPassword(), req.newPassword());
+            @Valid @RequestBody EmployeeRequests.ChangeMyPassword req, HttpServletRequest request) {
+        Long employeeId = SecurityUtils.currentEmployeeId();
+        employeeService.changeMyPassword(employeeId, req.currentPassword(), req.newPassword());
+        // 변경이 커밋된 뒤: 현재 세션은 새 ID 로 유지, 다른 기기 로그인은 종료
+        sessionTerminator.renewCurrentAndTerminateOthers(employeeId, request);
         return ApiResponse.ok();
     }
 

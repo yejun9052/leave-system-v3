@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { reportApi } from "@/api/dashboard";
-import { tokenStore } from "@/lib/tokenStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,9 +15,7 @@ export default function ReportsPage() {
   const download = async () => {
     setLoading(true);
     try {
-      const res = await fetch(reportApi.usageExportUrl(year), {
-        headers: { Authorization: `Bearer ${tokenStore.getAccess()}` },
-      });
+      const res = await fetch(reportApi.usageExportUrl(year), { credentials: "same-origin" });
       if (!res.ok) throw new Error("다운로드 실패");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

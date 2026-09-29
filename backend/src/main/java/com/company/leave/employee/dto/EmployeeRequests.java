@@ -21,8 +21,7 @@ public final class EmployeeRequests {
             @Size(max = 50) String position,
             @Size(max = 30) String phone,
             @NotNull LocalDate hireDate,
-            Set<Role> roles,
-            @Size(min = 8, max = 72) String initialPassword) {
+            Set<Role> roles) {
     }
 
     public record Update(
@@ -34,9 +33,6 @@ public final class EmployeeRequests {
             @Size(max = 30) String phone,
             @NotNull LocalDate hireDate,
             Set<Role> roles) {
-    }
-
-    public record ResetPassword(@NotBlank @Size(min = 8, max = 72) String newPassword) {
     }
 
     public record ChangeMyPassword(

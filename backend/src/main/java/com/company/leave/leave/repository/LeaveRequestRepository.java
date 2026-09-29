@@ -63,4 +63,14 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             """)
     List<LeaveRequest> findApprovedBetween(@Param("start") LocalDate start,
                                            @Param("end") LocalDate end);
+
+    /** 주어진 상태이면서 기간이 [start, end] 와 겹치는 신청 (공휴일 추가 시 재계산 대상 조회). */
+    @Query("""
+            select r from LeaveRequest r
+            where r.status in :statuses
+              and r.startDate <= :end and r.endDate >= :start
+            """)
+    List<LeaveRequest> findByStatusInOverlapping(@Param("statuses") Collection<LeaveRequestStatus> statuses,
+                                                 @Param("start") LocalDate start,
+                                                 @Param("end") LocalDate end);
 }

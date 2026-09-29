@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import type { Me, Role } from "@/types";
-import { tokenStore } from "@/lib/tokenStore";
 import { authApi } from "@/api/auth";
 
 interface AuthState {
@@ -8,39 +7,43 @@ interface AuthState {
   initialized: boolean;
   login: (email: string, password: string) => Promise<void>;
   loadMe: () => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   hasAnyRole: (...roles: Role[]) => boolean;
   isManager: () => boolean;
 }
 
+/**
+ * 인증 상태. 인증 정보 자체는 서버 세션(HttpOnly 쿠키)에만 있고 브라우저 저장소에 두지 않는다.
+ * 로그인·로그아웃 시 서버가 CSRF 토큰을 폐기하므로 직후 새 토큰을 받는다.
+ */
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   initialized: false,
 
   login: async (email, password) => {
-    const tokens = await authApi.login(email, password);
-    tokenStore.set(tokens.accessToken, tokens.refreshToken);
-    const user = await authApi.me();
+    await authApi.csrf();
+    const user = await authApi.login(email, password);
+    await authApi.csrf();
     set({ user, initialized: true });
   },
 
   loadMe: async () => {
-    if (!tokenStore.getAccess()) {
-      set({ user: null, initialized: true });
-      return;
-    }
     try {
+      await authApi.csrf();
       const user = await authApi.me();
       set({ user, initialized: true });
     } catch {
-      tokenStore.clear();
       set({ user: null, initialized: true });
     }
   },
 
-  logout: () => {
-    tokenStore.clear();
-    set({ user: null });
+  logout: async () => {
+    try {
+      await authApi.logout();
+    } finally {
+      set({ user: null });
+      await authApi.csrf().catch(() => undefined);
+    }
   },
 
   hasAnyRole: (...roles) => {

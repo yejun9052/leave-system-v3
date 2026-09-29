@@ -10,8 +10,10 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:prod}
   jackson:
     time-zone: Asia/Seoul
-    serialization:
-      write-dates-as-timestamps: false
+    # Jackson 3: 날짜 직렬화 옵션은 SerializationFeature → DateTimeFeature 로 이동
+    datatype:
+      datetime:
+        write-dates-as-timestamps: false
   servlet:
     multipart:
       # 엑셀 업로드 등 파일 크기 제한 (DoS·압축폭탄 완화)
@@ -26,11 +28,19 @@ spring:
         format_sql: true
         jdbc:
           time_zone: Asia/Seoul
+  session:
+    # 미사용 만료 시간 (예: 2h, 30m). 환경변수 SESSION_TIMEOUT 으로 변경 가능
+    timeout: ${SESSION_TIMEOUT:2h}
+    jdbc:
+      # 세션 테이블은 Flyway(V11)가 관리 → 자동 생성 끔
+      initialize-schema: never
   flyway:
     enabled: true
     baseline-on-migrate: true
     locations: classpath:db/migration
   mail:
+    # 회사 SMTP. 운영의 비밀번호는 Docker secret(mail_password) → application-prod.yml
+    # 로컬 계정·비밀번호는 backend/application-secret.yml(git 제외)에 입력
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
     username: ${MAIL_USERNAME:}
@@ -41,16 +51,31 @@ spring:
           auth: ${MAIL_AUTH:false}
           starttls:
             enable: ${MAIL_STARTTLS:false}
+          # SMTP 응답 지연 시 발송 스레드가 묶이지 않도록 제한(ms)
+          connectiontimeout: 5000
+          timeout: 10000
+          writetimeout: 10000
 
 server:
   port: 8080
   forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        # 세션 ID 쿠키: JS 접근 불가 · HTTPS 전용 · 교차 사이트 요청 시 미전송(Lax)
+        http-only: true
+        # HTTP 로 운영하는 경우(.env 모드 B)에만 SESSION_COOKIE_SECURE=false
+        secure: ${SESSION_COOKIE_SECURE:true}
+        same-site: lax
 
 springdoc:
   swagger-ui:
     path: /swagger-ui
     tags-sorter: alpha
     operations-sorter: alpha
+    # XSRF-TOKEN 쿠키 값을 X-XSRF-TOKEN 헤더로 실어 보냄(기본 이름과 동일) → Swagger 에서 POST 가능
+    csrf:
+      enabled: true
   default-produces-media-type: application/json
 
 management:
@@ -59,21 +84,23 @@ management:
       exposure:
         include: health,info
   health:
-    # 메일은 사용하지 않으므로 헬스 체크에서 제외(불필요한 SMTP 접속 시도·WARN·health DOWN 방지)
+    # 메일은 부가 기능(실패해도 요청은 성공)이므로 헬스 체크에서 제외(SMTP 장애로 health DOWN 방지)
     mail:
       enabled: false
 
 app:
-  jwt:
-    # 운영에서는 반드시 환경변수 JWT_SECRET 설정(미설정 시 기동 실패). 로컬 기본값은 application-local.yml 에만 둔다.
-    secret: ${JWT_SECRET:}
-    access-token-validity-minutes: 30
-    refresh-token-validity-days: 14
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000}
   mail:
     from: ${MAIL_FROM:no-reply@annual-leave.local}
-    enabled: ${MAIL_ENABLED:false}
+    # 메일 속 링크(로그인·비밀번호 재설정)의 기준 주소
+    link-base-url: ${APP_ORIGIN:http://localhost:5173}
+  holiday-api:
+    # 공공데이터포털 한국천문연구원 특일 정보 API (공휴일 동기화)
+    base-url: https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService
+    # 서비스 키(Decoding 키). 저장소에 커밋 금지 → 환경변수 HOLIDAY_API_KEY,
+    # 로컬은 backend/application-secret.yml(git 제외 파일)에 입력
+    service-key: ${HOLIDAY_API_KEY:}
   license:
     # 라이선스는 항상 집행됩니다. 유효한 키가 없으면 모든 기능이 차단됩니다.
     key: ${LICENSE_KEY:}                 # 발급받은 라이선스 문자열 (운영 필수)

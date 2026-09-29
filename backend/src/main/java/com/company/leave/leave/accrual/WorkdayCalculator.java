@@ -43,6 +43,20 @@ public class WorkdayCalculator {
         return workdays;
     }
 
+    /**
+     * 실제 잔액 차감액: 반차=deductDays, 종일=근무일수×deductDays, 비차감 유형=0.
+     * 휴가 신청(LeaveRequestService)과 공휴일 반영 재계산(HolidayImpactService)이 같은 규칙을 쓰도록 여기에 둔다.
+     */
+    public BigDecimal deductionFor(LeaveType type, BigDecimal durationDays) {
+        if (!type.isDeductFromAnnual()) {
+            return BigDecimal.ZERO;
+        }
+        if (type.isHalfDay()) {
+            return type.getDeductDays();
+        }
+        return durationDays.multiply(type.getDeductDays());
+    }
+
     public boolean isWorkday(LocalDate date, Set<LocalDate> holidays) {
         DayOfWeek dow = date.getDayOfWeek();
         if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {

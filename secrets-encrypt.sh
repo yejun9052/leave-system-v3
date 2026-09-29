@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  시크릿 암호화 — DB 비밀번호 / JWT 서명키를 마스터키로 암호화
+#  시크릿 암호화 — DB 비밀번호를 마스터키로 암호화
 #    평문 secrets/*  →  암호문 secrets.enc/*.enc  (AES-256-CBC, PBKDF2)
 #
 #  · 마스터키는 앱 폴더 "밖"(기본 ~/.config/annual-leave/master.key)에 보관
 #    → 앱 폴더(secrets.enc 포함)를 백업/공유해도 키가 없으면 복호화 불가.
 #  · secrets/ 에 기존 평문이 있으면 그 값을, 없으면 무작위 값을 생성해 암호화.
+#    (단 mail_password·holiday_api_key 는 사용자가 넣는 값이라 무작위 생성하지 않고, 없으면 빈 값으로 암호화)
 #
 #  사용: bash secrets-encrypt.sh
 #  키 위치 변경: AL_KEY_FILE=/경로/master.key bash secrets-encrypt.sh
@@ -33,7 +34,7 @@ enc_one() { # $1=name $2=length
   if [ -f "$PLAIN_DIR/$name" ]; then
     val="$(cat "$PLAIN_DIR/$name")"          # 기존 평문 유지
   else
-    val="$(gen "$len")"                        # 없으면 무작위 생성
+    if [ "$len" = "0" ]; then val=""; else val="$(gen "$len")"; fi   # 없으면 무작위 생성(길이 0 = 빈 값)
   fi
   printf '%s' "$val" | openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt \
       -pass file:"$KEY_FILE" -out "$ENC_DIR/$name.enc"
@@ -41,7 +42,8 @@ enc_one() { # $1=name $2=length
 }
 
 enc_one db_password 28
-enc_one jwt_secret 64
+enc_one mail_password 0
+enc_one holiday_api_key 0
 chmod 600 "$ENC_DIR"/*.enc 2>/dev/null || true
 
 echo "[OK] 완료. '$ENC_DIR/' 는 백업/보관해도 안전(암호문)."

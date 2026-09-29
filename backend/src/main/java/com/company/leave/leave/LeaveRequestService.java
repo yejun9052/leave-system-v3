@@ -106,7 +106,7 @@ public class LeaveRequestService {
         int appliedYear = appliedYear(start, policy);
 
         // 실제 차감액 = 근무일수 × 휴가유형 deductDays (반차는 deductDays, 비차감 유형은 0)
-        BigDecimal deduction = deductionFor(type, days);
+        BigDecimal deduction = workdayCalculator.deductionFor(type, days);
 
         if (type.isDeductFromAnnual()) {
             LeaveBalance balance = balanceService.getOrCreate(employeeId, appliedYear);
@@ -356,16 +356,6 @@ public class LeaveRequestService {
         }
     }
 
-    /** 실제 잔액 차감액: 반차=deductDays, 종일=근무일수×deductDays, 비차감 유형=0. */
-    private BigDecimal deductionFor(LeaveType type, BigDecimal durationDays) {
-        if (!type.isDeductFromAnnual()) {
-            return BigDecimal.ZERO;
-        }
-        if (type.isHalfDay()) {
-            return type.getDeductDays();
-        }
-        return durationDays.multiply(type.getDeductDays());
-    }
 
     private void validatePeriod(LocalDate start, LocalDate end, LeaveType type) {
         if (end.isBefore(start)) {

@@ -2,7 +2,7 @@ package com.company.leave.license;
 
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.common.exception.ErrorCode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

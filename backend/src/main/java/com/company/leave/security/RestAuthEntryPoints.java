@@ -2,7 +2,7 @@ package com.company.leave.security;
 
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.common.exception.ErrorCode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.http.MediaType;
@@ -32,7 +32,8 @@ public class RestAuthEntryPoints {
                 write(response, ErrorCode.FORBIDDEN);
     }
 
-    private void write(HttpServletResponse response, ErrorCode code) throws IOException {
+    /** 표준 JSON 오류 응답 작성(보안 필터에서 직접 응답할 때도 사용). */
+    public void write(HttpServletResponse response, ErrorCode code) throws IOException {
         response.setStatus(code.status().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");

@@ -9,12 +9,9 @@ import {
   KeyRound,
   Upload,
   Download,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { employeeApi, type EmployeeCreate } from "@/api/employees";
 import { departmentApi } from "@/api/departments";
-import { tokenStore } from "@/lib/tokenStore";
 import {
   ROLE_LABEL,
   type Employee,
@@ -114,10 +111,8 @@ export default function EmployeePage() {
   };
 
   const onExport = () => {
-    // 인증 헤더가 필요하므로 fetch 후 blob 다운로드
-    fetch(employeeApi.exportUrl, {
-      headers: { Authorization: `Bearer ${tokenStore.getAccess()}` },
-    })
+    // 세션 쿠키로 인증(같은 출처) → fetch 후 blob 다운로드
+    fetch(employeeApi.exportUrl, { credentials: "same-origin" })
       .then((r) => r.blob())
       .then((blob) => {
         const url = URL.createObjectURL(blob);
@@ -304,73 +299,39 @@ export default function EmployeePage() {
   );
 }
 
-function PasswordInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  const [show, setShow] = useState(false);
-  return (
-    <div className="relative">
-      <Input
-        type={show ? "text" : "password"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete="new-password"
-        className="pr-10"
-      />
-      <button
-        type="button"
-        tabIndex={-1}
-        onClick={() => setShow((s) => !s)}
-        title={show ? "숨기기" : "보기"}
-        className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
-      >
-        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
-    </div>
-  );
-}
-
 function ResetPasswordButton({ employee }: { employee: Employee }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [pw, setPw] = useState("");
   const mutation = useMutation({
-    mutationFn: () => employeeApi.resetPassword(employee.id, pw),
+    mutationFn: () => employeeApi.sendPasswordResetMail(employee.id),
     onSuccess: () => {
-      toast({ title: "비밀번호가 초기화되었습니다.", variant: "success" });
+      toast({ title: "재설정 메일을 보냈습니다.", variant: "success" });
       setOpen(false);
-      setPw("");
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
   return (
     <>
-      <Button size="icon" variant="ghost" title="비밀번호 초기화" onClick={() => setOpen(true)}>
+      <Button size="icon" variant="ghost" title="재설정 메일 발송" onClick={() => setOpen(true)}>
         <KeyRound className="h-4 w-4" />
       </Button>
       {open && (
         <Dialog open onOpenChange={(o) => !o && setOpen(false)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>{employee.name} 비밀번호 초기화</DialogTitle>
+              <DialogTitle>비밀번호 재설정 메일 발송</DialogTitle>
             </DialogHeader>
-            <div className="space-y-2">
-              <Label>새 비밀번호 (8자 이상)</Label>
-              <PasswordInput value={pw} onChange={setPw} />
-            </div>
+            <p className="text-sm leading-relaxed">
+              <span className="font-medium">{employee.name}</span>({employee.email})님에게 비밀번호 재설정
+              링크를 메일로 보냅니다. 링크는 30분 동안 한 번만 쓸 수 있으며, 본인이 새 비밀번호를 정하기
+              전까지 기존 비밀번호는 그대로입니다.
+            </p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>
                 취소
               </Button>
-              <Button disabled={pw.length < 8 || mutation.isPending} onClick={() => mutation.mutate()}>
-                초기화
+              <Button disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+                메일 발송
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -402,7 +363,6 @@ function EmployeeDialog({
     phone: employee?.phone ?? "",
     hireDate: employee?.hireDate ?? new Date().toISOString().slice(0, 10),
     roles: employee?.roles ?? ["EMPLOYEE"],
-    initialPassword: "",
   });
 
   const set = <K extends keyof EmployeeCreate>(k: K, v: EmployeeCreate[K]) =>
@@ -427,10 +387,13 @@ function EmployeeDialog({
         roles: form.roles.length ? form.roles : (["EMPLOYEE"] as Role[]),
       };
       if (isEdit && employee) return employeeApi.update(employee.id, payload);
-      return employeeApi.create({ ...payload, initialPassword: form.initialPassword || undefined });
+      return employeeApi.create(payload);
     },
     onSuccess: () => {
-      toast({ title: "저장되었습니다.", variant: "success" });
+      toast({
+        title: isEdit ? "저장되었습니다." : "사용자를 추가하고 임시 비밀번호 메일을 보냈습니다.",
+        variant: "success",
+      });
       onSaved();
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
@@ -480,16 +443,12 @@ function EmployeeDialog({
           <Field label="입사일">
             <Input type="date" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} />
           </Field>
-          {!isEdit && (
-            <Field label="초기 비밀번호 (미입력 시 기본값)">
-              <PasswordInput
-                value={form.initialPassword ?? ""}
-                onChange={(v) => set("initialPassword", v)}
-                placeholder="welcome1234!"
-              />
-            </Field>
-          )}
         </div>
+        {!isEdit && (
+          <p className="text-sm text-muted-foreground">
+            저장하면 임시 비밀번호가 사용자 이메일로 발송됩니다. 사용자는 첫 로그인 때 비밀번호를 변경해야 합니다.
+          </p>
+        )}
 
         <div className="space-y-2">
           <Label>권한</Label>
