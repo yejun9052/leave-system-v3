@@ -1,0 +1,211 @@
+package com.company.leave.policy.domain;
+
+import com.company.leave.common.entity.BaseTimeEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.math.BigDecimal;
+
+/**
+ * 전사 연차 운영 정책 (단일 활성 레코드).
+ */
+@Entity
+@Table(name = "leave_policy")
+public class LeavePolicy extends BaseTimeEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // --- 부여 기준 ---
+    @Enumerated(EnumType.STRING)
+    @Column(name = "grant_basis", nullable = false, length = 20)
+    private GrantBasis grantBasis = GrantBasis.HIRE_DATE;
+
+    @Column(name = "fiscal_start_month", nullable = false)
+    private int fiscalStartMonth = 1;
+
+    @Column(name = "fiscal_start_day", nullable = false)
+    private int fiscalStartDay = 1;
+
+    // --- 근속 가산 (근로기준법 기본값) ---
+    @Column(name = "base_annual_days", nullable = false)
+    private BigDecimal baseAnnualDays = BigDecimal.valueOf(15);
+
+    @Column(name = "seniority_step_years", nullable = false)
+    private int seniorityStepYears = 2;
+
+    @Column(name = "seniority_increment_days", nullable = false)
+    private BigDecimal seniorityIncrementDays = BigDecimal.ONE;
+
+    @Column(name = "max_annual_days", nullable = false)
+    private BigDecimal maxAnnualDays = BigDecimal.valueOf(25);
+
+    @Column(name = "monthly_accrual_enabled", nullable = false)
+    private boolean monthlyAccrualEnabled = true;
+
+    @Column(name = "monthly_accrual_max", nullable = false)
+    private int monthlyAccrualMax = 11;
+
+    // --- 사용 규칙 ---
+    @Column(name = "allow_negative", nullable = false)
+    private boolean allowNegative = false;
+
+    @Column(name = "half_day_enabled", nullable = false)
+    private boolean halfDayEnabled = true;
+
+    /** 같은 부서 동시 부재 최대 인원 (0 = 무제한) */
+    @Column(name = "max_concurrent_absence", nullable = false)
+    private int maxConcurrentAbsence = 0;
+
+    /** 최소 사전 신청 기한(일). 0 = 제한 없음 */
+    @Column(name = "min_advance_days", nullable = false)
+    private int minAdvanceDays = 0;
+
+    /** 최대 연속 사용일 (0 = 무제한) */
+    @Column(name = "max_consecutive_days", nullable = false)
+    private int maxConsecutiveDays = 0;
+
+    // --- 촉진 / 이월 ---
+    @Column(name = "promotion_enabled", nullable = false)
+    private boolean promotionEnabled = true;
+
+    @Column(name = "carry_over_enabled", nullable = false)
+    private boolean carryOverEnabled = false;
+
+    @Column(name = "max_carry_over_days", nullable = false)
+    private BigDecimal maxCarryOverDays = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private boolean active = true;
+
+    protected LeavePolicy() {
+    }
+
+    public static LeavePolicy createDefault() {
+        return new LeavePolicy();
+    }
+
+    /** 정책 설정 일괄 적용. */
+    public void apply(Settings s) {
+        this.grantBasis = s.grantBasis();
+        this.fiscalStartMonth = s.fiscalStartMonth();
+        this.fiscalStartDay = s.fiscalStartDay();
+        this.baseAnnualDays = s.baseAnnualDays();
+        this.seniorityStepYears = s.seniorityStepYears();
+        this.seniorityIncrementDays = s.seniorityIncrementDays();
+        this.maxAnnualDays = s.maxAnnualDays();
+        this.monthlyAccrualEnabled = s.monthlyAccrualEnabled();
+        this.monthlyAccrualMax = s.monthlyAccrualMax();
+        this.allowNegative = s.allowNegative();
+        this.halfDayEnabled = s.halfDayEnabled();
+        this.maxConcurrentAbsence = s.maxConcurrentAbsence();
+        this.minAdvanceDays = s.minAdvanceDays();
+        this.maxConsecutiveDays = s.maxConsecutiveDays();
+        this.promotionEnabled = s.promotionEnabled();
+        this.carryOverEnabled = s.carryOverEnabled();
+        this.maxCarryOverDays = s.maxCarryOverDays() != null ? s.maxCarryOverDays() : BigDecimal.ZERO;
+    }
+
+    /** 정책 설정 값 캐리어. */
+    public record Settings(
+            GrantBasis grantBasis,
+            int fiscalStartMonth,
+            int fiscalStartDay,
+            BigDecimal baseAnnualDays,
+            int seniorityStepYears,
+            BigDecimal seniorityIncrementDays,
+            BigDecimal maxAnnualDays,
+            boolean monthlyAccrualEnabled,
+            int monthlyAccrualMax,
+            boolean allowNegative,
+            boolean halfDayEnabled,
+            int maxConcurrentAbsence,
+            int minAdvanceDays,
+            int maxConsecutiveDays,
+            boolean promotionEnabled,
+            boolean carryOverEnabled,
+            BigDecimal maxCarryOverDays) {
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public GrantBasis getGrantBasis() {
+        return grantBasis;
+    }
+
+    public int getFiscalStartMonth() {
+        return fiscalStartMonth;
+    }
+
+    public int getFiscalStartDay() {
+        return fiscalStartDay;
+    }
+
+    public BigDecimal getBaseAnnualDays() {
+        return baseAnnualDays;
+    }
+
+    public int getSeniorityStepYears() {
+        return seniorityStepYears;
+    }
+
+    public BigDecimal getSeniorityIncrementDays() {
+        return seniorityIncrementDays;
+    }
+
+    public BigDecimal getMaxAnnualDays() {
+        return maxAnnualDays;
+    }
+
+    public boolean isMonthlyAccrualEnabled() {
+        return monthlyAccrualEnabled;
+    }
+
+    public int getMonthlyAccrualMax() {
+        return monthlyAccrualMax;
+    }
+
+    public boolean isAllowNegative() {
+        return allowNegative;
+    }
+
+    public boolean isHalfDayEnabled() {
+        return halfDayEnabled;
+    }
+
+    public int getMaxConcurrentAbsence() {
+        return maxConcurrentAbsence;
+    }
+
+    public int getMinAdvanceDays() {
+        return minAdvanceDays;
+    }
+
+    public int getMaxConsecutiveDays() {
+        return maxConsecutiveDays;
+    }
+
+    public boolean isPromotionEnabled() {
+        return promotionEnabled;
+    }
+
+    public boolean isCarryOverEnabled() {
+        return carryOverEnabled;
+    }
+
+    public BigDecimal getMaxCarryOverDays() {
+        return maxCarryOverDays;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+}

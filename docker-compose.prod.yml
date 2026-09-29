@@ -1,0 +1,95 @@
+# =====================================================================
+# 운영 배포용 Docker Compose
+#   web(Caddy, 자동 HTTPS) → backend(Spring Boot) → postgres
+#   사용법: cp .env.prod.example .env  (값 수정 후)
+#           docker compose -f docker-compose.prod.yml up -d --build
+# =====================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: leave-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      # 비밀번호는 Docker secret 파일에서 읽음 (.env 평문 저장 안 함)
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      TZ: Asia/Seoul
+    secrets:
+      - db_password
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: leave-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      # DB_PASSWORD, JWT_SECRET 은 Docker secret 파일로 주입 (아래 secrets)
+      CORS_ORIGINS: ${APP_ORIGIN}
+      LICENSE_KEY: ${LICENSE_KEY}
+      LICENSE_HOST: ${LICENSE_HOST}
+      TZ: Asia/Seoul
+    secrets:
+      - db_password
+      - jwt_secret
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    expose:
+      - "8080"   # 내부 네트워크에서만 접근 (외부로 직접 노출하지 않음)
+
+  web:
+    build:
+      context: ./frontend
+    container_name: leave-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # 도메인(HTTPS) 또는 :80(HTTP) — .env 참고
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data      # 발급받은 인증서 보관 (재시작해도 유지)
+      - caddy_config:/config
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  jwt_secret:
+    file: ./secrets/jwt_secret
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

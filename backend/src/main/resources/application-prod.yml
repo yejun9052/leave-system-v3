@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    # Docker secret: /run/secrets/db_password (configtree → 'db_password')
+    password: ${db_password}
+    hikari:
+      maximum-pool-size: 20
+  jpa:
+    properties:
+      hibernate:
+        show_sql: false
+
+app:
+  jwt:
+    # Docker secret: /run/secrets/jwt_secret (configtree → 'jwt_secret')
+    secret: ${jwt_secret}
+
+# 운영에서는 API 문서(Swagger/OpenAPI)를 비활성화 (외부 정보노출 방지)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.company.leave: INFO

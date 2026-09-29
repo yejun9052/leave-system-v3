@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/annual_leave}
+    username: ${DB_USERNAME:leave}
+    password: ${DB_PASSWORD:leave1234}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    properties:
+      hibernate:
+        show_sql: true
+
+app:
+  # 로컬/테스트 전용 고정 초기 관리자 비밀번호 (운영은 미설정 → 무작위 생성)
+  admin:
+    initial-password: admin1234!
+  jwt:
+    # 로컬 개발 전용 서명키 (운영에서는 환경변수 JWT_SECRET 사용)
+    secret: ${JWT_SECRET:local-dev-secret-key-please-change-this-to-a-very-long-random-value-0123456789}
+  license:
+    # 로컬 개발용 라이선스 (host=localhost, 만료 2030-12-31, 최대 100명)
+    host: localhost
+    key: eyJpZCI6IjE4ZmI1N2U0LWE5NGItNGI5Yi05ZTUyLWI2MTdjNmYxZGVhOCIsImxpY2Vuc2VlIjoiVGVzdENvIiwiaXNzdWVkQXQiOiIyMDI2LTA3LTA3IiwiZXhwaXJlc0F0IjoiMjAzMC0xMi0zMSIsIm1heFVzZXJzIjoxMDAsImhvc3QiOiJsb2NhbGhvc3QifQ.9dZBfb8kcu6bFGLpixZPh1zi8YfBtJwpdvl37BytN6ZcNnTMHM89iMrX0f38NHfMEBlveJ-hdbjj3MXfsRAiCQ
+
+logging:
+  level:
+    com.company.leave: DEBUG
+    org.hibernate.SQL: DEBUG

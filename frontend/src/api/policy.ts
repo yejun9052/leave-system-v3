@@ -1,0 +1,118 @@
+import { api, unwrap } from "./client";
+import type { LeaveType } from "@/types";
+
+export type GrantBasis = "HIRE_DATE" | "FISCAL_YEAR";
+
+export interface Policy {
+  id: number;
+  grantBasis: GrantBasis;
+  fiscalStartMonth: number;
+  fiscalStartDay: number;
+  baseAnnualDays: number;
+  seniorityStepYears: number;
+  seniorityIncrementDays: number;
+  maxAnnualDays: number;
+  monthlyAccrualEnabled: boolean;
+  monthlyAccrualMax: number;
+  allowNegative: boolean;
+  halfDayEnabled: boolean;
+  maxConcurrentAbsence: number;
+  minAdvanceDays: number;
+  maxConsecutiveDays: number;
+  promotionEnabled: boolean;
+  carryOverEnabled: boolean;
+  maxCarryOverDays: number;
+}
+
+export const policyApi = {
+  get: () => unwrap<Policy>(api.get("/policy")),
+  update: (body: Omit<Policy, "id">) => unwrap<Policy>(api.put("/policy", body)),
+};
+
+// --- 정책 규칙 (포상 / 경조사 / 블랙아웃) ---
+export interface AwardRule {
+  id: number;
+  years: number;
+  bonusDays: number;
+  name: string | null;
+}
+export interface SpecialRule {
+  id: number;
+  name: string;
+  days: number;
+  leaveTypeCode: string | null;
+  sortOrder: number;
+}
+export interface Blackout {
+  id: number;
+  startDate: string;
+  endDate: string;
+  name: string;
+}
+
+export const policyRulesApi = {
+  awards: () => unwrap<AwardRule[]>(api.get("/policy/award-rules")),
+  createAward: (b: Omit<AwardRule, "id">) => unwrap<AwardRule>(api.post("/policy/award-rules", b)),
+  updateAward: (id: number, b: Omit<AwardRule, "id">) =>
+    unwrap<AwardRule>(api.put(`/policy/award-rules/${id}`, b)),
+  removeAward: (id: number) => unwrap<void>(api.delete(`/policy/award-rules/${id}`)),
+
+  specials: () => unwrap<SpecialRule[]>(api.get("/policy/special-rules")),
+  createSpecial: (b: Omit<SpecialRule, "id">) =>
+    unwrap<SpecialRule>(api.post("/policy/special-rules", b)),
+  updateSpecial: (id: number, b: Omit<SpecialRule, "id">) =>
+    unwrap<SpecialRule>(api.put(`/policy/special-rules/${id}`, b)),
+  removeSpecial: (id: number) => unwrap<void>(api.delete(`/policy/special-rules/${id}`)),
+
+  blackouts: () => unwrap<Blackout[]>(api.get("/policy/blackouts")),
+  createBlackout: (b: Omit<Blackout, "id">) => unwrap<Blackout>(api.post("/policy/blackouts", b)),
+  updateBlackout: (id: number, b: Omit<Blackout, "id">) =>
+    unwrap<Blackout>(api.put(`/policy/blackouts/${id}`, b)),
+  removeBlackout: (id: number) => unwrap<void>(api.delete(`/policy/blackouts/${id}`)),
+};
+
+export interface PromotionTarget {
+  employeeId: number;
+  name: string;
+  department: string | null;
+  granted: number;
+  used: number;
+  remaining: number;
+}
+
+export const promotionApi = {
+  targets: (year?: number) =>
+    unwrap<PromotionTarget[]>(api.get("/leave/promotion/targets", { params: { year } })),
+  run: (year?: number) =>
+    unwrap<{ year: number; notified: number }>(
+      api.post("/leave/promotion/run", null, { params: { year } }),
+    ),
+};
+
+export interface LeaveTypeInput {
+  code?: string;
+  name: string;
+  deductDays: number;
+  paid: boolean;
+  halfDay: boolean;
+  deductFromAnnual: boolean;
+  colorHex: string;
+  sortOrder?: number;
+  active?: boolean;
+}
+
+export const leaveTypeApi = {
+  list: (includeInactive = true) =>
+    unwrap<LeaveType[]>(api.get("/leave-types", { params: { includeInactive } })),
+  create: (body: LeaveTypeInput) => unwrap<LeaveType>(api.post("/leave-types", body)),
+  update: (id: number, body: LeaveTypeInput) =>
+    unwrap<LeaveType>(api.put(`/leave-types/${id}`, body)),
+  remove: (id: number) => unwrap<void>(api.delete(`/leave-types/${id}`)),
+};
+
+export const leaveAdminApi = {
+  grantAll: (year?: number) =>
+    unwrap<{ year: number; granted: number }>(
+      api.post("/leave/admin/grant", null, { params: { year } }),
+    ),
+};

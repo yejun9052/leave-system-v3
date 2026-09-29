@@ -1,0 +1,226 @@
+<style>
+  :root{
+    --ink:#152019; --paper:#f4f8f5; --card:#ffffff;
+    --muted:#556860; --faint:#87968d; --line:#e0e9e3;
+    --accent:#0e9f6e; --accent-soft:#e7f6ef; --accent-line:#bde5d1; --accent-ink:#0a5c40;
+    --warn:#b5480b; --danger:#c1284a; --danger-soft:#fbecef;
+    --code-bg:#10171d; --code-ink:#e7ecec; --code-dim:#7f8c93; --code-accent:#6fd7ab; --code-var:#8fd0ff;
+    --radius:12px;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,"D2Coding",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;
+  }
+  *{box-sizing:border-box}
+  .wrap{
+    max-width:900px;margin:0 auto;padding:48px 24px 80px;
+    font-family:var(--sans);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 60% at 100% 0%, #e7f6ef 0%, rgba(231,246,239,0) 55%), var(--paper);
+  }
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+  h1{font-size:clamp(28px,4.5vw,40px);line-height:1.12;letter-spacing:-.02em;margin:0 0 12px;text-wrap:balance;font-weight:750}
+  .lede{font-size:17px;color:var(--muted);margin:0;max-width:64ch}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .chip{font-size:12.5px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
+  .chip b{color:var(--ink);font-weight:650}
+
+  .flow{display:flex;align-items:stretch;gap:10px;margin:34px 0 8px;flex-wrap:wrap}
+  .flow .node{flex:1 1 190px;display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .flow .num{flex:none;width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:15px;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+  .flow .node b{display:block;font-size:15px}
+  .flow .node span{font-size:12.5px;color:var(--faint)}
+
+  .rule{display:flex;gap:12px;align-items:flex-start;margin:30px 0;padding:16px 18px;background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:var(--radius)}
+  .rule .k{flex:none;font-size:20px;line-height:1.3}
+  .rule p{margin:0;font-size:14.5px;color:#1f4a3a}
+  .rule b{color:var(--accent-ink)}
+
+  section{margin-top:44px}
+  .sh{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:18px}
+  .sh .idx{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:7px;padding:3px 9px}
+  .sh h2{font-size:21px;letter-spacing:-.01em;margin:0;font-weight:700}
+  .sh .tag{margin-left:auto;font-size:12px;color:var(--faint)}
+  .sub{font-size:14.5px;color:var(--muted);margin:0 0 14px}
+
+  .diagram{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 18px;margin:6px 0 4px}
+  .dbox{text-align:center;min-width:120px}
+  .dbox .t{font-weight:700;font-size:14px}
+  .dbox .s{font-size:12px;color:var(--faint);margin-top:2px}
+  .darrow{color:var(--accent);font-weight:700;font-size:13px;text-align:center;line-height:1.3}
+  .darrow small{display:block;color:var(--faint);font-weight:500}
+
+  pre{margin:14px 0;background:var(--code-bg);border-radius:10px;overflow-x:auto}
+  .cb .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--code-dim);padding:9px 14px 0;display:block}
+  pre code{display:block;font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--code-ink);padding:8px 14px 14px;white-space:pre}
+  code .c{color:var(--code-dim)}
+  code .v{color:var(--code-var)}
+  code .o{color:var(--code-accent)}
+  :not(pre)>code{font-family:var(--mono);font-size:.88em;background:#e9f0ec;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#1f4a3a;white-space:nowrap}
+
+  .note{font-size:13.5px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent-line);border-radius:8px;padding:12px 14px;margin:14px 0}
+  .note b{color:var(--ink)}
+
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);margin-top:6px}
+  table{border-collapse:collapse;width:100%;min-width:520px;font-size:14px;background:var(--card)}
+  th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eef4f0;font-weight:650;font-size:12.5px;color:var(--muted)}
+  tr:last-child td{border-bottom:0}
+  td code{white-space:normal}
+  td:first-child{white-space:nowrap;font-weight:600}
+
+  .danger{display:flex;gap:14px;align-items:flex-start;margin-top:16px;background:var(--danger-soft);border:1px solid #f2c7d1;border-radius:var(--radius);padding:16px 18px}
+  .danger .k{flex:none;font-size:20px}
+  .danger h3{margin:0 0 6px;font-size:16px;color:var(--danger)}
+  .danger p{margin:0 0 6px;font-size:14px;color:#6b2233}
+  .danger ul{margin:6px 0 0;padding-left:18px;font-size:14px;color:#6b2233}
+  .danger li{margin:3px 0}
+
+  .summary{margin-top:44px;background:var(--ink);color:#eaf2ee;border-radius:16px;padding:26px 28px}
+  .summary h2{margin:0 0 16px;font-size:18px;color:#fff}
+  .summary ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px}
+  .summary li{font-size:14.5px;color:#cad8d1}
+  .summary li b{color:#fff}
+  .summary code{background:#23302a;border-color:#31463b;color:#a9e9c8}
+
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--faint)}
+  @media (max-width:560px){ .flow .node{flex-basis:100%} .sh .tag{display:none} .darrow{transform:rotate(90deg)} }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">공급사 전용 · 라이선스 운영</p>
+  <h1>라이선스 발급 가이드</h1>
+  <p class="lede">고객사마다 라이선스를 <b>발급(서명)</b>해 전달하는 방법입니다. 발급은 <b>비공개 키로만</b> 가능하고, 앱에는 <b>공개 키</b>만 들어 있어 고객은 위조할 수 없습니다.</p>
+  <div class="meta">
+    <span class="chip">서명 <b>Ed25519</b></span>
+    <span class="chip">집행 <b>항상 적용 (필수)</b></span>
+    <span class="chip">발급 도구 <b>LicenseTool</b></span>
+  </div>
+
+  <div class="flow" aria-label="발급 흐름">
+    <div class="node"><div class="num">1</div><div><b>준비</b><span>compileJava (최초 1회)</span></div></div>
+    <div class="node"><div class="num">2</div><div><b>발급</b><span>LicenseTool issue</span></div></div>
+    <div class="node"><div class="num">3</div><div><b>전달 · 적용</b><span>고객 .env 설정</span></div></div>
+  </div>
+
+  <div class="rule">
+    <div class="k">🔑</div>
+    <p><b>핵심 —</b> 라이선스는 <b>항상 집행</b>됩니다. 유효한 키가 없으면 고객 서버에서 <b>로그인 포함 모든 기능이 차단</b>됩니다. 그래서 배포 시 고객마다 라이선스 발급·전달이 필요합니다.</p>
+  </div>
+
+  <section>
+    <div class="sh"><span class="idx">개념</span><h2>어떻게 동작하나</h2></div>
+    <div class="diagram">
+      <div class="dbox"><div class="t">비공개 키</div><div class="s">당신만 보관</div></div>
+      <div class="darrow">──서명──▶<small>라이선스 발급</small></div>
+      <div class="dbox"><div class="t">라이선스 문자열</div><div class="s">고객에게 전달</div></div>
+      <div class="darrow">──검증──▶<small>고객 서버</small></div>
+      <div class="dbox"><div class="t">공개 키</div><div class="s">앱에 내장</div></div>
+    </div>
+    <p class="sub" style="margin-top:14px">라이선스에 담기는 정보:</p>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>항목</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td>회사명</td><td>사용 회사 (화면 표기·식별용)</td></tr>
+          <tr><td>만료일</td><td>이 날짜까지 유효 (지나면 차단)</td></tr>
+          <tr><td>최대 사용자수</td><td>재직 사용자 상한 (0 = 무제한). 초과 시 사용자 추가 차단</td></tr>
+          <tr><td>설치처 host</td><td>도메인 고정. 고객 <code>.env</code>의 <code>LICENSE_HOST</code>와 일치해야 함</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sh"><span class="idx">STEP 1</span><h2>준비 (최초 1회 · 코드 변경 후)</h2></div>
+    <p class="sub">발급 도구를 컴파일합니다. 키 쌍은 이미 만들어져 있습니다 — 공개키는 앱에 내장, 비공개키는 <code>LICENSE-PRIVATE-KEY.txt</code>에 보관.</p>
+    <div class="cb"><pre><span class="lbl">PowerShell</span><code><span class="v">$env:JAVA_HOME</span>='C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot'
+cd C:\alwork
+.\gradlew.bat :backend:compileJava</code></pre></div>
+  </section>
+
+  <section>
+    <div class="sh"><span class="idx">STEP 2</span><h2>라이선스 발급 (고객마다)</h2></div>
+    <p class="sub">인자: 비공개키 · 회사명 · 만료일 · 최대인원 · host 순서.</p>
+    <div class="cb"><pre><span class="lbl">PowerShell · 예) 가나상사 · 2027-12-31 · 50명 · leave.gana.co.kr</span><code>java -cp backend\build\classes\java\main com.company.leave.license.tool.LicenseTool `
+     issue <span class="v">"&lt;비공개키&gt;"</span> <span class="v">"가나상사"</span> <span class="v">2027-12-31</span> <span class="v">50</span> <span class="v">leave.gana.co.kr</span>
+
+<span class="c"># 출력 →</span>
+<span class="c">=== LICENSE (고객 서버 LICENSE_KEY 로 설정) ===</span>
+<span class="o">eyJpZCI6...(긴 문자열)...RAiCQ</span></code></pre></div>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>순서</th><th>인자</th><th>예</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>비공개 키 (Base64)</td><td><code>LICENSE-PRIVATE-KEY.txt</code>의 값</td></tr>
+          <tr><td>2</td><td>회사명</td><td><code>"가나상사"</code> (공백 시 따옴표)</td></tr>
+          <tr><td>3</td><td>만료일</td><td><code>2027-12-31</code></td></tr>
+          <tr><td>4</td><td>최대 사용자수</td><td><code>50</code> (0=무제한)</td></tr>
+          <tr><td>5</td><td>설치처 host</td><td><code>leave.gana.co.kr</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">출력된 <b>라이선스 문자열</b>을 고객에게 전달합니다. (문자열 자체는 비밀이 아니며 위조 불가 — 비밀은 오직 비공개 키입니다.)</p>
+  </section>
+
+  <section>
+    <div class="sh"><span class="idx">STEP 3</span><h2>고객 적용 (전달 시 안내)</h2></div>
+    <p class="sub">고객 서버 <code>.env</code>에 발급 문자열과 host를 넣고 재기동합니다.</p>
+    <div class="cb"><pre><span class="lbl">고객 서버 · .env</span><code>LICENSE_KEY=<span class="v">&lt;발급한 라이선스 문자열&gt;</span>
+LICENSE_HOST=<span class="v">leave.gana.co.kr</span>   <span class="c"># 발급 때 host 와 동일</span></code></pre></div>
+    <div class="cb"><pre><span class="lbl">고객 서버</span><code>docker compose -f docker-compose.prod.yml up -d</code></pre></div>
+    <p class="note">적용 확인: 정상 로그인되면 완료. <code>GET /api/license</code>로 상태 조회 가능. 만료 30일 전부터 상단 갱신 배너가 뜹니다.</p>
+  </section>
+
+  <section>
+    <div class="sh"><span class="idx">갱신</span><h2>연장 · 변경 · 정지</h2></div>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>상황</th><th>방법</th></tr></thead>
+        <tbody>
+          <tr><td>기간 연장</td><td>새 만료일로 재발급 → 고객 <code>LICENSE_KEY</code> 교체 후 재기동 (host 동일)</td></tr>
+          <tr><td>인원 변경</td><td>새 maxUsers로 재발급 → 동일하게 교체</td></tr>
+          <tr><td>정지</td><td>갱신하지 않으면 만료일에 자동 차단</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sh"><span class="idx">보안</span><h2>비공개 키 관리</h2></div>
+    <div class="danger">
+      <div class="k">⚠️</div>
+      <div>
+        <h3>비공개 키는 절대 노출 금지</h3>
+        <p>유출되면 누구나 유효한 라이선스를 위조할 수 있습니다.</p>
+        <ul>
+          <li>서버·저장소·고객 어디에도 두지 말 것 — 공급사 내부 암호관리자/오프라인 보관</li>
+          <li>분실 시: 새 키 쌍 생성 + 공개키 교체 + 앱 재배포 필요 → <b>기존 라이선스 전부 무효</b></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sh"><span class="idx">FIX</span><h2>고객 문제 해결</h2></div>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>증상</th><th>원인</th><th>조치</th></tr></thead>
+        <tbody>
+          <tr><td>모든 기능 차단</td><td>키 미설정·만료·위조</td><td><code>LICENSE_KEY</code> 확인, 만료면 재발급</td></tr>
+          <tr><td>설치처(host) 불일치</td><td><code>LICENSE_HOST</code> ≠ 발급 host</td><td>값 일치 또는 올바른 host로 재발급</td></tr>
+          <tr><td>사용자 추가 시 상한 도달</td><td>maxUsers 초과</td><td>인원 상향해 재발급</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="summary">
+    <h2>한눈에 보기</h2>
+    <ol>
+      <li><b>준비</b> — <code>gradlew :backend:compileJava</code> (최초 1회)</li>
+      <li><b>발급</b> — <code>LicenseTool issue "비공개키" "회사명" 만료일 최대인원 host</code></li>
+      <li><b>전달</b> — 출력 문자열 → 고객 <code>.env</code>의 <code>LICENSE_KEY</code> + <code>LICENSE_HOST</code> → 재기동</li>
+      <li><b>주의</b> — 비공개 키(LICENSE-PRIVATE-KEY.txt)는 안전하게 보관</li>
+    </ol>
+  </div>
+
+  <footer>연차관리 시스템 · 라이선스 발급 절차 (공급사 전용) &nbsp;·&nbsp; 저장소 문서: LICENSING.md</footer>
+</div>

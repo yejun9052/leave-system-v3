@@ -1,0 +1,208 @@
+<style>
+  :root{
+    --ink:#132025; --paper:#f4f8f9; --card:#ffffff;
+    --muted:#516067; --faint:#84959c; --line:#e0e8ea;
+    --accent:#0b7285; --accent-soft:#e2f3f6; --accent-line:#bbe1e8; --accent-ink:#0a5560;
+    --dev:#0b7285; --srv:#7048b6; --srv-soft:#efeafc; --srv-line:#d9ccf3;
+    --warn:#b5480b; --danger:#c1284a; --danger-soft:#fbecef;
+    --code-bg:#0f171a; --code-ink:#e6edee; --code-dim:#7f9096; --code-accent:#67d4c6; --code-var:#8fd0ff;
+    --radius:12px;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,"D2Coding",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;
+  }
+  *{box-sizing:border-box}
+  .wrap{max-width:900px;margin:0 auto;padding:48px 24px 80px;font-family:var(--sans);color:var(--ink);
+    line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 60% at 100% 0%, #e2f3f6 0%, rgba(226,243,246,0) 55%), var(--paper);}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+  h1{font-size:clamp(28px,4.5vw,40px);line-height:1.12;letter-spacing:-.02em;margin:0 0 12px;text-wrap:balance;font-weight:750}
+  .lede{font-size:17px;color:var(--muted);margin:0;max-width:64ch}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .chip{font-size:12.5px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 12px}
+  .chip b{color:var(--ink);font-weight:650}
+
+  /* pipeline */
+  .pipe{margin:34px 0 6px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .pipe .lane{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:0 0 10px}
+  .pipe .lane.d{color:var(--dev)} .pipe .lane.s{color:var(--srv)}
+  .steps{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .st{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;background:var(--accent-soft);border:1px solid var(--accent-line);color:var(--accent-ink);border-radius:8px;padding:7px 12px}
+  .st .n{font-family:var(--mono);font-size:11px;opacity:.7}
+  .st.s2{background:var(--srv-soft);border-color:var(--srv-line);color:#4a2f86}
+  .arw{color:var(--faint);font-weight:700}
+  .pipe hr{border:0;border-top:1px dashed var(--line);margin:14px 0}
+
+  section{margin-top:44px}
+  .sh{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:18px}
+  .sh .idx{font-family:var(--mono);font-size:12.5px;font-weight:700;border-radius:7px;padding:3px 10px}
+  .sh.dev .idx{color:#fff;background:var(--dev)}
+  .sh.srv .idx{color:#fff;background:var(--srv)}
+  .sh h2{font-size:21px;letter-spacing:-.01em;margin:0;font-weight:700}
+  .sh .tag{margin-left:auto;font-size:12px;color:var(--faint)}
+
+  .step{margin:0 0 18px}
+  .step h3{font-size:15px;margin:0 0 8px;display:flex;gap:9px;align-items:center}
+  .step h3 .b{flex:none;width:24px;height:24px;border-radius:7px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;display:grid;place-items:center}
+  .srv .step h3 .b{background:var(--srv)}
+  .step p{margin:0 0 8px;font-size:14px;color:var(--muted)}
+
+  pre{margin:8px 0 4px;background:var(--code-bg);border-radius:10px;overflow-x:auto}
+  .cb .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--code-dim);padding:9px 14px 0;display:block}
+  pre code{display:block;font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--code-ink);padding:8px 14px 14px;white-space:pre}
+  code .c{color:var(--code-dim)} code .v{color:var(--code-var)} code .o{color:var(--code-accent)}
+  :not(pre)>code{font-family:var(--mono);font-size:.88em;background:#e8f1f2;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#0a5560;white-space:nowrap}
+
+  .note{font-size:13.5px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent-line);border-radius:8px;padding:12px 14px;margin:12px 0}
+  .note b{color:var(--ink)}
+  .warnbox{border-left-color:#f0c38a;background:#fff8f0}
+  .warnbox b{color:var(--warn)}
+
+  .callout{display:flex;gap:14px;align-items:flex-start;margin-top:16px;border-radius:var(--radius);padding:16px 18px}
+  .callout.fast{background:var(--accent-soft);border:1px solid var(--accent-line)}
+  .callout.roll{background:var(--danger-soft);border:1px solid #f2c7d1}
+  .callout .k{flex:none;font-size:20px}
+  .callout h3{margin:0 0 6px;font-size:16px}
+  .callout.fast h3{color:var(--accent-ink)} .callout.roll h3{color:var(--danger)}
+  .callout p{margin:0;font-size:14px;color:#33474d}
+  .callout.roll p{color:#6b2233}
+
+  .tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);margin-top:6px}
+  table{border-collapse:collapse;width:100%;min-width:520px;font-size:14px;background:var(--card)}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#eaf2f3;font-weight:650;font-size:12.5px;color:var(--muted)}
+  tr:last-child td{border-bottom:0}
+  td:first-child{white-space:nowrap;font-weight:600}
+  td code{white-space:nowrap}
+
+  .summary{margin-top:44px;background:var(--ink);color:#e9f1f2;border-radius:16px;padding:26px 28px}
+  .summary h2{margin:0 0 16px;font-size:18px;color:#fff}
+  .summary code{background:#1f2c30;border-color:#2d3d42;color:#a6 e9df}
+  .summary .row{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #24343a;font-size:14px;align-items:baseline}
+  .summary .row:last-child{border-bottom:0}
+  .summary .row b{flex:none;width:64px;color:#8fd7cf}
+  .summary code{background:#1f2c30;border:1px solid #2d3d42;border-radius:5px;padding:1px 6px;color:#bfeae3;font-family:var(--mono);font-size:12.5px}
+
+  footer{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--faint)}
+  @media (max-width:560px){ .sh .tag{display:none} .arw{display:none} .st{flex-basis:100%} }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">개발 → 운영 배포</p>
+  <h1>빌드 &amp; 배포 사이클</h1>
+  <p class="lede">소스를 수정한 뒤 <b>하나의 app.jar</b>(프론트 + 백엔드 + 난독화 + 라이선스)로 빌드해, <b>소스 없는 패키지</b>로 서버에 반영하는 반복 절차입니다.</p>
+  <div class="meta">
+    <span class="chip">빌드 산출물 <b>app.jar 1개</b></span>
+    <span class="chip">서버 업로드 <b>소스 미포함</b></span>
+    <span class="chip">필요 <b>JDK 21 · Node.js</b></span>
+  </div>
+
+  <div class="pipe">
+    <p class="lane d">개발 PC</p>
+    <div class="steps">
+      <span class="st"><span class="n">1</span> 소스 수정</span><span class="arw">→</span>
+      <span class="st"><span class="n">2</span> 빌드(bootJarObf)</span><span class="arw">→</span>
+      <span class="st"><span class="n">3</span> 검증(선택)</span><span class="arw">→</span>
+      <span class="st"><span class="n">4</span> 패키징(소스 제외)</span>
+    </div>
+    <hr>
+    <p class="lane s">서버</p>
+    <div class="steps">
+      <span class="st s2"><span class="n">5</span> 업로드</span><span class="arw">→</span>
+      <span class="st s2"><span class="n">6</span> docker compose up</span>
+    </div>
+  </div>
+
+  <div class="note warnbox"><b>경로 주의 —</b> 빌드는 <b>실제 프로젝트 경로</b>에서 실행하세요. junction(<code>C:\alwork</code>)에서 하면 프론트(Vite) 빌드가 상대경로 문제로 실패합니다. junction 은 <code>gradlew test</code> 전용입니다.</div>
+
+  <section>
+    <div class="sh dev"><span class="idx">개발 PC</span><h2>빌드 · 패키징</h2><span class="tag">JDK 21 + Node.js</span></div>
+
+    <div class="step">
+      <h3><span class="b">1</span> 소스 수정</h3>
+      <p>프론트(<code>frontend/src</code>) · 백엔드(<code>backend/src</code>) 무엇을 고쳐도 이후 절차는 동일합니다.</p>
+    </div>
+
+    <div class="step">
+      <h3><span class="b">2</span> 빌드 — 프론트+백엔드 한 번에</h3>
+      <div class="cb"><pre><span class="lbl">PowerShell · 실제 경로에서</span><code><span class="v">$env:JAVA_HOME</span>='C:\Program Files\Eclipse Adoptium\jdk-21.0.11.10-hotspot'
+<span class="v">$env:Path</span>='C:\Program Files\nodejs;'+<span class="v">$env:Path</span>
+cd C:\Users\picas\Desktop\김회철\annual-leave
+.\gradlew.bat :backend:bootJarObf
+copy backend\build\libs\backend-obf.jar backend\app.jar</code></pre></div>
+      <p>이 한 번으로 <b>프론트(vite) + 백엔드(난독화) + 라이선스</b>가 모두 <code>app.jar</code>에 번들됩니다.</p>
+    </div>
+
+    <div class="step">
+      <h3><span class="b">3</span> 검증 <span style="font-weight:400;color:var(--faint);font-size:13px">(권장)</span></h3>
+      <p>난독화가 기능을 깨뜨리지 않았는지 실제로 띄워 확인합니다.</p>
+      <div class="cb"><pre><span class="lbl">PowerShell</span><code>& "<span class="v">$env:JAVA_HOME</span>\bin\java.exe" -jar backend\app.jar
+<span class="c"># "Started LeaveManagementApplication" → http://localhost:8080</span>
+<span class="c"># 전체 자동점검(다른 터미널):</span> .\scripts\smoke-test.ps1  <span class="c"># PASS=40 기대</span></code></pre></div>
+    </div>
+
+    <div class="step">
+      <h3><span class="b">4</span> 소스 없는 배포 패키지 생성</h3>
+      <div class="cb"><pre><span class="lbl">PowerShell</span><code>.\scripts\package-deploy.ps1
+<span class="c"># → 바탕화면\annual-leave-deploy.tar.gz  (소스 미포함 자동 검증)</span></code></pre></div>
+      <p>서버로 가는 패키지엔 <b>난독화된 app.jar + 도커 설정만</b> 들어갑니다. 원본 소스는 개발 PC에만 남습니다.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="sh srv"><span class="idx">서버</span><h2>업로드 · 재기동</h2><span class="tag">Docker</span></div>
+
+    <div class="step">
+      <h3><span class="b">5</span> 업로드</h3>
+      <div class="cb"><pre><span class="lbl">PowerShell (내 PC)</span><code>scp "<span class="v">$env:USERPROFILE</span>\Desktop\annual-leave-deploy.tar.gz" 사용자명@서버IP:~/</code></pre></div>
+    </div>
+
+    <div class="step">
+      <h3><span class="b">6</span> 재기동</h3>
+      <div class="cb"><pre><span class="lbl">서버</span><code>tar xzf annual-leave-deploy.tar.gz && cd annual-leave
+docker compose -f docker-compose.prod.yml up -d --build</code></pre></div>
+      <p><code>--build</code> 이 새 app.jar 를 반영·재시작합니다. DB 스키마 변경은 <b>Flyway가 자동 적용</b>(데이터 보존), <code>.env</code>(DB·JWT·라이선스·도메인)는 <b>그대로 유지</b>되어 다시 만들 필요 없습니다.</p>
+    </div>
+  </section>
+
+  <div class="callout fast">
+    <div class="k">⚡</div>
+    <div>
+      <h3>더 빠른 방법 — app.jar 만 교체</h3>
+      <p>설정·구조 변화 없이 코드만 바꿨다면 패키지 전체 대신 app.jar 만 올려도 됩니다.<br>
+      <code>scp backend\app.jar 사용자@서버:~/annual-leave/backend/app.jar</code> → 서버에서 <code>docker compose … up -d --build</code></p>
+    </div>
+  </div>
+
+  <div class="callout roll">
+    <div class="k">↩️</div>
+    <div>
+      <h3>롤백 (난독화 문제 등)</h3>
+      <p>일반(비난독화) 빌드로 즉시 되돌립니다: <code>.\gradlew.bat :backend:bootJar</code> → 생성된 jar 를 <code>backend\app.jar</code> 로 사용 후 재패키징·재배포.</p>
+    </div>
+  </div>
+
+  <section>
+    <div class="sh"><span class="idx" style="color:#fff;background:var(--ink)">확인</span><h2>이럴 땐?</h2></div>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>상황</th><th>대응</th></tr></thead>
+        <tbody>
+          <tr><td>프론트만 수정</td><td>동일하게 <code>bootJarObf</code> (프론트도 함께 빌드됨)</td></tr>
+          <tr><td>DB 스키마 변경</td><td>새 Flyway 마이그레이션 추가 → 재기동 시 자동 적용(데이터 보존)</td></tr>
+          <tr><td>난독화 후 오류</td><td>검증(3)에서 발견 → keep 규칙 보완(OBFUSCATION.md) 또는 일반 jar 롤백</td></tr>
+          <tr><td>라이선스</td><td>서버 <code>.env</code> 유지 — 재배포 때 재설정 불필요</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="summary">
+    <h2>한눈에 — 명령 순서</h2>
+    <div class="row"><b>빌드</b><code>gradlew :backend:bootJarObf</code> → <code>copy …obf.jar backend\app.jar</code></div>
+    <div class="row"><b>패키징</b><code>scripts\package-deploy.ps1</code></div>
+    <div class="row"><b>업로드</b><code>scp …\annual-leave-deploy.tar.gz 서버:~/</code></div>
+    <div class="row"><b>재기동</b>서버: <code>tar xzf … && docker compose … up -d --build</code></div>
+  </div>
+
+  <footer>연차관리 시스템 · 빌드/배포 사이클 &nbsp;·&nbsp; 저장소 문서: DEPLOY.md / OBFUSCATION.md</footer>
+</div>

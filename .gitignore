@@ -1,0 +1,39 @@
+# Java / Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# Node / Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+application-secret.yml
+secrets/
+secrets.enc/
+master.key
+*.key
+*.pem
+LICENSE-PRIVATE-KEY.txt
+
+# 배포 산출물(대용량 바이너리)
+backend/app.jar
+*.tar.gz

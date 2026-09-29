@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: annual-leave-db
+    environment:
+      POSTGRES_DB: annual_leave
+      POSTGRES_USER: leave
+      POSTGRES_PASSWORD: leave1234
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:5432:5432"   # 로컬호스트에만 노출(외부 미개방)
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leave -d annual_leave"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: build & run the backend in a container.
+  # For local development you'll usually run the backend via `./gradlew bootRun`
+  # and only start the `postgres` service above.
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: annual-leave-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # 로컬 개발 편의용(profile: full). 운영 배포는 docker-compose.prod.yml 사용.
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/annual_leave
+      DB_USERNAME: leave
+      DB_PASSWORD: leave1234
+    ports:
+      - "127.0.0.1:8080:8080"
+    profiles:
+      - full
+
+volumes:
+  pgdata:

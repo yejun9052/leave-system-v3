@@ -1,0 +1,10 @@
+# Caddy: HTTPS(또는 HTTP) 종단 + 백엔드로 리버스 프록시
+#
+# 프론트엔드는 백엔드 jar 안에 번들되어 있으므로, Caddy 는 UI/API 구분 없이
+# 모든 요청을 backend 로 넘기고 TLS 만 담당한다.
+#
+# 접속 주소는 SITE_ADDRESS 로 결정 (도메인 → 자동 HTTPS / :80 → HTTP)
+{$SITE_ADDRESS} {
+	encode zstd gzip
+	reverse_proxy backend:8080
+}

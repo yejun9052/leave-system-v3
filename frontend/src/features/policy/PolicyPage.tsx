@@ -1,0 +1,689 @@
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Save, Trash2, PlayCircle } from "lucide-react";
+import {
+  policyApi,
+  leaveTypeApi,
+  leaveAdminApi,
+  policyRulesApi,
+  promotionApi,
+  type Policy,
+  type GrantBasis,
+  type LeaveTypeInput,
+} from "@/api/policy";
+import type { LeaveType } from "@/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast";
+import { extractErrorMessage } from "@/api/client";
+
+export default function PolicyPage() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">정책 · 휴가종류</h1>
+        <p className="text-sm text-muted-foreground">연차 운영 정책과 휴가 종류를 설정합니다.</p>
+      </div>
+      <Tabs defaultValue="policy">
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="policy">연차 정책</TabsTrigger>
+          <TabsTrigger value="types">휴가 종류</TabsTrigger>
+          <TabsTrigger value="rules">포상 · 경조사</TabsTrigger>
+          <TabsTrigger value="blackout">블랙아웃</TabsTrigger>
+          <TabsTrigger value="promotion">촉진 · 미사용</TabsTrigger>
+        </TabsList>
+        <TabsContent value="policy">
+          <PolicyTab />
+        </TabsContent>
+        <TabsContent value="types">
+          <LeaveTypeTab />
+        </TabsContent>
+        <TabsContent value="rules">
+          <RulesTab />
+        </TabsContent>
+        <TabsContent value="blackout">
+          <BlackoutTab />
+        </TabsContent>
+        <TabsContent value="promotion">
+          <PromotionTab />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function PolicyTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
+  const [form, setForm] = useState<Omit<Policy, "id"> | null>(null);
+
+  useEffect(() => {
+    if (data) {
+      const { id: _id, ...rest } = data;
+      void _id;
+      setForm(rest);
+    }
+  }, [data]);
+
+  const set = <K extends keyof Omit<Policy, "id">>(k: K, v: Omit<Policy, "id">[K]) =>
+    setForm((f) => (f ? { ...f, [k]: v } : f));
+
+  const save = useMutation({
+    mutationFn: () => policyApi.update(form!),
+    onSuccess: () => {
+      toast({ title: "정책이 저장되었습니다.", variant: "success" });
+      qc.invalidateQueries({ queryKey: ["policy"] });
+    },
+    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+  });
+
+  const grant = useMutation({
+    mutationFn: () => leaveAdminApi.grantAll(),
+    onSuccess: (r) => toast({ title: `${r.granted}명 연차 부여/재계산 완료`, variant: "success" }),
+    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+  });
+
+  if (!form) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">부여 기준</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>연차 부여 기준</Label>
+            <Select value={form.grantBasis} onValueChange={(v) => set("grantBasis", v as GrantBasis)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="HIRE_DATE">입사일 기준 (근로기준법 원칙)</SelectItem>
+                <SelectItem value="FISCAL_YEAR">회계연도 기준 (일괄 부여)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {form.grantBasis === "FISCAL_YEAR" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>회계 시작 월</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={form.fiscalStartMonth}
+                  onChange={(e) => set("fiscalStartMonth", Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>회계 시작 일</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={form.fiscalStartDay}
+                  onChange={(e) => set("fiscalStartDay", Number(e.target.value))}
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">사용 규칙</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ToggleRow
+            label="반차 사용 허용"
+            checked={form.halfDayEnabled}
+            onChange={(v) => set("halfDayEnabled", v)}
+          />
+          <ToggleRow
+            label="마이너스 연차 허용"
+            desc="잔여 연차를 초과해 신청 가능"
+            checked={form.allowNegative}
+            onChange={(v) => set("allowNegative", v)}
+          />
+          <ToggleRow
+            label="연차 촉진제도 사용"
+            desc="사용 기한 전 자동 안내"
+            checked={form.promotionEnabled}
+            onChange={(v) => set("promotionEnabled", v)}
+          />
+          <ToggleRow
+            label="미사용 연차 이월"
+            checked={form.carryOverEnabled}
+            onChange={(v) => set("carryOverEnabled", v)}
+          />
+          {form.carryOverEnabled && (
+            <div className="space-y-2">
+              <Label>최대 이월 일수</Label>
+              <Input
+                type="number"
+                step="0.5"
+                value={form.maxCarryOverDays}
+                onChange={(e) => set("maxCarryOverDays", Number(e.target.value))}
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">근속 가산 연차</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>기본 연차(1년 이상)</Label>
+              <Input type="number" step="0.5" value={form.baseAnnualDays}
+                onChange={(e) => set("baseAnnualDays", Number(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label>상한(최대 연차)</Label>
+              <Input type="number" step="0.5" value={form.maxAnnualDays}
+                onChange={(e) => set("maxAnnualDays", Number(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label>가산 주기(년)</Label>
+              <Input type="number" min={1} value={form.seniorityStepYears}
+                onChange={(e) => set("seniorityStepYears", Number(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label>가산량(일)</Label>
+              <Input type="number" step="0.5" value={form.seniorityIncrementDays}
+                onChange={(e) => set("seniorityIncrementDays", Number(e.target.value))} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            예) 기본 15 · 주기 2년 · 가산 1일 · 상한 25 → 3년차 16일, 5년차 17일 … (근로기준법 기본값)
+          </p>
+          <ToggleRow label="1년 미만 월차 부여" desc="1개월 개근 시 1일" checked={form.monthlyAccrualEnabled}
+            onChange={(v) => set("monthlyAccrualEnabled", v)} />
+          {form.monthlyAccrualEnabled && (
+            <div className="space-y-2">
+              <Label>월차 상한(일)</Label>
+              <Input type="number" min={0} value={form.monthlyAccrualMax}
+                onChange={(e) => set("monthlyAccrualMax", Number(e.target.value))} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">사용 통제</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>팀 동시 부재 최대 인원 (0 = 무제한)</Label>
+            <Input type="number" min={0} value={form.maxConcurrentAbsence}
+              onChange={(e) => set("maxConcurrentAbsence", Number(e.target.value))} />
+          </div>
+          <div className="space-y-2">
+            <Label>최소 사전 신청 기한(일, 0 = 제한 없음)</Label>
+            <Input type="number" min={0} value={form.minAdvanceDays}
+              onChange={(e) => set("minAdvanceDays", Number(e.target.value))} />
+          </div>
+          <div className="space-y-2">
+            <Label>최대 연속 사용일 (0 = 무제한)</Label>
+            <Input type="number" min={0} value={form.maxConsecutiveDays}
+              onChange={(e) => set("maxConsecutiveDays", Number(e.target.value))} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap gap-2 lg:col-span-2">
+        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          <Save className="h-4 w-4" /> 정책 저장
+        </Button>
+        <Button variant="outline" onClick={() => grant.mutate()} disabled={grant.isPending}>
+          <PlayCircle className="h-4 w-4" /> 전 직원 연차 부여/재계산
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        {desc && <p className="text-xs text-muted-foreground">{desc}</p>}
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
+function LeaveTypeTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: types = [] } = useQuery({
+    queryKey: ["leaveTypes", "all"],
+    queryFn: () => leaveTypeApi.list(true),
+  });
+  const [editing, setEditing] = useState<LeaveType | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["leaveTypes"] });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => leaveTypeApi.remove(id),
+    onSuccess: () => {
+      toast({ title: "삭제되었습니다.", variant: "success" });
+      invalidate();
+    },
+    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setCreating(true)}>
+          <Plus className="h-4 w-4" /> 휴가 종류 추가
+        </Button>
+      </div>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>이름</TableHead>
+                <TableHead>코드</TableHead>
+                <TableHead>차감</TableHead>
+                <TableHead>반차</TableHead>
+                <TableHead>연차차감</TableHead>
+                <TableHead>상태</TableHead>
+                <TableHead className="text-right">관리</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {types.map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-2">
+                      <span
+                        className="inline-block h-3 w-3 rounded-full"
+                        style={{ backgroundColor: t.colorHex }}
+                      />
+                      {t.name}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{t.code}</TableCell>
+                  <TableCell>{t.deductDays}</TableCell>
+                  <TableCell>{t.halfDay ? "예" : "-"}</TableCell>
+                  <TableCell>{t.deductFromAnnual ? "예" : "-"}</TableCell>
+                  <TableCell>
+                    <Badge variant={t.active ? "success" : "outline"}>
+                      {t.active ? "사용" : "미사용"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(t)}>
+                        수정
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => {
+                          if (confirm(`'${t.name}' 삭제?`)) remove.mutate(t.id);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      {(creating || editing) && (
+        <LeaveTypeDialog
+          type={editing}
+          onClose={() => {
+            setCreating(false);
+            setEditing(null);
+          }}
+          onSaved={() => {
+            setCreating(false);
+            setEditing(null);
+            invalidate();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LeaveTypeDialog({
+  type,
+  onClose,
+  onSaved,
+}: {
+  type: LeaveType | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const isEdit = !!type;
+  const [form, setForm] = useState<LeaveTypeInput>({
+    code: type?.code ?? "",
+    name: type?.name ?? "",
+    deductDays: type?.deductDays ?? 1,
+    paid: type?.paid ?? true,
+    halfDay: type?.halfDay ?? false,
+    deductFromAnnual: type?.deductFromAnnual ?? true,
+    colorHex: type?.colorHex ?? "#4f46e5",
+    sortOrder: type?.sortOrder ?? 0,
+    active: type?.active ?? true,
+  });
+  const set = <K extends keyof LeaveTypeInput>(k: K, v: LeaveTypeInput[K]) =>
+    setForm((f) => ({ ...f, [k]: v }));
+
+  const save = useMutation({
+    mutationFn: () => (isEdit && type ? leaveTypeApi.update(type.id, form) : leaveTypeApi.create(form)),
+    onSuccess: () => {
+      toast({ title: "저장되었습니다.", variant: "success" });
+      onSaved();
+    },
+    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <CardHeader>
+          <CardTitle className="text-base">{isEdit ? "휴가 종류 수정" : "휴가 종류 추가"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>이름</Label>
+              <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>코드</Label>
+              <Input
+                value={form.code}
+                disabled={isEdit}
+                onChange={(e) => set("code", e.target.value.toUpperCase())}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>차감 일수</Label>
+              <Input
+                type="number"
+                step="0.5"
+                value={form.deductDays}
+                onChange={(e) => set("deductDays", Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>색상</Label>
+              <Input type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
+            </div>
+          </div>
+          <ToggleRow label="유급" checked={form.paid} onChange={(v) => set("paid", v)} />
+          <ToggleRow label="반차 여부" checked={form.halfDay} onChange={(v) => set("halfDay", v)} />
+          <ToggleRow
+            label="연차 잔액에서 차감"
+            checked={form.deductFromAnnual}
+            onChange={(v) => set("deductFromAnnual", v)}
+          />
+          {isEdit && (
+            <ToggleRow label="사용" checked={form.active ?? true} onChange={(v) => set("active", v)} />
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={onClose}>
+              취소
+            </Button>
+            <Button
+              onClick={() => save.mutate()}
+              disabled={save.isPending || !form.name.trim() || (!isEdit && !form.code?.trim())}
+            >
+              저장
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function RulesTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: awards = [] } = useQuery({ queryKey: ["awardRules"], queryFn: policyRulesApi.awards });
+  const { data: specials = [] } = useQuery({ queryKey: ["specialRules"], queryFn: policyRulesApi.specials });
+
+  const [aYears, setAYears] = useState(5);
+  const [aDays, setADays] = useState(3);
+  const [aName, setAName] = useState("");
+  const [sName, setSName] = useState("");
+  const [sDays, setSDays] = useState(1);
+
+  const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
+  const addAward = useMutation({
+    mutationFn: () => policyRulesApi.createAward({ years: aYears, bonusDays: aDays, name: aName || null }),
+    onSuccess: () => { setAName(""); qc.invalidateQueries({ queryKey: ["awardRules"] }); },
+    onError: err,
+  });
+  const delAward = useMutation({
+    mutationFn: (id: number) => policyRulesApi.removeAward(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["awardRules"] }),
+    onError: err,
+  });
+  const addSpecial = useMutation({
+    mutationFn: () => policyRulesApi.createSpecial({ name: sName, days: sDays, leaveTypeCode: "CONDOLENCE", sortOrder: 0 }),
+    onSuccess: () => { setSName(""); qc.invalidateQueries({ queryKey: ["specialRules"] }); },
+    onError: err,
+  });
+  const delSpecial = useMutation({
+    mutationFn: (id: number) => policyRulesApi.removeSpecial(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["specialRules"] }),
+    onError: err,
+  });
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Card>
+        <CardHeader><CardTitle className="text-base">장기근속 포상휴가</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1"><Label className="text-xs">근속(년)</Label>
+              <Input type="number" min={1} className="w-20" value={aYears} onChange={(e) => setAYears(Number(e.target.value))} /></div>
+            <div className="space-y-1"><Label className="text-xs">포상(일)</Label>
+              <Input type="number" step="0.5" className="w-20" value={aDays} onChange={(e) => setADays(Number(e.target.value))} /></div>
+            <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
+              <Input value={aName} onChange={(e) => setAName(e.target.value)} placeholder="예: 5년 근속 포상" /></div>
+            <Button size="sm" onClick={() => addAward.mutate()}><Plus className="h-4 w-4" /> 추가</Button>
+          </div>
+          <RuleTable rows={awards.map((a) => ({ id: a.id, cells: [`${a.years}년`, `${a.bonusDays}일`, a.name ?? "-"] }))}
+            headers={["근속", "포상", "명칭"]} onDelete={(id) => delAward.mutate(id)} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">경조사 규정</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1 flex-1"><Label className="text-xs">사유/관계</Label>
+              <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="예: 본인 결혼" /></div>
+            <div className="space-y-1"><Label className="text-xs">일수</Label>
+              <Input type="number" step="0.5" className="w-20" value={sDays} onChange={(e) => setSDays(Number(e.target.value))} /></div>
+            <Button size="sm" onClick={() => addSpecial.mutate()} disabled={!sName.trim()}><Plus className="h-4 w-4" /> 추가</Button>
+          </div>
+          <RuleTable rows={specials.map((s) => ({ id: s.id, cells: [s.name, `${s.days}일`] }))}
+            headers={["사유/관계", "일수"]} onDelete={(id) => delSpecial.mutate(id)} />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function BlackoutTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data: rows = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
+  const today = new Date().toISOString().slice(0, 10);
+  const [start, setStart] = useState(today);
+  const [end, setEnd] = useState(today);
+  const [name, setName] = useState("");
+  const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
+
+  const add = useMutation({
+    mutationFn: () => policyRulesApi.createBlackout({ startDate: start, endDate: end, name }),
+    onSuccess: () => { setName(""); qc.invalidateQueries({ queryKey: ["blackouts"] }); },
+    onError: err,
+  });
+  const del = useMutation({
+    mutationFn: (id: number) => policyRulesApi.removeBlackout(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["blackouts"] }),
+    onError: err,
+  });
+
+  return (
+    <Card className="max-w-3xl">
+      <CardHeader><CardTitle className="text-base">연차 사용 금지 기간 (블랙아웃)</CardTitle></CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1"><Label className="text-xs">시작</Label>
+            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">종료</Label>
+            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+          <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
+          <Button size="sm" onClick={() => add.mutate()} disabled={!name.trim()}><Plus className="h-4 w-4" /> 추가</Button>
+        </div>
+        <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name] }))}
+          headers={["기간", "명칭"]} onDelete={(id) => del.mutate(id)} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function PromotionTab() {
+  const { toast } = useToast();
+  const [year, setYear] = useState(new Date().getFullYear());
+  const { data: targets = [], refetch } = useQuery({
+    queryKey: ["promotionTargets", year],
+    queryFn: () => promotionApi.targets(year),
+  });
+  const run = useMutation({
+    mutationFn: () => promotionApi.run(year),
+    onSuccess: (r) => toast({ title: `${r.notified}명에게 촉진 알림을 보냈습니다.`, variant: "success" }),
+    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+  });
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">연차 촉진 · 미사용 현황</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1"><Label className="text-xs">연도</Label>
+            <Input type="number" className="w-28" value={year} onChange={(e) => setYear(Number(e.target.value))} /></div>
+          <Button size="sm" variant="secondary" onClick={() => refetch()}>조회</Button>
+          <Button size="sm" onClick={() => run.mutate()} disabled={run.isPending || targets.length === 0}>
+            <PlayCircle className="h-4 w-4" /> 촉진 알림 발송 ({targets.length})
+          </Button>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>이름</TableHead><TableHead>부서</TableHead>
+              <TableHead>부여</TableHead><TableHead>사용</TableHead><TableHead>잔여</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {targets.length > 0 ? targets.map((t) => (
+              <TableRow key={t.employeeId}>
+                <TableCell className="font-medium">{t.name}</TableCell>
+                <TableCell>{t.department ?? "-"}</TableCell>
+                <TableCell>{t.granted}</TableCell>
+                <TableCell>{t.used}</TableCell>
+                <TableCell><Badge variant="warning">{t.remaining}일</Badge></TableCell>
+              </TableRow>
+            )) : (
+              <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">잔여 연차가 있는 대상이 없습니다.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RuleTable({
+  headers,
+  rows,
+  onDelete,
+}: {
+  headers: string[];
+  rows: { id: number; cells: string[] }[];
+  onDelete: (id: number) => void;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {headers.map((h) => <TableHead key={h}>{h}</TableHead>)}
+          <TableHead className="text-right">관리</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.length > 0 ? rows.map((r) => (
+          <TableRow key={r.id}>
+            {r.cells.map((c, i) => <TableCell key={i}>{c}</TableCell>)}
+            <TableCell className="text-right">
+              <Button size="icon" variant="ghost" onClick={() => onDelete(r.id)}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </TableCell>
+          </TableRow>
+        )) : (
+          <TableRow><TableCell colSpan={headers.length + 1} className="py-6 text-center text-muted-foreground">등록된 항목이 없습니다.</TableCell></TableRow>
+        )}
+      </TableBody>
+    </Table>
+  );
+}

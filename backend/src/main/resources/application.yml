@@ -1,0 +1,80 @@
+spring:
+  application:
+    name: annual-leave
+  # Docker secrets(/run/secrets/*) 를 설정값으로 로딩. 로컬엔 없으므로 optional.
+  config:
+    import: optional:configtree:/run/secrets/
+  profiles:
+    # 기본은 prod(안전). env 미지정으로 jar 를 직접 실행해도 local 시크릿으로 폴백되지 않음.
+    # 로컬 개발은 gradlew bootRun(자동 local) 또는 --spring.profiles.active=local 로 실행.
+    active: ${SPRING_PROFILES_ACTIVE:prod}
+  jackson:
+    time-zone: Asia/Seoul
+    serialization:
+      write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      # 엑셀 업로드 등 파일 크기 제한 (DoS·압축폭탄 완화)
+      max-file-size: 5MB
+      max-request-size: 8MB
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: Asia/Seoul
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_AUTH:false}
+          starttls:
+            enable: ${MAIL_STARTTLS:false}
+
+server:
+  port: 8080
+  forward-headers-strategy: framework
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui
+    tags-sorter: alpha
+    operations-sorter: alpha
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    # 메일은 사용하지 않으므로 헬스 체크에서 제외(불필요한 SMTP 접속 시도·WARN·health DOWN 방지)
+    mail:
+      enabled: false
+
+app:
+  jwt:
+    # 운영에서는 반드시 환경변수 JWT_SECRET 설정(미설정 시 기동 실패). 로컬 기본값은 application-local.yml 에만 둔다.
+    secret: ${JWT_SECRET:}
+    access-token-validity-minutes: 30
+    refresh-token-validity-days: 14
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000}
+  mail:
+    from: ${MAIL_FROM:no-reply@annual-leave.local}
+    enabled: ${MAIL_ENABLED:false}
+  license:
+    # 라이선스는 항상 집행됩니다. 유효한 키가 없으면 모든 기능이 차단됩니다.
+    key: ${LICENSE_KEY:}                 # 발급받은 라이선스 문자열 (운영 필수)
+    host: ${LICENSE_HOST:}               # 설치처 고정 값(도메인 등)

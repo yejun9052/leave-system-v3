@@ -1,0 +1,111 @@
+package com.company.leave.leave.domain;
+
+import com.company.leave.common.entity.BaseTimeEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import java.math.BigDecimal;
+
+/**
+ * 사용자의 연도별 연차 잔액.
+ * remaining = granted + carried_over - used - expired
+ */
+@Entity
+@Table(name = "leave_balances")
+public class LeaveBalance extends BaseTimeEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "employee_id", nullable = false)
+    private Long employeeId;
+
+    @Column(nullable = false)
+    private int year;
+
+    @Column(nullable = false)
+    private BigDecimal granted = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private BigDecimal used = BigDecimal.ZERO;
+
+    @Column(name = "carried_over", nullable = false)
+    private BigDecimal carriedOver = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    private BigDecimal expired = BigDecimal.ZERO;
+
+    /** 낙관적 락: 동시 승인/차감 시 갱신 유실(lost update) 방지. */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
+    protected LeaveBalance() {
+    }
+
+    public LeaveBalance(Long employeeId, int year) {
+        this.employeeId = employeeId;
+        this.year = year;
+    }
+
+    public BigDecimal remaining() {
+        return granted.add(carriedOver).subtract(used).subtract(expired);
+    }
+
+    /** 부여 일수를 설정(재계산 시 덮어씀). */
+    public void setGranted(BigDecimal granted) {
+        this.granted = granted;
+    }
+
+    public void addUsed(BigDecimal days) {
+        this.used = this.used.add(days);
+    }
+
+    public void restoreUsed(BigDecimal days) {
+        this.used = this.used.subtract(days);
+        if (this.used.signum() < 0) {
+            this.used = BigDecimal.ZERO;
+        }
+    }
+
+    public void setCarriedOver(BigDecimal carriedOver) {
+        this.carriedOver = carriedOver;
+    }
+
+    public void setExpired(BigDecimal expired) {
+        this.expired = expired;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Long getEmployeeId() {
+        return employeeId;
+    }
+
+    public int getYear() {
+        return year;
+    }
+
+    public BigDecimal getGranted() {
+        return granted;
+    }
+
+    public BigDecimal getUsed() {
+        return used;
+    }
+
+    public BigDecimal getCarriedOver() {
+        return carriedOver;
+    }
+
+    public BigDecimal getExpired() {
+        return expired;
+    }
+}

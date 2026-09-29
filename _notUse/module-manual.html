@@ -1,0 +1,379 @@
+<style>
+  :root{
+    --ink:#0f172a; --muted:#64748b; --faint:#94a3b8; --line:#e2e8f0; --paper:#eef1f6; --card:#ffffff;
+    --accent:#4f46e5; --accent-soft:#eef2ff; --accent-ink:#3730a3; --accent-line:#c7d2fe;
+    --ok:#16a34a; --ok-soft:#ecfdf3; --warn:#b45309; --warn-soft:#fef6e7; --danger:#dc2626; --danger-soft:#fef2f2;
+    --code-bg:#0f172a; --code-ink:#e2e8f0; --code-dim:#94a3b8; --code-tok:#a5b4fc; --code-str:#86efac; --code-com:#64748b;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR","Malgun Gothic",sans-serif;
+  }
+  *{box-sizing:border-box}
+  .radio{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 22px 96px;font-family:var(--sans);color:var(--ink);
+    background:var(--paper);line-height:1.65;font-size:15.5px;-webkit-font-smoothing:antialiased;min-height:100vh}
+
+  header.top{margin-bottom:24px}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+  h1{font-size:32px;line-height:1.14;font-weight:800;letter-spacing:-.02em;margin:0 0 10px}
+  .sub{font-size:16px;color:var(--muted);margin:0;max-width:64ch}
+  .badges{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+  .badge{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 11px}
+  .badge b{color:var(--ink);font-weight:650}
+
+  /* tabs */
+  nav.tabs{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:4px;background:var(--paper);
+    padding:10px 0 12px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+  nav.tabs label{cursor:pointer;font-size:14.5px;font-weight:650;color:var(--muted);padding:9px 16px;border-radius:9px;
+    border:1px solid transparent;display:flex;align-items:center;gap:8px;user-select:none;transition:background .12s,color .12s}
+  nav.tabs label:hover{background:var(--card);color:var(--ink)}
+  nav.tabs label .tn{font-family:var(--mono);font-size:12px;opacity:.6}
+
+  .panel{display:none;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  #t1:checked ~ .wrap #p1,#t2:checked ~ .wrap #p2,#t3:checked ~ .wrap #p3,#t4:checked ~ .wrap #p4{display:block}
+  #t1:checked ~ .wrap .tabs label[for="t1"],
+  #t2:checked ~ .wrap .tabs label[for="t2"],
+  #t3:checked ~ .wrap .tabs label[for="t3"],
+  #t4:checked ~ .wrap .tabs label[for="t4"]{background:var(--accent);color:#fff}
+  #t1:checked ~ .wrap .tabs label[for="t1"] .tn,
+  #t2:checked ~ .wrap .tabs label[for="t2"] .tn,
+  #t3:checked ~ .wrap .tabs label[for="t3"] .tn,
+  #t4:checked ~ .wrap .tabs label[for="t4"] .tn{opacity:.85}
+  .radio:focus-visible ~ .wrap .tabs label{outline:none}
+  .radio:focus-visible ~ .wrap .tabs label[for="t1"]{box-shadow:0 0 0 3px var(--accent-line)}
+
+  h2{font-size:20px;font-weight:750;letter-spacing:-.01em;margin:34px 0 4px}
+  h2:first-child{margin-top:8px}
+  h3{font-size:15px;font-weight:700;margin:22px 0 8px;color:var(--accent-ink)}
+  .lead{color:var(--muted);margin:0 0 14px;max-width:70ch}
+  p{margin:0 0 12px}
+  ul{margin:0 0 12px;padding-left:20px}li{margin:3px 0}
+  strong{font-weight:700}
+  code{font-family:var(--mono);font-size:.85em;background:#eaeefb;border:1px solid var(--accent-line);border-radius:5px;padding:1px 5px;color:var(--accent-ink)}
+  a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:14px 0}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px}
+  .feat h4{margin:0 0 5px;font-size:14.5px;font-weight:700}
+  .feat p{margin:0;font-size:13px;color:var(--muted)}
+
+  .code{background:var(--code-bg);border-radius:11px;padding:15px 17px;margin:10px 0 16px;overflow-x:auto;border:1px solid #1e293b}
+  .code pre{margin:0;font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--code-ink);white-space:pre}
+  .code .c{color:var(--code-com)} .code .k{color:var(--code-tok)} .code .s{color:var(--code-str)}
+  .lbl{font-family:var(--mono);font-size:11px;color:var(--faint);margin:0 0 6px}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card);margin:12px 0}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700;background:#f8fafc}
+  tbody tr:last-child td{border-bottom:none}
+  td code{white-space:nowrap}
+
+  .note{border-radius:10px;padding:12px 15px;margin:12px 0;font-size:14px;border:1px solid}
+  .note.i{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent-ink)}
+  .note.ok{background:var(--ok-soft);border-color:#bbf7d0;color:#14532d}
+  .note.w{background:var(--warn-soft);border-color:#fde3b3;color:#7c3a06}
+  .note.d{background:var(--danger-soft);border-color:#fecaca;color:#991b1b}
+  .note b{font-weight:700}
+
+  /* architecture diagram */
+  .arch{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:14px 0}
+  .arch .box{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px;text-align:center}
+  .arch .box .bt{font-weight:700;font-size:14px}
+  .arch .box .bd{font-size:12px;color:var(--muted);margin-top:4px}
+  .arch .arrow{display:flex;align-items:center;color:var(--faint);font-weight:700;padding:0 10px;font-size:18px}
+  ol.steps{list-style:none;counter-reset:s;padding:0;margin:8px 0}
+  ol.steps>li{counter-increment:s;position:relative;padding-left:40px;margin-bottom:20px}
+  ol.steps>li::before{content:counter(s);position:absolute;left:0;top:-1px;width:27px;height:27px;display:flex;
+    align-items:center;justify-content:center;background:var(--accent);color:#fff;border-radius:8px;font-family:var(--mono);font-weight:700;font-size:13px}
+  ol.steps>li h3{margin:2px 0 8px}
+  .kbd{font-family:var(--mono);font-size:12px;background:#eaeefb;border:1px solid var(--accent-line);border-bottom-width:2px;border-radius:5px;padding:1px 6px}
+  .foot{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--faint);font-size:12.5px}
+</style>
+
+<input type="radio" name="t" id="t1" class="radio" checked>
+<input type="radio" name="t" id="t2" class="radio">
+<input type="radio" name="t" id="t3" class="radio">
+<input type="radio" name="t" id="t4" class="radio">
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Annual Leave Management System · 운영 매뉴얼</p>
+    <h1>연차관리 시스템 모듈 문서</h1>
+    <p class="sub">근로기준법 기반 연차·반차 관리 시스템. 웹/모바일(반응형·PWA)에서 동작하며, 단일 실행 파일(app.jar)에 UI·API·라이선스가 번들되어 Docker로 배포됩니다.</p>
+    <div class="badges">
+      <span class="badge"><b>Java</b> 21</span>
+      <span class="badge"><b>Spring Boot</b> 3.4</span>
+      <span class="badge"><b>PostgreSQL</b> 16</span>
+      <span class="badge"><b>React</b> 18 · Vite</span>
+      <span class="badge"><b>배포</b> Docker Compose</span>
+      <span class="badge"><b>보안</b> JWT · 난독화 · 라이선스</span>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <label for="t1"><span class="tn">01</span> 모듈 정보</label>
+    <label for="t2"><span class="tn">02</span> 설정 정보</label>
+    <label for="t3"><span class="tn">03</span> 설치 정보</label>
+    <label for="t4"><span class="tn">04</span> 그 외 정보</label>
+  </nav>
+
+  <main>
+
+  <!-- ============ TAB 1 : 모듈 ============ -->
+  <section class="panel" id="p1">
+    <h2>개요</h2>
+    <p class="lead">회사에서 실제 운영 가능한 상용 수준의 연차/반차 관리 시스템입니다. 연차 자동 부여·소멸, 부서/사용자 관리, 권한 분리(RBAC), 결재 워크플로우, 전사 캘린더, 대시보드/리포트를 제공합니다.</p>
+
+    <h2>아키텍처</h2>
+    <p class="lead">3개의 컨테이너로 동작합니다. 서버에는 <b>Docker만</b> 있으면 되고, 자바(JRE)·프론트엔드는 <code>app.jar</code>에, DB는 컨테이너에 포함됩니다.</p>
+    <div class="arch">
+      <div class="box"><div class="bt">web (Caddy)</div><div class="bd">HTTPS 종단 · 리버스 프록시</div></div>
+      <div class="arrow">→</div>
+      <div class="box"><div class="bt">backend (app.jar)</div><div class="bd">UI + REST API + 라이선스<br>Spring Boot · 난독화</div></div>
+      <div class="arrow">→</div>
+      <div class="box"><div class="bt">postgres</div><div class="bd">데이터베이스<br>(내부 네트워크 전용)</div></div>
+    </div>
+    <div class="note i">외부로 열리는 포트는 <b>web(80/443 또는 지정 포트)뿐</b>이며, backend(8080)·postgres(5432)는 도커 내부 네트워크에서만 통신합니다.</div>
+
+    <h2>기술 스택</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>구분</th><th>스택</th></tr></thead>
+      <tbody>
+        <tr><td>Backend</td><td>Java 21, Spring Boot 3.4, Spring Security(JWT), Spring Data JPA, QueryDSL, Flyway, Apache POI(엑셀)</td></tr>
+        <tr><td>Database</td><td>PostgreSQL 16 (부서 계층 재귀 CTE)</td></tr>
+        <tr><td>Frontend</td><td>React 18 · TypeScript · Vite · Tailwind · shadcn/ui · TanStack Query · FullCalendar · Recharts · PWA</td></tr>
+        <tr><td>인프라</td><td>Docker Compose · Caddy(자동 HTTPS)</td></tr>
+        <tr><td>보안</td><td>BCrypt · JWT(HS256) · ProGuard 난독화 · Ed25519 라이선스 · Docker secrets</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2>주요 기능</h2>
+    <div class="grid">
+      <div class="feat"><h4>인증 · 권한</h4><p>JWT 로그인/재발급, 4단계 RBAC, 메서드 단위 인가, 브루트포스 잠금</p></div>
+      <div class="feat"><h4>부서 관리</h4><p>트리 CRUD, 상·하위 이동(순환 방지), 팀장 지정</p></div>
+      <div class="feat"><h4>사용자 관리</h4><p>검색·페이지네이션, 엑셀 가져오기/내보내기(행별 오류 보고), 비번 마스킹</p></div>
+      <div class="feat"><h4>연차 정책</h4><p>입사일/회계연도 기준, 근속 가산, 포상/경조사, 사용 통제, 촉진 자동화</p></div>
+      <div class="feat"><h4>연차 엔진</h4><p>근로기준법 자동 산정(1년 15일·가산 최대 25일), 스케줄러 부여/이월</p></div>
+      <div class="feat"><h4>휴가 신청/결재</h4><p>연차·오전/오후 반차, 근무일 자동 계산, 팀장 승인/반려, 대리승인, 취소 재승인</p></div>
+      <div class="feat"><h4>캘린더</h4><p>전사/부서/개인 뷰, 승인 휴가 자동 반영, 공휴일 표시</p></div>
+      <div class="feat"><h4>대시보드 · 리포트</h4><p>개인/관리자 통계 차트, 연차 사용 현황 엑셀</p></div>
+      <div class="feat"><h4>감사 로그</h4><p>모든 생성·수정·삭제·로그인 AOP 자동 기록, 관리자 전용 조회</p></div>
+    </div>
+
+    <h2>권한 구조 (RBAC)</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>역할</th><th>범위</th><th>핵심 권한</th></tr></thead>
+      <tbody>
+        <tr><td><code>SUPER_ADMIN</code></td><td>전체</td><td>시스템 전권, 사용자·부서·정책·감사로그</td></tr>
+        <tr><td><code>HR_ADMIN</code></td><td>전사 인사</td><td>사용자·부서·연차 운영, 대리승인, 통계</td></tr>
+        <tr><td><code>TEAM_LEAD</code></td><td><b>담당 팀(하위 포함)</b></td><td>팀원 결재, 팀 캘린더, 팀원 현황(팀 범위로 제한)</td></tr>
+        <tr><td><code>EMPLOYEE</code></td><td>본인</td><td>휴가 신청/취소, 본인 잔액·이력, 전사 캘린더 열람</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2>보안 요약</h2>
+    <ul>
+      <li>비밀번호 <b>BCrypt</b> 해시 저장, API 응답 미노출 / 입력 마스킹</li>
+      <li><b>로그인 브루트포스 잠금</b>(5회 실패 15분), 보안 헤더(CSP·Referrer·Permissions·X-Frame-Options·nosniff)</li>
+      <li>DB 비번·JWT 서명키 <b>Docker secrets</b> 분리(+선택적 파일 암호화), 컨테이너 <b>비-root</b> 실행</li>
+      <li>운영 Swagger 비활성, 업로드 크기 제한, 스택트레이스 미노출, 기본 프로파일 <b>prod</b></li>
+      <li>초기 관리자 비밀번호 <b>설치마다 무작위</b>(로그 1회), 코드 <b>난독화</b>, <b>라이선스</b> 집행</li>
+      <li>SonarQube/OWASP·ZAP 기준 점검 완료 — 인젝션 0건, 파라미터 바인딩·암호선택 정상</li>
+    </ul>
+  </section>
+
+  <!-- ============ TAB 2 : 설정 ============ -->
+  <section class="panel" id="p2">
+    <h2>설정 개요</h2>
+    <p class="lead">설정은 <b>세 곳</b>으로 나뉩니다: 접속·비민감 설정은 <code>.env</code>, 민감 비밀은 <code>secrets/</code> 파일, 라이선스는 <code>.env</code>(키 문자열)입니다.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>항목</th><th>위치</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr><td>접속 주소·DB명·라이선스</td><td><code>.env</code></td><td>평문(민감정보 아님)</td></tr>
+        <tr><td>DB 비밀번호 · JWT 서명키</td><td><code>secrets/db_password</code>, <code>secrets/jwt_secret</code></td><td>Docker secret(선택 암호화)</td></tr>
+        <tr><td>접속 포트</td><td><code>docker-compose.prod.yml</code></td><td>기본 80/443, 변경 가능</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2>1) 접속 설정 — <code>.env</code></h2>
+    <p><code>cp .env.prod.example .env</code> 후 편집. 두 모드 중 하나를 선택합니다.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>모드 A · 도메인+HTTPS (권장)</th><th>모드 B · IP+HTTP (임시)</th></tr></thead>
+      <tbody>
+        <tr><td>SITE_ADDRESS</td><td><code>leave.회사.com</code></td><td><code>:80</code> (또는 지정포트는 <code>:80</code> 유지)</td></tr>
+        <tr><td>APP_ORIGIN</td><td><code>https://leave.회사.com</code></td><td><code>http://서버IP[:포트]</code></td></tr>
+        <tr><td>준비물</td><td>도메인 + DNS A레코드</td><td>없음</td></tr>
+        <tr><td>암호화(HTTPS)</td><td>O (자동 발급)</td><td>X (사내/테스트)</td></tr>
+      </tbody>
+    </table></div>
+    <div class="code"><pre><span class="c"># .env 예시 (모드 A)</span>
+<span class="k">SITE_ADDRESS</span>=leave.회사.com
+<span class="k">APP_ORIGIN</span>=https://leave.회사.com
+<span class="k">POSTGRES_DB</span>=annual_leave
+<span class="k">POSTGRES_USER</span>=leave
+<span class="k">LICENSE_KEY</span>=eyJpZCI6...(발급받은 문자열)...
+<span class="k">LICENSE_HOST</span>=leave.회사.com
+<span class="c"># DB 비밀번호·JWT 는 .env 에 두지 않음 → secrets/ 파일 (아래 2)</span></pre></div>
+
+    <h2>2) 비밀정보 — <code>secrets/</code> (Docker secrets)</h2>
+    <p>DB 비밀번호·JWT 서명키는 <b>파일</b>로 관리되어 컨테이너 내부 <code>/run/secrets/</code> 로만 주입됩니다(환경변수·<code>docker inspect</code>에 노출되지 않음). <code>install.sh</code> 사용 시 자동 생성됩니다.</p>
+    <div class="code"><pre><span class="c"># 수동 생성 (줄바꿈 없이)</span>
+mkdir -p secrets
+printf '%s' "$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-28)" &gt; secrets/db_password
+printf '%s' "$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-64)" &gt; secrets/jwt_secret
+chmod 700 secrets &amp;&amp; chmod 600 secrets/*</pre></div>
+    <h3>(선택) 시크릿 파일 암호화</h3>
+    <p>암호문으로 보관하려면 마스터키(앱 폴더 밖 root 전용)로 암호화합니다. 기동 시 자동 복호화됩니다.</p>
+    <div class="code"><pre>bash secrets-encrypt.sh   <span class="c"># master.key + secrets.enc/*.enc 생성</span>
+rm -f secrets/*          <span class="c"># 평문 제거(배포 때 복호화)</span></pre></div>
+    <div class="note w"><b>마스터키(<code>master.key</code>)는 반드시 별도 백업</b>하세요. 분실 시 복호화가 불가능합니다.</div>
+
+    <h2>3) 포트 변경</h2>
+    <p>80번이 다른 서비스와 겹치면 <code>web</code> 포트를 바꿉니다. (<code>SITE_ADDRESS</code>는 컨테이너 내부 포트라 <code>:80</code> 유지)</p>
+    <div class="code"><pre><span class="c"># docker-compose.prod.yml</span>
+  web:
+    ports:
+      - <span class="s">"8090:80"</span>     <span class="c"># 호스트 8090 → 컨테이너 80</span>
+<span class="c"># .env</span>
+<span class="k">APP_ORIGIN</span>=http://서버IP:8090</pre></div>
+
+    <h2>4) 라이선스</h2>
+    <p>라이선스는 <b>항상 집행</b>됩니다. 유효한 키가 없으면 로그인 포함 모든 기능이 차단됩니다.</p>
+    <ul>
+      <li><code>LICENSE_KEY</code>: 공급사가 발급한 서명 문자열</li>
+      <li><code>LICENSE_HOST</code>: 발급 시 지정한 host와 <b>정확히 일치</b>해야 함(회사명 아님)</li>
+      <li>만료·최대 사용자수·설치처(host) 검증. 만료 30일 전부터 상단 배너 표시. 상태는 <code>GET /api/license</code></li>
+    </ul>
+
+    <h2>5) 프로파일 &amp; 초기 관리자 비밀번호</h2>
+    <ul>
+      <li>기본 활성 프로파일은 <b>prod</b> (env 없이 실행해도 개발용 시크릿으로 폴백되지 않음).</li>
+      <li>로컬 개발은 <code>gradlew bootRun</code>(자동 local) 또는 <code>--spring.profiles.active=local</code>.</li>
+      <li>운영 <b>초기 관리자 비밀번호는 설치마다 무작위 생성</b>되어 최초 기동 로그에 1회 표시(고정 기본값 없음). → 설치 탭 참고.</li>
+    </ul>
+  </section>
+
+  <!-- ============ TAB 3 : 설치 ============ -->
+  <section class="panel" id="p3">
+    <h2>3.1 설치에 필요한 툴</h2>
+    <p class="lead"><b>운영 서버</b>에는 Docker 하나면 됩니다. <b>개발 PC</b>의 도구는 소스 수정 후 <code>app.jar</code>를 다시 빌드할 때만 필요합니다.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>대상</th><th>툴</th><th>용도</th><th>필수?</th></tr></thead>
+      <tbody>
+        <tr><td>운영 서버</td><td><b>Docker</b> + compose 플러그인</td><td>컨테이너 실행</td><td>필수</td></tr>
+        <tr><td>개발 PC</td><td><b>JDK 21</b> (Temurin)</td><td>백엔드 빌드</td><td>빌드 시</td></tr>
+        <tr><td>개발 PC</td><td><b>Node.js 20+</b></td><td>프론트 빌드(jar 번들)</td><td>빌드 시</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>운영 서버 — Docker 설치</h3>
+    <div class="code"><pre><span class="lbl">Ubuntu / Debian</span><span class="c"># 공식 편의 스크립트</span>
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER   <span class="c"># 재로그인 후 적용</span></pre></div>
+    <div class="code"><pre><span class="lbl">CentOS / RHEL / Rocky / Alma</span>sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo systemctl enable --now docker</pre></div>
+    <div class="note ok"><b>더 간편하게:</b> 배포 패키지의 <code>install.sh</code> 가 OS 선택 메뉴로 Docker 설치부터 기동까지 자동 처리합니다(아래 3.2).</div>
+
+    <h3>개발 PC — 빌드 도구 (Windows)</h3>
+    <div class="code"><pre>winget install EclipseAdoptium.Temurin.21.JDK
+winget install OpenJS.NodeJS.LTS</pre></div>
+
+    <h2>3.2 설치 절차</h2>
+    <h3>방법 A — install.sh 자동 (권장)</h3>
+    <div class="code"><pre><span class="lbl">내 PC → 서버 업로드</span>scp install.sh annual-leave-deploy.tar.gz 사용자@서버IP:~/</pre></div>
+    <div class="code"><pre><span class="lbl">서버</span>sudo bash install.sh        <span class="c"># OS 선택 → Docker 설치 → 압축해제 → 시크릿 생성</span>
+<span class="c"># 안내에 따라 .env 편집(접속주소·라이선스) 후 기동</span></pre></div>
+
+    <h3>방법 B — 수동</h3>
+    <ol class="steps">
+      <li><h3>압축 해제</h3>
+        <div class="code"><pre>tar xzf annual-leave-deploy.tar.gz &amp;&amp; cd annual-leave</pre></div></li>
+      <li><h3>환경설정</h3>
+        <div class="code"><pre>cp .env.prod.example .env &amp;&amp; nano .env   <span class="c"># 접속주소·DB명·라이선스</span></pre></div></li>
+      <li><h3>시크릿 생성 (DB 비번·JWT)</h3>
+        <div class="code"><pre>mkdir -p secrets
+printf '%s' "$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-28)" &gt; secrets/db_password
+printf '%s' "$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-64)" &gt; secrets/jwt_secret
+chmod 700 secrets &amp;&amp; chmod 600 secrets/*</pre></div></li>
+      <li><h3>기동</h3>
+        <div class="code"><pre>docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml ps   <span class="c"># 3개 Up 이면 성공</span></pre></div></li>
+    </ol>
+
+    <h2>3.3 최초 로그인</h2>
+    <p>초기 관리자 비밀번호는 <b>최초 기동 로그에 1회만</b> 표시됩니다(설치마다 무작위).</p>
+    <div class="code"><pre>docker compose -f docker-compose.prod.yml logs backend | grep -A4 "초기 관리자 계정 생성"
+<span class="c"># 이메일: admin@company.com / 초기 비밀번호: (로그의 값)</span></pre></div>
+    <div class="note d"><b>로그인 후 즉시 비밀번호를 변경</b>하세요. 관리자 계정은 사용자 목록에 노출되지 않으며, 우상단 <b>[내 정보 → 비밀번호 변경]</b> 으로 변경합니다.</div>
+  </section>
+
+  <!-- ============ TAB 4 : 그 외 ============ -->
+  <section class="panel" id="p4">
+    <h2>운영 명령</h2>
+    <div class="code"><pre><span class="c"># 상태 / 로그</span>
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f backend
+<span class="c"># 중지 / 시작 / 재시작</span>
+docker compose -f docker-compose.prod.yml stop
+docker compose -f docker-compose.prod.yml restart web</pre></div>
+
+    <h2>데이터 백업 / 복구</h2>
+    <div class="code"><pre><span class="c"># 백업 (매일 cron 권장)</span>
+docker exec leave-postgres pg_dump -U leave annual_leave | gzip &gt; leave_$(date +%F).sql.gz
+<span class="c"># 복구</span>
+gunzip -c leave_YYYY-MM-DD.sql.gz | docker exec -i leave-postgres psql -U leave -d annual_leave</pre></div>
+    <div class="note i">DB는 도커 볼륨 <code>pgdata</code>, 인증서는 <code>caddy_data</code> 에 영구 저장됩니다.</div>
+
+    <h2>소스 수정 후 재배포 (개발 PC)</h2>
+    <p class="lead">프론트+백엔드를 한 번에 빌드해 난독화 <code>app.jar</code> 로 만든 뒤, 소스 없는 패키지로 배포합니다.</p>
+    <div class="code"><pre><span class="lbl">내 PC (실제 경로에서)</span>.\gradlew.bat :backend:bootJarObf
+copy backend\build\libs\backend-obf.jar backend\app.jar
+.\scripts\package-deploy.ps1        <span class="c"># 소스 미포함 패키지 생성(자동 검증)</span></pre></div>
+    <div class="code"><pre><span class="lbl">서버</span>tar xzf annual-leave-deploy.tar.gz &amp;&amp; cd annual-leave
+docker compose -f docker-compose.prod.yml up -d --build   <span class="c"># Flyway 자동 마이그레이션</span></pre></div>
+    <div class="note ok">서버의 <code>.env</code>·<code>secrets/</code> 는 패키지에 없어 <b>그대로 유지</b>됩니다. 데이터도 보존됩니다.</div>
+
+    <h2>보안 체크리스트 (배포 전)</h2>
+    <ul>
+      <li>초기 관리자 비밀번호 변경(로그 확인 후)</li>
+      <li>DB 비번·JWT는 <code>secrets/</code> 파일(무작위·강력), <code>chmod 600</code></li>
+      <li><code>.env</code>·<code>secrets/</code> git·백업 공유 제외</li>
+      <li>방화벽 22/80/443만 개방(5432·8080 외부 차단)</li>
+      <li>가능하면 모드 A(HTTPS) 운영, 정기 DB 백업(cron)</li>
+      <li>SSH 키 로그인만 허용, 디스크/볼륨 암호화(권장)</li>
+    </ul>
+
+    <h2>문제 해결</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>증상</th><th>원인 / 조치</th></tr></thead>
+      <tbody>
+        <tr><td>포트 충돌 <code>address already in use</code></td><td>다른 서비스가 점유 → compose <code>web</code> 포트 변경(설정 탭 3)</td></tr>
+        <tr><td>접속 시 302/인증서 오류</td><td><code>SITE_ADDRESS</code> 콜론 누락 → <code>:80</code> 으로(도메인은 도메인만)</td></tr>
+        <tr><td>로그인 등 전면 차단</td><td>라이선스 미설정/만료/host 불일치 → <code>LICENSE_KEY</code>·<code>LICENSE_HOST</code> 확인</td></tr>
+        <tr><td>기동 실패 "JWT 서명키…"</td><td><code>secrets/jwt_secret</code> 없음/짧음 → 32바이트 이상 생성</td></tr>
+        <tr><td>502 Bad Gateway</td><td>백엔드 기동 전 접속 → <code>logs backend</code> 에서 <code>Started</code> 확인</td></tr>
+        <tr><td>엑셀 등록 일부 실패</td><td>행별 오류로 보고됨(부서명 일치·날짜 <code>YYYY-MM-DD</code>·권한값 확인)</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2>관련 문서 (저장소)</h2>
+    <ul>
+      <li><code>README.md</code> — 프로젝트 개요·로컬 개발</li>
+      <li><code>DEPLOY.md</code> — 운영 배포 상세(모드 A/B·시크릿·라이선스)</li>
+      <li><code>SECURITY.md</code> — 코드 보호·서버 보안·시크릿</li>
+      <li><code>OBFUSCATION.md</code> — 난독화 빌드/배포 절차</li>
+      <li><code>LICENSING.md</code> — 라이선스 발급(공급사)</li>
+    </ul>
+  </section>
+
+  </main>
+
+  <p class="foot">
+    저장 단축키(nano): <span class="kbd">Ctrl+O</span> → <span class="kbd">Enter</span> → <span class="kbd">Ctrl+X</span> ·
+    배포 아티팩트는 소스 미포함(난독화 jar) · 컨테이너 비-root 실행 · 라이선스 항상 집행
+  </p>
+</div>
