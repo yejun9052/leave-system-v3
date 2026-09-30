@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { cn } from "@/lib/utils";
 import { extractErrorMessage } from "@/api/client";
 
@@ -59,6 +60,7 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
 export default function EmployeePage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [keyword, setKeyword] = useState("");
@@ -96,6 +98,12 @@ export default function EmployeePage() {
   });
 
   const onImport = async (file: File) => {
+    const ok = await confirm({
+      title: "엑셀 파일로 사용자를 일괄 등록할까요?",
+      description: `${file.name}\n등록된 사용자마다 임시 비밀번호 메일이 발송됩니다.`,
+      confirmText: "등록",
+    });
+    if (!ok) return;
     try {
       const result = await employeeApi.importExcel(file);
       toast({
@@ -229,7 +237,14 @@ export default function EmployeePage() {
                             size="icon"
                             variant="ghost"
                             title="복원"
-                            onClick={() => reactivateMutation.mutate(e.id)}
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: `${e.name} 님을 재직 상태로 복원할까요?`,
+                                description: "복원하면 다시 로그인할 수 있습니다.",
+                                confirmText: "복원",
+                              });
+                              if (ok) reactivateMutation.mutate(e.id);
+                            }}
                           >
                             <UserCheck className="h-4 w-4" />
                           </Button>
@@ -238,8 +253,14 @@ export default function EmployeePage() {
                             size="icon"
                             variant="ghost"
                             title="퇴사 처리"
-                            onClick={() => {
-                              if (confirm(`${e.name} 님을 퇴사 처리할까요?`)) resignMutation.mutate(e.id);
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: `${e.name} 님을 퇴사 처리할까요?`,
+                                description: "퇴사 처리하면 즉시 로그아웃되고 더 이상 로그인할 수 없습니다.",
+                                confirmText: "퇴사 처리",
+                                destructive: true,
+                              });
+                              if (ok) resignMutation.mutate(e.id);
                             }}
                           >
                             <UserX className="h-4 w-4 text-destructive" />
@@ -301,43 +322,26 @@ export default function EmployeePage() {
 
 function ResetPasswordButton({ employee }: { employee: Employee }) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const confirm = useConfirm();
   const mutation = useMutation({
     mutationFn: () => employeeApi.sendPasswordResetMail(employee.id),
-    onSuccess: () => {
-      toast({ title: "재설정 메일을 보냈습니다.", variant: "success" });
-      setOpen(false);
-    },
+    onSuccess: () => toast({ title: "재설정 메일을 보냈습니다.", variant: "success" }),
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
+  const onClick = async () => {
+    const ok = await confirm({
+      title: "비밀번호 재설정 메일을 보낼까요?",
+      description:
+        `${employee.name}(${employee.email})님에게 비밀번호 재설정 링크를 메일로 보냅니다.\n` +
+        "링크는 30분 동안 한 번만 쓸 수 있으며, 본인이 새 비밀번호를 정하기 전까지 기존 비밀번호는 그대로입니다.",
+      confirmText: "메일 발송",
+    });
+    if (ok) mutation.mutate();
+  };
   return (
-    <>
-      <Button size="icon" variant="ghost" title="재설정 메일 발송" onClick={() => setOpen(true)}>
-        <KeyRound className="h-4 w-4" />
-      </Button>
-      {open && (
-        <Dialog open onOpenChange={(o) => !o && setOpen(false)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>비밀번호 재설정 메일 발송</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm leading-relaxed">
-              <span className="font-medium">{employee.name}</span>({employee.email})님에게 비밀번호 재설정
-              링크를 메일로 보냅니다. 링크는 30분 동안 한 번만 쓸 수 있으며, 본인이 새 비밀번호를 정하기
-              전까지 기존 비밀번호는 그대로입니다.
-            </p>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                취소
-              </Button>
-              <Button disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-                메일 발송
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </>
+    <Button size="icon" variant="ghost" title="재설정 메일 발송" onClick={onClick} disabled={mutation.isPending}>
+      <KeyRound className="h-4 w-4" />
+    </Button>
   );
 }
 
@@ -353,6 +357,7 @@ function EmployeeDialog({
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const isEdit = !!employee;
   const [form, setForm] = useState<EmployeeCreate>({
     email: employee?.email ?? "",
@@ -396,6 +401,27 @@ function EmployeeDialog({
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
+
+  const roleText = (roles: Role[]) =>
+    (roles.length ? roles : (["EMPLOYEE"] as Role[])).map((r) => ROLE_LABEL[r]).join(", ");
+
+  const onSave = async () => {
+    const lines: string[] = [`${form.name.trim()} (${form.email.trim()})`];
+    if (isEdit && employee) {
+      const before = roleText(employee.roles);
+      const after = roleText(form.roles);
+      lines.push(before === after ? `권한: ${after}` : `권한 변경: ${before} → ${after}`);
+    } else {
+      lines.push(`권한: ${roleText(form.roles)}`);
+      lines.push("임시 비밀번호가 사용자 이메일로 발송됩니다.");
+    }
+    const ok = await confirm({
+      title: isEdit ? "사용자 정보를 저장할까요?" : "사용자를 추가할까요?",
+      description: lines.join("\n"),
+      confirmText: isEdit ? "저장" : "추가",
+    });
+    if (ok) save.mutate();
+  };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -471,7 +497,7 @@ function EmployeeDialog({
             취소
           </Button>
           <Button
-            onClick={() => save.mutate()}
+            onClick={onSave}
             disabled={save.isPending || !form.name.trim() || !form.email.trim()}
           >
             저장

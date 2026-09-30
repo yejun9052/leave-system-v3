@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import HolidayTab from "./HolidayTab";
 
@@ -87,6 +88,7 @@ export default function PolicyPage() {
 
 function PolicyTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
   const [form, setForm] = useState<Omit<Policy, "id"> | null>(null);
@@ -284,10 +286,31 @@ function PolicyTab() {
       </Card>
 
       <div className="flex flex-wrap gap-2 lg:col-span-2">
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+        <Button
+          onClick={async () => {
+            const ok = await confirm({
+              title: "정책을 저장할까요?",
+              description: "저장하면 이후 연차 계산에 바로 적용됩니다.",
+              confirmText: "저장",
+            });
+            if (ok) save.mutate();
+          }}
+          disabled={save.isPending}
+        >
           <Save className="h-4 w-4" /> 정책 저장
         </Button>
-        <Button variant="outline" onClick={() => grant.mutate()} disabled={grant.isPending}>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            const ok = await confirm({
+              title: "전 직원 연차를 부여/재계산할까요?",
+              description: "재직 중인 전 직원의 올해 연차를 다시 계산해 부여합니다.",
+              confirmText: "부여/재계산",
+            });
+            if (ok) grant.mutate();
+          }}
+          disabled={grant.isPending}
+        >
           <PlayCircle className="h-4 w-4" /> 전 직원 연차 부여/재계산
         </Button>
       </div>
@@ -319,6 +342,7 @@ function ToggleRow({
 
 function LeaveTypeTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: types = [] } = useQuery({
     queryKey: ["leaveTypes", "all"],
@@ -393,8 +417,13 @@ function LeaveTypeTab() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => {
-                          if (confirm(`'${t.name}' 삭제?`)) remove.mutate(t.id);
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: `'${t.name}' 휴가 종류를 삭제할까요?`,
+                            confirmText: "삭제",
+                            destructive: true,
+                          });
+                          if (ok) remove.mutate(t.id);
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -435,6 +464,7 @@ function LeaveTypeDialog({
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const isEdit = !!type;
   const [form, setForm] = useState<LeaveTypeInput>({
     code: type?.code ?? "",
@@ -529,7 +559,13 @@ function LeaveTypeDialog({
               취소
             </Button>
             <Button
-              onClick={() => save.mutate()}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: isEdit ? `'${form.name}' 휴가 종류를 저장할까요?` : `'${form.name}' 휴가 종류를 추가할까요?`,
+                  confirmText: isEdit ? "저장" : "추가",
+                });
+                if (ok) save.mutate();
+              }}
               disabled={save.isPending || !form.name.trim() || (!isEdit && !form.code?.trim())}
             >
               저장
@@ -543,6 +579,7 @@ function LeaveTypeDialog({
 
 function RulesTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: awards = [] } = useQuery({ queryKey: ["awardRules"], queryFn: policyRulesApi.awards });
   const { data: specials = [] } = useQuery({ queryKey: ["specialRules"], queryFn: policyRulesApi.specials });
@@ -587,10 +624,23 @@ function RulesTab() {
               <Input type="number" step="0.5" className="w-20" value={aDays} onChange={(e) => setADays(Number(e.target.value))} /></div>
             <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
               <Input value={aName} onChange={(e) => setAName(e.target.value)} placeholder="예: 5년 근속 포상" /></div>
-            <Button size="sm" onClick={() => addAward.mutate()}><Plus className="h-4 w-4" /> 추가</Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "포상휴가 규칙을 추가할까요?",
+                  description: `근속 ${aYears}년 도달 시 ${aDays}일을 부여하는 규칙을 추가합니다.`,
+                  confirmText: "추가",
+                });
+                if (ok) addAward.mutate();
+              }}
+            ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
           <RuleTable rows={awards.map((a) => ({ id: a.id, cells: [`${a.years}년`, `${a.bonusDays}일`, a.name ?? "-"] }))}
-            headers={["근속", "포상", "명칭"]} onDelete={(id) => delAward.mutate(id)} />
+            headers={["근속", "포상", "명칭"]} onDelete={async (id) => {
+              const ok = await confirm({ title: "포상휴가 규칙을 삭제할까요?", confirmText: "삭제", destructive: true });
+              if (ok) delAward.mutate(id);
+            }} />
         </CardContent>
       </Card>
 
@@ -602,10 +652,24 @@ function RulesTab() {
               <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="예: 본인 결혼" /></div>
             <div className="space-y-1"><Label className="text-xs">일수</Label>
               <Input type="number" step="0.5" className="w-20" value={sDays} onChange={(e) => setSDays(Number(e.target.value))} /></div>
-            <Button size="sm" onClick={() => addSpecial.mutate()} disabled={!sName.trim()}><Plus className="h-4 w-4" /> 추가</Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: `'${sName}' 경조사 규정을 추가할까요?`,
+                  description: `${sDays}일이 부여되는 규정으로 추가합니다.`,
+                  confirmText: "추가",
+                });
+                if (ok) addSpecial.mutate();
+              }}
+              disabled={!sName.trim()}
+            ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
           <RuleTable rows={specials.map((s) => ({ id: s.id, cells: [s.name, `${s.days}일`] }))}
-            headers={["사유/관계", "일수"]} onDelete={(id) => delSpecial.mutate(id)} />
+            headers={["사유/관계", "일수"]} onDelete={async (id) => {
+              const ok = await confirm({ title: "경조사 규정을 삭제할까요?", confirmText: "삭제", destructive: true });
+              if (ok) delSpecial.mutate(id);
+            }} />
         </CardContent>
       </Card>
     </div>
@@ -614,6 +678,7 @@ function RulesTab() {
 
 function BlackoutTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: rows = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
   const today = new Date().toISOString().slice(0, 10);
@@ -644,10 +709,24 @@ function BlackoutTab() {
             <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
           <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
-          <Button size="sm" onClick={() => add.mutate()} disabled={!name.trim()}><Plus className="h-4 w-4" /> 추가</Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const ok = await confirm({
+                title: `'${name}' 사용 금지 기간을 추가할까요?`,
+                description: `${start} ~ ${end} 기간에는 연차를 신청할 수 없게 됩니다.`,
+                confirmText: "추가",
+              });
+              if (ok) add.mutate();
+            }}
+            disabled={!name.trim()}
+          ><Plus className="h-4 w-4" /> 추가</Button>
         </div>
         <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name] }))}
-          headers={["기간", "명칭"]} onDelete={(id) => del.mutate(id)} />
+          headers={["기간", "명칭"]} onDelete={async (id) => {
+            const ok = await confirm({ title: "사용 금지 기간을 삭제할까요?", confirmText: "삭제", destructive: true });
+            if (ok) del.mutate(id);
+          }} />
       </CardContent>
     </Card>
   );
@@ -655,6 +734,7 @@ function BlackoutTab() {
 
 function PromotionTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [year, setYear] = useState(new Date().getFullYear());
   const { data: targets = [], refetch } = useQuery({
     queryKey: ["promotionTargets", year],
@@ -674,7 +754,18 @@ function PromotionTab() {
           <div className="space-y-1"><Label className="text-xs">연도</Label>
             <Input type="number" className="w-28" value={year} onChange={(e) => setYear(Number(e.target.value))} /></div>
           <Button size="sm" variant="secondary" onClick={() => refetch()}>조회</Button>
-          <Button size="sm" onClick={() => run.mutate()} disabled={run.isPending || targets.length === 0}>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const ok = await confirm({
+                title: `${year}년 연차 촉진 알림을 발송할까요?`,
+                description: "대상 직원에게 알림이 발송되며 되돌릴 수 없습니다.",
+                confirmText: "발송",
+              });
+              if (ok) run.mutate();
+            }}
+            disabled={run.isPending || targets.length === 0}
+          >
             <PlayCircle className="h-4 w-4" /> 촉진 알림 발송 ({targets.length})
           </Button>
         </div>

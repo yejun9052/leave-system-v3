@@ -23,15 +23,37 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import type { LeaveRequest } from "@/types";
 import { formatDays, formatLeaveAmount } from "@/lib/leaveFormat";
 
 type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
 
+/** 확인창용 요약: "홍길동 · 연차 2026-10-14 ~ 2026-10-15 (2일)" */
+function summary(r: LeaveRequest): string {
+  const period = r.startDate === r.endDate ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
+  return `${r.employeeName} · ${r.leaveTypeName} ${period} (${formatLeaveAmount(r)})`;
+}
+
 export default function ApprovalsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
+
+  const onApprove = async (r: LeaveRequest) => {
+    const ok = await confirm({ title: "휴가를 승인할까요?", description: summary(r), confirmText: "승인" });
+    if (ok) approve.mutate(r.id);
+  };
+
+  const onApproveCancel = async (r: LeaveRequest) => {
+    const ok = await confirm({
+      title: "휴가 취소 요청을 승인할까요?",
+      description: `${summary(r)}\n승인하면 휴가가 취소되고 차감된 연차가 돌아갑니다.`,
+      confirmText: "취소 승인",
+    });
+    if (ok) approveCancel.mutate(r.id);
+  };
   const [rejecting, setRejecting] = useState<RejectTarget | null>(null);
 
   const { data: pending = [], isLoading } = useQuery({
@@ -133,7 +155,7 @@ export default function ApprovalsPage() {
                           <>
                             <Button
                               size="sm"
-                              onClick={() => approveCancel.mutate(r.id)}
+                              onClick={() => onApproveCancel(r)}
                               disabled={approveCancel.isPending}
                             >
                               <Check className="h-4 w-4" /> 취소 승인
@@ -150,7 +172,7 @@ export default function ApprovalsPage() {
                           <>
                             <Button
                               size="sm"
-                              onClick={() => approve.mutate(r.id)}
+                              onClick={() => onApprove(r)}
                               disabled={approve.isPending}
                             >
                               <Check className="h-4 w-4" /> 승인
@@ -205,8 +227,18 @@ function RejectDialog({
   onDone: () => void;
 }) {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [reason, setReason] = useState("");
   const isCancel = target.mode === "cancelReject";
+  const onReject = async () => {
+    const ok = await confirm({
+      title: isCancel ? "휴가 취소 요청을 반려할까요?" : "휴가 신청을 반려할까요?",
+      description: `${summary(target.req)}\n사유: ${reason.trim() || "(미기재)"}`,
+      confirmText: "반려",
+      destructive: true,
+    });
+    if (ok) reject.mutate();
+  };
   const reject = useMutation({
     mutationFn: () =>
       isCancel
@@ -234,7 +266,7 @@ function RejectDialog({
           <Button variant="outline" onClick={onClose}>
             취소
           </Button>
-          <Button variant="destructive" onClick={() => reject.mutate()} disabled={reject.isPending}>
+          <Button variant="destructive" onClick={onReject} disabled={reject.isPending}>
             반려
           </Button>
         </DialogFooter>

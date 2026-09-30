@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { formatDays, formatLeaveAmount } from "@/lib/leaveFormat";
 
@@ -45,6 +46,7 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warnin
 export default function MyLeavesPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
 
   const { data: balance } = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
@@ -133,8 +135,15 @@ export default function MyLeavesPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => {
-                            if (confirm("신청을 취소할까요?")) cancel.mutate({ id: r.id, approved: false });
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: "휴가 신청을 취소할까요?",
+                              description: `${r.leaveTypeName} ${r.startDate}${r.startDate !== r.endDate ? ` ~ ${r.endDate}` : ""} (${formatLeaveAmount(r)})`,
+                              confirmText: "신청 취소",
+                              cancelText: "닫기",
+                              destructive: true,
+                            });
+                            if (ok) cancel.mutate({ id: r.id, approved: false });
                           }}
                         >
                           <X className="h-4 w-4" /> 취소
@@ -144,9 +153,14 @@ export default function MyLeavesPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => {
-                            if (confirm("승인된 휴가의 취소를 요청할까요?\n팀장 승인 후 확정됩니다."))
-                              cancel.mutate({ id: r.id, approved: true });
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: "승인된 휴가의 취소를 요청할까요?",
+                              description: `${r.leaveTypeName} ${r.startDate}${r.startDate !== r.endDate ? ` ~ ${r.endDate}` : ""} (${formatLeaveAmount(r)})\n결재자가 승인하면 취소가 확정됩니다.`,
+                              confirmText: "취소 요청",
+                              cancelText: "닫기",
+                            });
+                            if (ok) cancel.mutate({ id: r.id, approved: true });
                           }}
                         >
                           <X className="h-4 w-4" /> 취소 요청

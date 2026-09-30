@@ -6,6 +6,7 @@ import { extractErrorMessage } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useConfirm } from "@/components/ui/confirm";
 import { changePasswordSchema, type ChangePasswordValues } from "./passwordSchema";
 
 /**
@@ -21,6 +22,7 @@ export function ChangePasswordForm({
   submitLabel?: string;
   onChanged: () => void | Promise<void>;
 }) {
+  const confirm = useConfirm();
   const {
     register,
     handleSubmit,
@@ -33,6 +35,12 @@ export function ChangePasswordForm({
   });
 
   const onSubmit = async (values: ChangePasswordValues) => {
+    const ok = await confirm({
+      title: "비밀번호를 변경할까요?",
+      description: "변경하면 다른 기기에서의 로그인은 모두 종료됩니다.",
+      confirmText: "변경",
+    });
+    if (!ok) return;
     try {
       await employeeApi.changeMyPassword(values.currentPassword, values.newPassword);
       reset();

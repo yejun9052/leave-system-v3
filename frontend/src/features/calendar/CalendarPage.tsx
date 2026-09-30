@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { cn } from "@/lib/utils";
 
@@ -171,6 +172,7 @@ function EventDialog({
   onDelete?: () => void;
 }) {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const isEdit = !!event;
   const [form, setForm] = useState<CalendarEventInput>({
     title: event?.title ?? "",
@@ -199,6 +201,25 @@ function EventDialog({
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
+
+  const onSave = async () => {
+    const ok = await confirm({
+      title: isEdit ? "일정을 수정할까요?" : "일정을 추가할까요?",
+      description: `${form.title.trim()} (${form.startDate}${form.endDate !== form.startDate ? ` ~ ${form.endDate}` : ""}, ${form.scope === "COMPANY" ? "전사" : "부서"})`,
+      confirmText: isEdit ? "수정" : "추가",
+    });
+    if (ok) save.mutate();
+  };
+
+  const onDeleteClick = async () => {
+    const ok = await confirm({
+      title: "일정을 삭제할까요?",
+      description: form.title.trim(),
+      confirmText: "삭제",
+      destructive: true,
+    });
+    if (ok) onDelete?.();
+  };
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -242,7 +263,7 @@ function EventDialog({
         </div>
         <DialogFooter className="sm:justify-between">
           {onDelete ? (
-            <Button variant="destructive" onClick={onDelete}>
+            <Button variant="destructive" onClick={onDeleteClick}>
               삭제
             </Button>
           ) : (
@@ -252,7 +273,7 @@ function EventDialog({
             <Button variant="outline" onClick={onClose}>
               취소
             </Button>
-            <Button onClick={() => save.mutate()} disabled={!form.title.trim() || save.isPending}>
+            <Button onClick={onSave} disabled={!form.title.trim() || save.isPending}>
               저장
             </Button>
           </div>

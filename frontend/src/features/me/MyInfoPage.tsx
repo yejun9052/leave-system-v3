@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { ChangePasswordForm } from "@/features/auth/ChangePasswordForm";
 
 // 서버 검증과 동일: 이름 필수(100자), 직급 50자, 전화번호 30자
@@ -23,6 +24,7 @@ type ProfileValues = z.infer<typeof profileSchema>;
 export default function MyInfoPage() {
   const { user, loadMe } = useAuthStore();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
   const {
     register,
@@ -35,6 +37,8 @@ export default function MyInfoPage() {
   });
 
   const saveProfile = async (values: ProfileValues) => {
+    const ok = await confirm({ title: "프로필을 저장할까요?", confirmText: "저장" });
+    if (!ok) return;
     try {
       const saved = await employeeApi.updateMyProfile({
         name: values.name,

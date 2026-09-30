@@ -9,12 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 
 /** 공휴일 조회·동기화(관리자). 동기화는 매일 00:10 자동으로도 실행된다. */
 export default function HolidayTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const [year, setYear] = useState(new Date().getFullYear());
   const [result, setResult] = useState<HolidaySyncResult | null>(null);
@@ -58,7 +60,18 @@ export default function HolidayTab() {
               }}
             />
           </div>
-          <Button size="sm" onClick={() => sync.mutate()} disabled={sync.isPending}>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const ok = await confirm({
+                title: `${year}년 공휴일을 동기화할까요?`,
+                description: "새 공휴일이 걸친 신청 휴가는 자동 조정·환원됩니다.",
+                confirmText: "동기화",
+              });
+              if (ok) sync.mutate();
+            }}
+            disabled={sync.isPending}
+          >
             <RefreshCw className={sync.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
             {year}년 동기화
           </Button>

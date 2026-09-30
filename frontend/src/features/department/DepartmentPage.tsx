@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 
 type DialogMode =
@@ -43,6 +44,7 @@ type DialogMode =
 export default function DepartmentPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [dialog, setDialog] = useState<DialogMode>(null);
 
   const { data: tree = [], isLoading } = useQuery({
@@ -65,8 +67,13 @@ export default function DepartmentPage() {
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
-  const onDelete = (dept: Department) => {
-    if (confirm(`'${dept.name}' 부서를 삭제할까요?`)) removeMutation.mutate(dept.id);
+  const onDelete = async (dept: Department) => {
+    const ok = await confirm({
+      title: `'${dept.name}' 부서를 삭제할까요?`,
+      confirmText: "삭제",
+      destructive: true,
+    });
+    if (ok) removeMutation.mutate(dept.id);
   };
 
   return (
@@ -216,6 +223,7 @@ function DepartmentDialog({
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const [name, setName] = useState(mode.type === "edit" ? mode.dept.name : "");
   const [newParentId, setNewParentId] = useState<string>(
     mode.type === "move" && mode.dept.parentId ? String(mode.dept.parentId) : "root",
@@ -286,7 +294,18 @@ function DepartmentDialog({
             취소
           </Button>
           <Button
-            onClick={() => save.mutate()}
+            onClick={async () => {
+              const ok = await confirm({
+                title:
+                  mode.type === "create"
+                    ? `'${name}' 부서를 추가할까요?`
+                    : mode.type === "edit"
+                      ? `'${name}' 부서로 저장할까요?`
+                      : `'${mode.dept.name}' 부서를 이동할까요?`,
+                confirmText: mode.type === "create" ? "추가" : mode.type === "edit" ? "저장" : "이동",
+              });
+              if (ok) save.mutate();
+            }}
             disabled={save.isPending || (mode.type !== "move" && !name.trim())}
           >
             저장
