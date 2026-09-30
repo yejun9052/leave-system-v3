@@ -23,12 +23,22 @@ export const api = axios.create({
 // 앱 초기 로그인 확인(/auth/me)과 로그인 시도 자체의 401 은 호출부에서 처리
 const SKIP_REDIRECT_URLS = ["/auth/me", "/auth/login"];
 
+/**
+ * 세션이 없어서(만료·로그아웃·퇴사 처리) 받은 401 인지. 서버는 이때 오류 코드 UNAUTHORIZED 를 준다.
+ * 그 외 코드의 401(예: 로그인 실패)은 입력 오류라 로그인 페이지로 보내지 않는다.
+ */
+function isSessionLost(error: AxiosError): boolean {
+  if (error.response?.status !== 401) return false;
+  const code = (error.response.data as ApiEnvelope<unknown> | undefined)?.error?.code;
+  return !code || code === "UNAUTHORIZED";
+}
+
 api.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
     const url = error.config?.url ?? "";
     if (
-      error.response?.status === 401 &&
+      isSessionLost(error) &&
       !SKIP_REDIRECT_URLS.includes(url) &&
       window.location.pathname !== "/login"
     ) {

@@ -22,6 +22,8 @@ public enum ErrorCode {
     TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS,
             "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요."),
     PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN, "비밀번호를 변경한 뒤 이용할 수 있습니다."),
+    /** 로그인된 사용자의 입력 오류라 401(세션 없음)이 아닌 400. */
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "현재 비밀번호가 올바르지 않습니다."),
     HOLIDAY_SYNC_FAILED(HttpStatus.BAD_GATEWAY, "공휴일 동기화에 실패했습니다. 잠시 후 다시 시도하세요."),
     // 400: 로그인 없이 쓰는 재설정 화면에서 401(→ 로그인 화면 이동)과 구분
     PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST,

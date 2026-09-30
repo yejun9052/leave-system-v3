@@ -137,15 +137,19 @@ class EmployeeServicePasswordTest {
     }
 
     @Test
-    void 현재_비밀번호가_틀리면_변경하지_않는다() {
+    void 현재_비밀번호가_틀리면_변경하지_않고_세션_만료가_아닌_400_입력_오류로_알린다() {
         Employee employee = 직원(passwordEncoder.encode("Temp#Pass123"));
         employee.requirePasswordChange();
         String before = employee.getPasswordHash();
         when(employeeRepository.findById(5L)).thenReturn(Optional.of(employee));
 
+        // 401 이면 화면이 세션 만료로 보고 로그인 페이지로 보내 버린다
         assertThatThrownBy(() -> service.changeMyPassword(5L, "wrong", "myNewPassword!"))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.CURRENT_PASSWORD_MISMATCH);
+                    assertThat(ex.getErrorCode().status().value()).isEqualTo(400);
+                    assertThat(ex.getMessage()).isEqualTo("현재 비밀번호가 올바르지 않습니다.");
+                });
         assertThat(employee.getPasswordHash()).isEqualTo(before);
         assertThat(employee.isPasswordChangeRequired()).isTrue();
         verify(passwordResetService, never()).issue(any());

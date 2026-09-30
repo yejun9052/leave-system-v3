@@ -165,7 +165,7 @@ public class EmployeeService {
     public void changeMyPassword(Long employeeId, String currentPassword, String newPassword) {
         Employee employee = getEntity(employeeId);
         if (!passwordEncoder.matches(currentPassword, employee.getPasswordHash())) {
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "현재 비밀번호가 올바르지 않습니다.");
+            throw new BusinessException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }
         employee.setOwnPassword(passwordEncoder.encode(newPassword));
     }
