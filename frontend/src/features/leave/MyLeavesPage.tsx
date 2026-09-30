@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi, type LeaveRequestCreate } from "@/api/leave";
 import { LEAVE_STATUS_LABEL, type LeaveRequestStatus, type LeaveType } from "@/types";
@@ -225,6 +225,21 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const isPartial = !!selectedType && selectedType.portion !== "FULL";
   const isHourly = selectedType?.portion === "HOURLY";
 
+  // 병가·공가처럼 잔여 연차 소진 후 쓰는 종류는 목록을 열기 전에 신청 가능 여부를 미리 조회해,
+  // 불가하면 드롭다운에서 회색으로 표시하고 선택할 수 없게 한다(아래 단건 조회와 같은 캐시 키).
+  const restrictedTypes = useMemo(() => usableTypes.filter((t) => t.requiresAnnualExhausted), [usableTypes]);
+  const restrictedEligibility = useQueries({
+    queries: restrictedTypes.map((t) => ({
+      queryKey: ["eligibility", String(t.id), start],
+      queryFn: () => leaveApi.eligibility(t.id, start || undefined),
+    })),
+  });
+  const blockedReasons = new Map<number, string>();
+  restrictedTypes.forEach((t, i) => {
+    const e = restrictedEligibility[i]?.data;
+    if (e && !e.allowed) blockedReasons.set(t.id, e.reason ?? "지금은 신청할 수 없습니다.");
+  });
+
   const { data: eligibility, isFetching: eligibilityLoading } = useQuery({
     queryKey: ["eligibility", typeId, start],
     queryFn: () => leaveApi.eligibility(Number(typeId), start || undefined),
@@ -232,6 +247,12 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   });
   const forfeitDays = eligibility?.forfeitDays ?? 0;
   const notAllowed = !!eligibility && !eligibility.allowed;
+
+  // 시작일을 바꿔(연도가 달라지는 등) 선택해 둔 종류가 불가해지면 선택을 해제한다
+  const selectedBlocked = !!selectedType && blockedReasons.has(selectedType.id);
+  useEffect(() => {
+    if (selectedBlocked) setTypeId("");
+  }, [selectedBlocked]);
 
   // 종류·날짜가 바뀌면 소멸 안내 확인을 다시 받는다
   useEffect(() => {
@@ -280,12 +301,18 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
               </SelectTrigger>
               <SelectContent>
                 {usableTypes.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>
+                  <SelectItem key={t.id} value={String(t.id)} disabled={blockedReasons.has(t.id)}>
                     {t.name} ({formatDays(t.deductDays)}일 차감)
+                    {blockedReasons.has(t.id) && " · 선택 불가"}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {[...new Set(blockedReasons.values())].map((reason) => (
+              <p key={reason} className="text-xs text-muted-foreground">
+                {reason}
+              </p>
+            ))}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
