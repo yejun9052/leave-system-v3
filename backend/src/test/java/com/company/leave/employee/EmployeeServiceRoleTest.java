@@ -120,6 +120,15 @@ class EmployeeServiceRoleTest {
         assertThat(target.getRoles()).containsExactlyInAnyOrder(Role.HR_ADMIN, Role.TEAM_LEAD);
     }
 
+    @Test
+    void approvalRecipientsAreOnlyActiveHrAdmins() {
+        when(employees.findIdsByAnyRoleAndStatus(Set.of(Role.HR_ADMIN),
+                com.company.leave.employee.domain.EmployeeStatus.ACTIVE)).thenReturn(java.util.List.of(11L));
+        assertThat(service.activeAdminIds()).containsExactly(11L);
+        verify(employees).findIdsByAnyRoleAndStatus(Set.of(Role.HR_ADMIN),
+                com.company.leave.employee.domain.EmployeeStatus.ACTIVE);
+    }
+
     private EmployeeRequests.Update update(Set<Role> roles) {
         return new EmployeeRequests.Update("changed@company.com", "수정", null, null, null,
                 LocalDate.of(2024, 1, 1), roles);

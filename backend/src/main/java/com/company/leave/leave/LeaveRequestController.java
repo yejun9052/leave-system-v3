@@ -70,21 +70,21 @@ public class LeaveRequestController {
     }
 
     @Operation(summary = "결재 대기 목록")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN') and !hasRole('SUPER_ADMIN')")
     @GetMapping("/pending")
     public ApiResponse<List<LeaveRequestDtos.Response>> pending() {
         return ApiResponse.ok(leaveRequestService.pendingForApprover(SecurityUtils.currentEmployeeId()));
     }
 
     @Operation(summary = "휴가 승인")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN') and !hasRole('SUPER_ADMIN')")
     @PostMapping("/{id}/approve")
     public ApiResponse<LeaveRequestDtos.Response> approve(@PathVariable Long id) {
         return ApiResponse.ok(leaveRequestService.approve(id, SecurityUtils.currentEmployeeId()));
     }
 
     @Operation(summary = "휴가 반려")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN') and !hasRole('SUPER_ADMIN')")
     @PostMapping("/{id}/reject")
     public ApiResponse<LeaveRequestDtos.Response> reject(
             @PathVariable Long id, @Valid @RequestBody LeaveRequestDtos.Reject req) {
@@ -101,16 +101,16 @@ public class LeaveRequestController {
         return ApiResponse.ok(leaveRequestService.cancel(id, SecurityUtils.currentEmployeeId(), reason));
     }
 
-    @Operation(summary = "휴가 취소 요청 승인 (팀장/관리자)")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
+    @Operation(summary = "휴가 취소 요청 승인 (인사관리자)")
+    @PreAuthorize("hasRole('HR_ADMIN') and !hasRole('SUPER_ADMIN')")
     @PostMapping("/{id}/cancel/approve")
     public ApiResponse<LeaveRequestDtos.Response> approveCancellation(@PathVariable Long id) {
         return ApiResponse.ok(
                 leaveRequestService.approveCancellation(id, SecurityUtils.currentEmployeeId()));
     }
 
-    @Operation(summary = "휴가 취소 요청 반려 (팀장/관리자)")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
+    @Operation(summary = "휴가 취소 요청 반려 (인사관리자)")
+    @PreAuthorize("hasRole('HR_ADMIN') and !hasRole('SUPER_ADMIN')")
     @PostMapping("/{id}/cancel/reject")
     public ApiResponse<LeaveRequestDtos.Response> rejectCancellation(
             @PathVariable Long id, @Valid @RequestBody LeaveRequestDtos.Reject req) {

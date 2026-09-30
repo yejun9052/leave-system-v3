@@ -57,7 +57,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 /**
  * 휴가 결재 권한.
  * <ul>
- *   <li>팀장의 신청(본인 건 포함)은 관리자(인사관리자·최고관리자)만 결재. 상위 부서 팀장도 불가</li>
+ *   <li>팀장의 신청(본인 건 포함)은 인사관리자만 결재. 시스템 관리자·상위 부서 팀장도 불가</li>
  *   <li>팀장은 담당 부서(하위 포함)의 일반 직원만 결재</li>
  *   <li>인사관리자는 본인 휴가도 직접 승인 가능</li>
  * </ul>
@@ -125,6 +125,7 @@ class LeaveRequestServiceApprovalTest {
         Department 경영지원팀 = 부서(5L, "경영지원팀", 본사);
 
         최고관리자 = 직원(1L, 본사, Role.SUPER_ADMIN);
+        ReflectionTestUtils.setField(최고관리자, "systemAccount", true);
         인사관리자 = 직원(11L, 경영지원팀, Role.EMPLOYEE, Role.TEAM_LEAD, Role.HR_ADMIN);
         개발팀장 = 직원(2L, 제품개발팀, Role.EMPLOYEE, Role.TEAM_LEAD);
         파트장 = 직원(7L, 플랫폼파트, Role.EMPLOYEE, Role.TEAM_LEAD);
@@ -143,7 +144,7 @@ class LeaveRequestServiceApprovalTest {
         lenient().when(departmentRepository.findSubtreeIds(5L)).thenReturn(List.of(5L));
 
         lenient().when(employeeService.getEntity(anyLong())).thenAnswer(inv -> employees.get(inv.<Long>getArgument(0)));
-        lenient().when(employeeService.activeAdminIds()).thenReturn(List.of(1L, 11L));
+        lenient().when(employeeService.activeAdminIds()).thenReturn(List.of(11L));
         lenient().when(requestRepository.findById(anyLong()))
                 .thenAnswer(inv -> Optional.ofNullable(requests.get(inv.<Long>getArgument(0))));
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
@@ -264,19 +265,20 @@ class LeaveRequestServiceApprovalTest {
     }
 
     @Test
-    void 팀장이_신청하면_부서장_대신_재직_관리자들에게_알림이_간다() {
+    void 팀장이_신청하면_재직_인사관리자에게만_알림이_간다() {
         service.create(부파트장.getId(), 신청서());
 
-        verify(notificationService).notify(eq(1L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         verify(notificationService).notify(eq(11L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
         verify(notificationService, never()).notify(eq(7L), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
-    void 인사관리자가_신청하면_본인을_뺀_다른_관리자에게_알림이_간다() {
-        service.create(인사관리자.getId(), 신청서());
+    void 인사관리자가_혼자여도_본인_결재가_가능하므로_결재자_부재_경고가_없다() {
+        LeaveRequestDtos.Response response = service.create(인사관리자.getId(), 신청서());
 
-        verify(notificationService).notify(eq(1L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        assertThat(response.requestWarning()).isNull();
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         verify(notificationService, never()).notify(eq(11L), anyString(), anyString(), anyString(), anyString());
     }
 
@@ -289,7 +291,7 @@ class LeaveRequestServiceApprovalTest {
         service.cancel(request.getId(), 개발팀장.getId(), "일정 변경");
 
         assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCEL_REQUESTED);
-        verify(notificationService).notify(eq(1L), eq("LEAVE_CANCEL_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         verify(notificationService).notify(eq(11L), eq("LEAVE_CANCEL_REQUESTED"), anyString(), anyString(), anyString());
     }
 
@@ -305,7 +307,7 @@ class LeaveRequestServiceApprovalTest {
         assertThat(request.getLeadApprover()).isSameAs(개발팀장);
         assertThat(balance.getUsed()).isEqualByComparingTo("0");
         verify(calendarEventRepository, never()).save(any());
-        verify(notificationService).notify(eq(1L), eq("LEAVE_FINAL_APPROVAL_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         verify(notificationService).notify(eq(11L), eq("LEAVE_FINAL_APPROVAL_REQUESTED"), anyString(), anyString(), anyString());
         verify(notificationService).notify(eq(6L), eq("LEAVE_LEAD_APPROVED"), anyString(), anyString(), anyString());
     }
@@ -358,7 +360,8 @@ class LeaveRequestServiceApprovalTest {
 
         service.create(파트원.getId(), 신청서());
 
-        verify(notificationService).notify(eq(1L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService).notify(eq(11L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         verify(notificationService, never()).notify(eq(7L), anyString(), anyString(), anyString(), anyString());
         assertThat(service.pendingForApprover(파트장.getId())).isEmpty();
     }
@@ -372,7 +375,7 @@ class LeaveRequestServiceApprovalTest {
         when(employeeService.allEmployeeIds()).thenReturn(List.of(1L, 2L, 6L, 7L, 13L));
         when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(팀원_대기, 팀원_1차승인, 팀장_대기));
 
-        List<LeaveRequestDtos.Response> inbox = service.pendingForApprover(최고관리자.getId());
+        List<LeaveRequestDtos.Response> inbox = service.pendingForApprover(인사관리자.getId());
 
         assertThat(inbox).extracting(LeaveRequestDtos.Response::id)
                 .containsExactlyInAnyOrder(팀원_1차승인.getId(), 팀장_대기.getId());
@@ -388,7 +391,8 @@ class LeaveRequestServiceApprovalTest {
 
         LeaveRequest request = requests.get(created.id());
         assertThat(request.getHrDirectReason()).isEqualTo("팀장 부재로 인사관리자에게 신청합니다.");
-        verify(notificationService).notify(eq(1L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService).notify(eq(11L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         verify(notificationService, never()).notify(eq(7L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
         service.approve(request.getId(), 인사관리자.getId());
         assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.APPROVED);
@@ -421,7 +425,8 @@ class LeaveRequestServiceApprovalTest {
         request.approve(인사관리자, Instant.now());
         ReflectionTestUtils.setField(request, "startDate", LocalDate.now().plusDays(30));
         service.cancel(request.getId(), 파트원.getId(), "일정 변경");
-        verify(notificationService).notify(eq(1L), eq("LEAVE_CANCEL_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService).notify(eq(11L), eq("LEAVE_CANCEL_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         verify(notificationService, never()).notify(eq(7L), eq("LEAVE_CANCEL_REQUESTED"), anyString(), anyString(), anyString());
 
         승인_권한_없음(() -> service.approveCancellation(request.getId(), 파트장.getId()));
@@ -454,6 +459,153 @@ class LeaveRequestServiceApprovalTest {
     }
 
     // --- 조회 권한은 그대로 ---
+    @Test
+    void 시스템_관리자는_팀장_단계와_인사_단계_모두_승인과_반려를_할_수_없다() {
+        for (Employee applicant : List.of(개발팀원, 개발팀장)) {
+            LeaveRequest request = 대기_신청(applicant);
+            승인_권한_없음(() -> service.approve(request.getId(), 최고관리자.getId()));
+            승인_권한_없음(() -> service.reject(request.getId(), 최고관리자.getId(), "사유"));
+            assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+        }
+        verify(calendarEventRepository, never()).save(any());
+        assertThat(balance.getUsed()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void 시스템_관리자는_취소_요청을_승인하거나_반려할_수_없다() {
+        LeaveRequest request = 대기_신청(개발팀장);
+        request.approve(인사관리자, Instant.now());
+        request.requestCancel("변경");
+        승인_권한_없음(() -> service.approveCancellation(request.getId(), 최고관리자.getId()));
+        승인_권한_없음(() -> service.rejectCancellation(request.getId(), 최고관리자.getId(), "사유"));
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCEL_REQUESTED);
+        verify(calendarEventRepository, never()).deleteByLeaveRequestId(anyLong());
+    }
+
+    @Test
+    void 시스템_관리자는_대기_1차승인_승인_취소대기_건을_대리_취소할_수_없다() {
+        for (LeaveRequestStatus status : List.of(LeaveRequestStatus.PENDING, LeaveRequestStatus.LEAD_APPROVED,
+                LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED)) {
+            LeaveRequest request = 대기_신청(개발팀원);
+            ReflectionTestUtils.setField(request, "status", status);
+            assertThatThrownBy(() -> service.cancel(request.getId(), 최고관리자.getId(), "대리 취소"))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+            assertThat(request.getStatus()).isEqualTo(status);
+        }
+        verify(calendarEventRepository, never()).deleteByLeaveRequestId(anyLong());
+    }
+
+    @Test
+    void 시스템_관리자는_서비스를_직접_호출해도_결재함이_거부된다() {
+        승인_권한_없음(() -> service.pendingForApprover(최고관리자.getId()));
+        verify(requestRepository, never()).findForApproval(any(), any());
+    }
+
+    @Test
+    void 시스템_관리자에게_인사와_팀장_역할과_부서장이_섞여도_결재할_수_없다() {
+        최고관리자.replaceRoles(Set.of(Role.SUPER_ADMIN, Role.HR_ADMIN, Role.TEAM_LEAD));
+        lenient().when(departmentRepository.findByLeadId(1L)).thenReturn(List.of(개발팀원.getDepartment()));
+        LeaveRequest request = 대기_신청(개발팀원);
+        승인_권한_없음(() -> service.approve(request.getId(), 최고관리자.getId()));
+        승인_권한_없음(() -> service.reject(request.getId(), 최고관리자.getId(), "사유"));
+        request.leadApprove(개발팀장, Instant.now());
+        승인_권한_없음(() -> service.approve(request.getId(), 최고관리자.getId()));
+        승인_권한_없음(() -> service.reject(request.getId(), 최고관리자.getId(), "사유"));
+    }
+
+    @Test
+    void 인사관리자는_본인_신청을_결재함에서_보고_승인과_반려할_수_있다() {
+        LeaveRequest 승인건 = 대기_신청(인사관리자);
+        LeaveRequest 반려건 = 대기_신청(인사관리자);
+        when(employeeService.allEmployeeIds()).thenReturn(List.of(11L));
+        when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(승인건, 반려건));
+        assertThat(service.pendingForApprover(11L)).extracting(LeaveRequestDtos.Response::id)
+                .containsExactlyInAnyOrder(승인건.getId(), 반려건.getId());
+        service.approve(승인건.getId(), 11L);
+        service.reject(반려건.getId(), 11L, "변경");
+        assertThat(승인건.getStatus()).isEqualTo(LeaveRequestStatus.APPROVED);
+        assertThat(반려건.getStatus()).isEqualTo(LeaveRequestStatus.REJECTED);
+    }
+
+    @Test
+    void 인사관리자는_다른_직원_휴가의_대리_취소를_계속_할_수_있다() {
+        LeaveRequest request = 대기_신청(개발팀원);
+        request.approve(인사관리자, Instant.now());
+        ReflectionTestUtils.setField(request, "startDate", LocalDate.now().plusDays(30));
+        balance.addUsed(BigDecimal.ONE);
+        service.cancel(request.getId(), 인사관리자.getId(), "대리 취소");
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCELLED);
+        assertThat(balance.getUsed()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void 팀장_역할과_부서장_지정이_없는_인사관리자도_본인_결재를_할_수_있다() {
+        Employee hrOnly = 직원(22L, 개발팀원.getDepartment(), Role.HR_ADMIN);
+        assertThat(service.approvalRoute(22L).firstStage()).isEqualTo(ApprovalStage.HR);
+        LeaveRequest approve = 대기_신청(hrOnly);
+        LeaveRequest reject = 대기_신청(hrOnly);
+        when(employeeService.allEmployeeIds()).thenReturn(List.of(22L));
+        when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(approve, reject));
+        assertThat(service.pendingForApprover(22L)).extracting(LeaveRequestDtos.Response::id)
+                .containsExactlyInAnyOrder(approve.getId(), reject.getId());
+        service.approve(approve.getId(), 22L);
+        service.reject(reject.getId(), 22L, "변경");
+        assertThat(approve.getStatus()).isEqualTo(LeaveRequestStatus.APPROVED);
+        assertThat(reject.getStatus()).isEqualTo(LeaveRequestStatus.REJECTED);
+    }
+
+    @Test
+    void 시스템_관리자가_부서장으로_지정되어도_결재_경로와_알림에서_제외한다() {
+        개발팀원.getDepartment().assignLead(최고관리자);
+        assertThat(service.approvalRoute(개발팀원.getId()).firstStage()).isEqualTo(ApprovalStage.HR);
+        service.create(개발팀원.getId(), 신청서());
+        verify(notificationService).notify(eq(11L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void 시스템_관리자_부서장은_건너뛰고_상위의_일반_팀장에게_1차_결재를_요청한다() {
+        파트원.getDepartment().assignLead(최고관리자);
+        assertThat(service.approvalRoute(파트원.getId()).firstStage()).isEqualTo(ApprovalStage.LEAD);
+        service.create(파트원.getId(), 신청서());
+        verify(notificationService).notify(eq(2L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void 인사관리자가_없어도_팀장_신청은_저장되고_응답과_알림과_로그에_경고한다() {
+        when(employeeService.activeAdminIds()).thenReturn(List.of());
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger)
+                org.slf4j.LoggerFactory.getLogger(LeaveRequestService.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            LeaveRequestDtos.Response response = service.create(개발팀장.getId(), 신청서());
+            String warning = "결재할 인사관리자가 없습니다. 관리자에게 문의하세요.";
+            assertThat(response.status()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(requests).containsKey(response.id());
+            assertThat(response.requestWarning()).isEqualTo(warning);
+            verify(notificationService).notify(eq(2L), eq("LEAVE_NO_HR_APPROVER"), anyString(),
+                    eq(warning), eq("/my-leaves"));
+            verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
+            assertThat(appender.list).anySatisfy(event -> {
+                assertThat(event.getLevel()).isEqualTo(ch.qos.logback.classic.Level.WARN);
+                assertThat(event.getFormattedMessage()).contains(warning);
+            });
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
+    void 시스템_관리자는_다른_직원의_연차_정보를_계속_조회할_수_있다() {
+        assertThatCode(() -> service.assertCanViewEmployeeData(최고관리자.getId(), 개발팀장.getId()))
+                .doesNotThrowAnyException();
+    }
 
     @Test
     void 상위_부서_팀장은_하위_부서_팀장의_연차_정보를_계속_조회할_수_있다() {

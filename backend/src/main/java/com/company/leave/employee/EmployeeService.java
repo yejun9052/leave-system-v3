@@ -206,11 +206,11 @@ public class EmployeeService {
         return employeeRepository.findAllIds();
     }
 
-    /** 재직 중인 관리자(HR_ADMIN·SUPER_ADMIN) ID. 팀장 휴가 결재 알림 수신자. */
+    /** 재직 중인 인사관리자 ID. 휴가 결재 알림 수신자(시스템 관리자는 제외). */
     @Transactional(readOnly = true)
     public java.util.List<Long> activeAdminIds() {
         return employeeRepository.findIdsByAnyRoleAndStatus(
-                EnumSet.of(Role.HR_ADMIN, Role.SUPER_ADMIN), EmployeeStatus.ACTIVE);
+                EnumSet.of(Role.HR_ADMIN), EmployeeStatus.ACTIVE);
     }
 
     @Transactional(readOnly = true)
