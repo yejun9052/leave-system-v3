@@ -17,14 +17,14 @@ $env:PGPASSWORD = $DbPass
 
 $qa = "(SELECT id FROM employees WHERE email LIKE 'qa.%@test.local')"
 $stmts = @(
-  "DELETE FROM leave_requests WHERE employee_id IN $qa OR approver_id IN $qa;",
+  "DELETE FROM leave_requests WHERE employee_id IN $qa OR approver_id IN $qa OR lead_approver_id IN $qa;",
   "DELETE FROM leave_balances  WHERE employee_id IN $qa;",
   "DELETE FROM notifications   WHERE employee_id IN $qa;",
   "DELETE FROM calendar_events WHERE employee_id IN $qa OR created_by IN $qa;",
   "UPDATE departments SET lead_id = NULL WHERE lead_id IN $qa;",
   "DELETE FROM employee_roles  WHERE employee_id IN $qa;",
   "DELETE FROM employees       WHERE email LIKE 'qa.%@test.local';",
-  "DELETE FROM audit_logs      WHERE actor_name IN ('QA_Lead','QA_Emp');",
+  "DELETE FROM audit_logs      WHERE actor_name IN ('QA_Lead','QA_Emp','QA_HR');",
   "DELETE FROM blackout_periods WHERE name LIKE 'QA%';",
   "DELETE FROM departments     WHERE name IN ('QA_Sub','QA_Team');"
 )

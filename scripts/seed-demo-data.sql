@@ -115,6 +115,13 @@ JOIN (VALUES
 ) AS v(email, role) ON v.email = e.email
 ON CONFLICT (employee_id, role) DO NOTHING;
 
+-- Every other employee (not the system account) gets the basic EMPLOYEE role.
+INSERT INTO employee_roles (employee_id, role)
+SELECT e.id, 'EMPLOYEE'
+FROM employees e
+WHERE e.system_account = FALSE
+  AND NOT EXISTS (SELECT 1 FROM employee_roles r WHERE r.employee_id = e.id);
+
 UPDATE departments SET lead_id = (SELECT id FROM employees WHERE email = 'leey217423@gmail.com') WHERE name = '제품개발팀';
 UPDATE departments SET lead_id = (SELECT id FROM employees WHERE email = 'seoyeon.park@example.com') WHERE name = '플랫폼파트';
 UPDATE departments SET lead_id = (SELECT id FROM employees WHERE email = 'jihoon.choi@example.com') WHERE name = '서비스파트';
