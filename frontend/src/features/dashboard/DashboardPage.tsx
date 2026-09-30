@@ -26,7 +26,8 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold">안녕하세요, {user?.name}님 👋</h1>
         <p className="text-sm text-muted-foreground">오늘의 휴가 현황을 확인하세요.</p>
       </div>
-      <PersonalSection />
+      {/* 관리 전용 계정은 직원이 아니므로 개인 연차·휴가 카드를 보여주지 않는다 */}
+      {!user?.systemAccount && <PersonalSection />}
       {manager && <AdminSection />}
     </div>
   );
