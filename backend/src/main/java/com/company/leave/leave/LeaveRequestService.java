@@ -149,8 +149,11 @@ public class LeaveRequestService {
             list = requestRepository.findForApproval(allEmployeeIds(), statuses);
         } else {
             Set<Long> memberIds = subordinateEmployeeIds(approver);
+            // 팀장(본인 포함)의 신청은 관리자만 결재하므로 팀장 결재함에서 뺀다
             list = memberIds.isEmpty() ? List.of()
-                    : requestRepository.findForApproval(memberIds, statuses);
+                    : requestRepository.findForApproval(memberIds, statuses).stream()
+                            .filter(r -> !isTeamLead(r.getEmployee()))
+                            .toList();
         }
         return list.stream().map(LeaveRequestDtos.Response::from).toList();
     }
@@ -166,7 +169,7 @@ public class LeaveRequestService {
         }
         Employee caller = employeeService.getEntity(callerId);
         Employee target = employeeService.getEntity(targetEmployeeId);
-        if (!canApprove(caller, target)) {
+        if (!isAdmin(caller) && !isInChargeOf(caller, target)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
     }
@@ -317,10 +320,8 @@ public class LeaveRequestService {
 
     private void notifyApproversForCancel(LeaveRequest request) {
         Employee employee = request.getEmployee();
-        Department dept = employee.getDepartment();
-        if (dept != null && dept.getLead() != null
-                && !dept.getLead().getId().equals(employee.getId())) {
-            notificationService.notify(dept.getLead().getId(), "LEAVE_CANCEL_REQUESTED",
+        for (Long approverId : approverIdsFor(employee)) {
+            notificationService.notify(approverId, "LEAVE_CANCEL_REQUESTED",
                     "휴가 취소 요청",
                     employee.getName() + " - " + request.getLeaveType().getName() + " "
                             + request.getStartDate() + " ~ " + request.getEndDate(), "/approvals");
@@ -402,30 +403,59 @@ public class LeaveRequestService {
     }
 
     private void notifyApprovers(Employee employee, LeaveRequest request) {
-        Department dept = employee.getDepartment();
-        if (dept != null && dept.getLead() != null
-                && !dept.getLead().getId().equals(employee.getId())) {
-            notificationService.notify(dept.getLead().getId(), "LEAVE_REQUESTED",
+        for (Long approverId : approverIdsFor(employee)) {
+            notificationService.notify(approverId, "LEAVE_REQUESTED",
                     "새 휴가 결재 요청",
                     employee.getName() + " - " + request.getLeaveType().getName() + " "
                             + request.getStartDate() + " ~ " + request.getEndDate(), "/approvals");
         }
     }
 
+    /**
+     * 결재 알림 수신자. 일반 직원은 소속 부서 팀장, 팀장의 신청이나 결재할 팀장이 없는 부서는
+     * 재직 관리자(인사관리자·최고관리자). 본인은 제외.
+     */
+    private List<Long> approverIdsFor(Employee applicant) {
+        Department dept = applicant.getDepartment();
+        if (!isTeamLead(applicant) && dept != null && dept.getLead() != null
+                && !dept.getLead().getId().equals(applicant.getId())) {
+            return List.of(dept.getLead().getId());
+        }
+        return employeeService.activeAdminIds().stream()
+                .filter(id -> !id.equals(applicant.getId()))
+                .toList();
+    }
+
     private boolean isAdmin(Employee e) {
         return e.hasRole(Role.SUPER_ADMIN) || e.hasRole(Role.HR_ADMIN);
     }
 
-    /** 결재 권한: 관리자이거나, 대상자가 본인이 팀장인 부서(하위 포함)에 속함 */
+    /** 팀장: TEAM_LEAD 역할이 있거나 부서장으로 지정된 직원. */
+    private boolean isTeamLead(Employee e) {
+        return e.hasRole(Role.TEAM_LEAD) || !departmentRepository.findByLeadId(e.getId()).isEmpty();
+    }
+
+    /**
+     * 결재 권한. 관리자(인사관리자·최고관리자)는 모두 결재(본인 건 포함).
+     * 팀장의 신청(본인 건 포함)은 관리자만 결재하고, 팀장은 담당 부서(하위 포함)의 일반 직원만 결재한다.
+     */
     private boolean canApprove(Employee approver, Employee target) {
         if (isAdmin(approver)) {
             return true;
         }
+        if (isTeamLead(target)) {
+            return false;
+        }
+        return isInChargeOf(approver, target);
+    }
+
+    /** 대상자가 본인이 팀장인 부서(하위 포함)에 속함. 조회 권한 판단에도 쓴다. */
+    private boolean isInChargeOf(Employee lead, Employee target) {
         Long targetDeptId = target.getDepartmentId();
         if (targetDeptId == null) {
             return false;
         }
-        return subordinateDeptIds(approver).contains(targetDeptId);
+        return subordinateDeptIds(lead).contains(targetDeptId);
     }
 
     private Set<Long> subordinateDeptIds(Employee lead) {

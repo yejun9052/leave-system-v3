@@ -2,6 +2,7 @@ package com.company.leave.employee.repository;
 
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.EmployeeStatus;
+import com.company.leave.employee.domain.Role;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -46,6 +47,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
 
     @Query("select e.id from Employee e where e.department.id in :deptIds")
     List<Long> findIdsByDepartmentIdIn(@Param("deptIds") java.util.Collection<Long> deptIds);
+
+    /** 주어진 역할 중 하나라도 가진, 해당 상태의 직원 ID (예: 결재 알림을 받을 재직 관리자). */
+    @Query("select distinct e.id from Employee e join e.roles r where r in :roles and e.status = :status")
+    List<Long> findIdsByAnyRoleAndStatus(@Param("roles") java.util.Collection<Role> roles,
+                                         @Param("status") EmployeeStatus status);
 
     /**
      * 사용자 생성 직렬화용 트랜잭션 advisory lock (라이선스 인원 TOCTOU 방지).

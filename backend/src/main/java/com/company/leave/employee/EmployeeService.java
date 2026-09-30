@@ -206,6 +206,13 @@ public class EmployeeService {
         return employeeRepository.findAllIds();
     }
 
+    /** 재직 중인 관리자(HR_ADMIN·SUPER_ADMIN) ID. 팀장 휴가 결재 알림 수신자. */
+    @Transactional(readOnly = true)
+    public java.util.List<Long> activeAdminIds() {
+        return employeeRepository.findIdsByAnyRoleAndStatus(
+                EnumSet.of(Role.HR_ADMIN, Role.SUPER_ADMIN), EmployeeStatus.ACTIVE);
+    }
+
     @Transactional(readOnly = true)
     public java.util.Set<Long> employeeIdsInDepartments(java.util.Collection<Long> departmentIds) {
         return new java.util.HashSet<>(employeeRepository.findIdsByDepartmentIdIn(departmentIds));
