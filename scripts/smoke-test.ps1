@@ -102,8 +102,15 @@ Check "create team lead" ($lead.id -ne $null)
 $empBody = @{email="qa.emp@test.local";name="QA_Emp";departmentId=$qa.id;position="staff";hireDate="2024-01-02";roles=@("EMPLOYEE")}|ConvertTo-Json
 $emp = (Req POST "$base/employees" $admin $empBody).data.data
 Check "create staff" ($emp.id -ne $null)
+$hrBody = @{email="qa.hr@test.local";name="QA_HR";departmentId=$rootId;position="hr";hireDate="2022-01-03";roles=@("HR_ADMIN","EMPLOYEE")}|ConvertTo-Json
+$hr = (Req POST "$base/employees" $admin $hrBody).data.data
+Check "create HR admin" ($hr.id -ne $null)
+$superBody = @{email="qa.super@test.local";name="QA_Super";departmentId=$qa.id;position="x";hireDate="2022-01-03";roles=@("SUPER_ADMIN")}|ConvertTo-Json
+$superRes = Req POST "$base/employees" $admin $superBody
+Check "SUPER_ADMIN cannot be granted to employee -> 400" ($superRes.status -eq 400 -and $superRes.data.error.code -eq "SUPER_ADMIN_ROLE_RESTRICTED") "(status=$($superRes.status))"
 SetQaPassword "qa.lead@test.local"
 SetQaPassword "qa.emp@test.local"
+SetQaPassword "qa.hr@test.local"
 Req PUT "$base/departments/$($qa.id)" $admin (@{name="QA_Team";leadId=$lead.id;sortOrder=0}|ConvertTo-Json) | Out-Null
 $leadBal = (Req GET "$base/leave-requests/balances/$($lead.id)" $admin).data.data
 $empBal = (Req GET "$base/leave-requests/balances/$($emp.id)" $admin).data.data
@@ -113,6 +120,7 @@ Check "staff grant (2024 -> 15)" ($empBal.granted -eq 15) "(granted=$($empBal.gr
 "===== 4. Request -> approve -> balance/calendar ====="
 $empH = Login "qa.emp@test.local" "qatest1234!"
 $leadH = Login "qa.lead@test.local" "qatest1234!"
+$hrH = Login "qa.hr@test.local" "qatest1234!"
 $annualId = ((Req GET "$base/leave-types" $empH).data.data | ? {$_.code -eq "ANNUAL"}).id
 $reqBody = @{leaveTypeId=$annualId;startDate=(D 0);endDate=(D 1);reason="qa annual"}|ConvertTo-Json
 $lr = (Req POST "$base/leave-requests" $empH $reqBody).data.data
@@ -125,7 +133,11 @@ $empBal1 = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "balance not charged before final approval (used=0)" ($empBal1.used -eq 0) "(used=$($empBal1.used))"
 $leadFinal = Req POST "$base/leave-requests/$($lr.id)/approve" $leadH
 Check "lead cannot give final approval -> 403" ($leadFinal.status -eq 403) "(status=$($leadFinal.status))"
-$appr = (Req POST "$base/leave-requests/$($lr.id)/approve" $admin).data.data
+$sysPend = Req GET "$base/leave-requests/pending" $admin
+Check "system admin has no approval inbox -> 403" ($sysPend.status -eq 403) "(status=$($sysPend.status))"
+$sysAppr = Req POST "$base/leave-requests/$($lr.id)/approve" $admin
+Check "system admin cannot approve -> 403" ($sysAppr.status -eq 403) "(status=$($sysAppr.status))"
+$appr = (Req POST "$base/leave-requests/$($lr.id)/approve" $hrH).data.data
 Check "HR final approve -> APPROVED" ($appr.status -eq "APPROVED")
 $empBal2 = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "balance used=2" ($empBal2.used -eq 2) "(used=$($empBal2.used))"
@@ -139,11 +151,11 @@ $empBalC = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "balance kept during cancel-req (used=2)" ($empBalC.used -eq 2)
 $leadCancel = Req POST "$base/leave-requests/$($lr.id)/cancel/approve" $leadH
 Check "lead cannot decide cancel request -> 403" ($leadCancel.status -eq 403) "(status=$($leadCancel.status))"
-$rej = (Req POST "$base/leave-requests/$($lr.id)/cancel/reject" $admin (@{reason="need at work"}|ConvertTo-Json)).data.data
+$rej = (Req POST "$base/leave-requests/$($lr.id)/cancel/reject" $hrH (@{reason="need at work"}|ConvertTo-Json)).data.data
 Check "cancel reject -> back to APPROVED" ($rej.status -eq "APPROVED")
 $c2 = (Req POST "$base/leave-requests/$($lr.id)/cancel" $empH (@{reason="again"}|ConvertTo-Json)).data.data
 Check "re cancel request" ($c2.status -eq "CANCEL_REQUESTED")
-$capp = (Req POST "$base/leave-requests/$($lr.id)/cancel/approve" $admin).data.data
+$capp = (Req POST "$base/leave-requests/$($lr.id)/cancel/approve" $hrH).data.data
 Check "cancel approve -> CANCELLED" ($capp.status -eq "CANCELLED")
 $empBal3 = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "balance restored (used=0)" ($empBal3.used -eq 0) "(used=$($empBal3.used))"
@@ -155,7 +167,7 @@ $amId = ((Req GET "$base/leave-types" $empH).data.data | ? {$_.code -eq "HALF_AM
 $half = (Req POST "$base/leave-requests" $empH (@{leaveTypeId=$amId;startDate=(D 3);endDate=(D 3)}|ConvertTo-Json)).data.data
 Check "half-day request (0.5d)" ($half.days -eq 0.5) "(days=$($half.days))"
 Req POST "$base/leave-requests/$($half.id)/approve" $leadH | Out-Null
-Req POST "$base/leave-requests/$($half.id)/approve" $admin | Out-Null
+Req POST "$base/leave-requests/$($half.id)/approve" $hrH | Out-Null
 $empBal4 = (Req GET "$base/leave-requests/balances/me" $empH).data.data
 Check "half-day used=0.5" ($empBal4.used -eq 0.5) "(used=$($empBal4.used))"
 
