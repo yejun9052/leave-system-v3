@@ -122,7 +122,7 @@ public class LeaveRequestService {
 
         validateNoOverlap(employeeId, start, end, type, days);
 
-        validateUsagePolicy(employee, start, end, days, policy);
+        validateUsagePolicy(employee, type, start, end, days, policy);
         int appliedYear = appliedYear(start, policy);
 
         if (type.isRequiresAnnualExhausted()) {
@@ -208,7 +208,10 @@ public class LeaveRequestService {
                             .filter(r -> !isTeamLead(r.getEmployee()))
                             .toList();
         }
-        return list.stream().map(LeaveRequestDtos.Response::from).toList();
+        LeavePolicy policy = policyService.getActivePolicy();
+        return list.stream()
+                .map(r -> LeaveRequestDtos.Response.from(r).withApprovalWarning(teamLimitWarning(r, policy)))
+                .toList();
     }
 
     /**
@@ -403,8 +406,13 @@ public class LeaveRequestService {
     // --- helpers ---
 
     /** 정책 기반 사용 통제 검증 (블랙아웃/사전신청/연속일/팀 동시부재). */
-    private void validateUsagePolicy(Employee employee, LocalDate start, LocalDate end,
+    private void validateUsagePolicy(Employee employee, LeaveType type, LocalDate start, LocalDate end,
                                      BigDecimal days, LeavePolicy policy) {
+        // 경조사·병가·공가(연차 비차감)는 갑자기 생기거나 회사가 막을 수 없는 휴가라 사용 통제를 적용하지 않는다.
+        // 팀 동시 부재 한도 초과는 막지 않고 결재함에 경고로 보여 팀장이 재량으로 판단한다(teamLimitWarning).
+        if (!type.isDeductFromAnnual()) {
+            return;
+        }
         if (blackoutPeriodRepository.existsOverlap(start, end)) {
             throw new BusinessException(ErrorCode.LEAVE_BLACKOUT);
         }
@@ -420,18 +428,39 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_MAX_CONSECUTIVE,
                     "최대 연속 " + policy.getMaxConsecutiveDays() + "일까지 사용할 수 있습니다.");
         }
-        if (policy.getMaxConcurrentAbsence() > 0 && employee.getDepartmentId() != null) {
-            long teamOnLeave = requestRepository.findApprovedBetween(start, end).stream()
-                    .filter(r -> employee.getDepartmentId().equals(r.getEmployee().getDepartmentId()))
-                    .filter(r -> !r.getEmployee().getId().equals(employee.getId()))
-                    .map(r -> r.getEmployee().getId())
-                    .distinct()
-                    .count();
-            if (teamOnLeave + 1 > policy.getMaxConcurrentAbsence()) {
-                throw new BusinessException(ErrorCode.LEAVE_TEAM_LIMIT,
-                        "같은 기간 팀 내 최대 " + policy.getMaxConcurrentAbsence() + "명까지 휴가가 가능합니다.");
-            }
+        if (exceedsTeamLimit(employee, start, end, policy)) {
+            throw new BusinessException(ErrorCode.LEAVE_TEAM_LIMIT,
+                    "같은 기간 팀 내 최대 " + policy.getMaxConcurrentAbsence() + "명까지 휴가가 가능합니다.");
         }
+    }
+
+    /** 같은 기간 같은 부서의 승인된 휴가자(본인 제외) 수. */
+    private long teamOnLeave(Employee employee, LocalDate start, LocalDate end) {
+        return requestRepository.findApprovedBetween(start, end).stream()
+                .filter(r -> employee.getDepartmentId().equals(r.getEmployee().getDepartmentId()))
+                .filter(r -> !r.getEmployee().getId().equals(employee.getId()))
+                .map(r -> r.getEmployee().getId())
+                .distinct()
+                .count();
+    }
+
+    private boolean exceedsTeamLimit(Employee employee, LocalDate start, LocalDate end, LeavePolicy policy) {
+        return policy.getMaxConcurrentAbsence() > 0 && employee.getDepartmentId() != null
+                && teamOnLeave(employee, start, end) + 1 > policy.getMaxConcurrentAbsence();
+    }
+
+    /**
+     * 결재자에게 보여 줄 경고. 사용 통제를 적용하지 않은 비차감 휴가(경조사·병가·공가)가 팀 동시 부재 한도를
+     * 넘으면 알려 주고, 승인 여부는 결재자가 판단한다. 해당 없으면 null.
+     */
+    private String teamLimitWarning(LeaveRequest request, LeavePolicy policy) {
+        if (!request.isPending() || request.getLeaveType().isDeductFromAnnual()
+                || !exceedsTeamLimit(request.getEmployee(), request.getStartDate(), request.getEndDate(), policy)) {
+            return null;
+        }
+        long others = teamOnLeave(request.getEmployee(), request.getStartDate(), request.getEndDate());
+        return "같은 기간 팀 부재 " + (others + 1) + "명으로 한도(" + policy.getMaxConcurrentAbsence()
+                + "명)를 넘습니다. 승인 여부를 판단해 주세요.";
     }
 
 

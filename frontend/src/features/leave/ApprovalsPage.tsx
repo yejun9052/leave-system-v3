@@ -43,7 +43,11 @@ export default function ApprovalsPage() {
   const confirm = useConfirm();
 
   const onApprove = async (r: LeaveRequest) => {
-    const ok = await confirm({ title: "휴가를 승인할까요?", description: summary(r), confirmText: "승인" });
+    const ok = await confirm({
+      title: "휴가를 승인할까요?",
+      description: r.approvalWarning ? `${summary(r)}\n⚠ ${r.approvalWarning}` : summary(r),
+      confirmText: "승인",
+    });
     if (ok) approve.mutate(r.id);
   };
 
@@ -137,6 +141,9 @@ export default function ApprovalsPage() {
                           <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
                         )}
                       </span>
+                      {r.approvalWarning && (
+                        <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
+                      )}
                     </TableCell>
                     <TableCell>
                       {r.startDate}

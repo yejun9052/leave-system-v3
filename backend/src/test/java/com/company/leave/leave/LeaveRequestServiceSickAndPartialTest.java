@@ -509,6 +509,86 @@ class LeaveRequestServiceSickAndPartialTest {
         }
     }
 
+    @Nested
+    @DisplayName("경조사·병가·공가는 사용 통제 제외")
+    @DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
+    class 사용_통제_제외 {
+
+        @Test
+        void 블랙아웃_기간에도_경조사와_병가는_신청되고_연차는_막힌다() {
+            when(blackoutPeriodRepository.existsOverlap(any(), any())).thenReturn(true);
+            잔여(0);
+
+            assertThat(신청(경조사, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(신청(병가, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThatThrownBy(() -> 신청(연차, null, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_BLACKOUT));
+        }
+
+        @Test
+        void 최소_사전_신청_기한은_경조사에_적용하지_않는다() {
+            when(policy.getMinAdvanceDays()).thenReturn(10_000);
+
+            assertThat(신청(경조사, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThatThrownBy(() -> 신청(연차, null, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_MIN_ADVANCE));
+        }
+
+        @Test
+        void 최대_연속_사용일은_경조사에_적용하지_않는다() {
+            when(policy.getMaxConsecutiveDays()).thenReturn(1);
+
+            LeaveRequestDtos.Response ok = service.create(EMP,
+                    new LeaveRequestDtos.Create(경조사.getId(), TUE, TUE.plusDays(2), "사유"));
+            assertThat(ok.days()).isEqualByComparingTo("3");
+            assertThatThrownBy(() -> service.create(EMP,
+                    new LeaveRequestDtos.Create(연차.getId(), TUE.plusDays(7), TUE.plusDays(9), "사유")))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_MAX_CONSECUTIVE));
+        }
+
+        @Test
+        void 팀_동시_부재_한도를_넘어도_경조사는_신청되고_결재함에_경고가_뜬다() {
+            팀원_한_명이_같은_기간_휴가_중(1);
+
+            LeaveRequest request = 신청(경조사, null, null);
+            assertThatThrownBy(() -> 신청(연차, null, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_TEAM_LIMIT));
+
+            when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(request));
+            List<LeaveRequestDtos.Response> inbox = service.pendingForApprover(ADMIN);
+
+            assertThat(inbox).singleElement().extracting(LeaveRequestDtos.Response::approvalWarning).asString()
+                    .contains("팀 부재 2명").contains("한도(1명)");
+        }
+
+        @Test
+        void 팀_한도_안이면_결재함_경고가_없다() {
+            팀원_한_명이_같은_기간_휴가_중(2);
+            LeaveRequest request = 신청(경조사, null, null);
+            when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(request));
+
+            assertThat(service.pendingForApprover(ADMIN)).singleElement()
+                    .extracting(LeaveRequestDtos.Response::approvalWarning).isNull();
+        }
+
+        private void 팀원_한_명이_같은_기간_휴가_중(int limit) {
+            com.company.leave.department.domain.Department team =
+                    new com.company.leave.department.domain.Department("개발팀", null, 0);
+            ReflectionTestUtils.setField(team, "id", 3L);
+            ReflectionTestUtils.setField(employee, "department", team);
+            Employee mate = Employee.builder().email("mate@company.com").passwordHash("h").name("동료")
+                    .department(team).build();
+            ReflectionTestUtils.setField(mate, "id", 11L);
+            LeaveRequest mateLeave = new LeaveRequest(mate, 연차, TUE, TUE, BigDecimal.ONE, BigDecimal.ONE, 2027, "휴가");
+            lenient().when(requestRepository.findApprovedBetween(any(), any())).thenReturn(List.of(mateLeave));
+            lenient().when(policy.getMaxConcurrentAbsence()).thenReturn(limit);
+        }
+    }
+
     // --- helpers ---
 
     private static LeaveType 종류(long id, String code, String name, String deduct, DayPortion portion,

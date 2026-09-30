@@ -80,7 +80,16 @@ public final class LeaveRequestDtos {
             Instant approvedAt,
             String rejectReason,
             String cancelReason,
-            Instant createdAt) {
+            Instant createdAt,
+            /** 결재자에게 보여 줄 경고(예: 경조사가 팀 동시 부재 한도 초과). 결재함에서만 채워진다. */
+            String approvalWarning) {
+
+        public Response withApprovalWarning(String warning) {
+            return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
+                    leaveTypeColor, startDate, endDate, days, portion, hours, forfeitedDays, specialRuleName,
+                    specialRuleDays, status, reason, approverName, approvedAt, rejectReason, cancelReason,
+                    createdAt, warning);
+        }
 
         public static Response from(LeaveRequest r) {
             DayPortion portion = r.getLeaveType().getPortion();
@@ -107,7 +116,8 @@ public final class LeaveRequestDtos {
                     r.getApprovedAt(),
                     r.getRejectReason(),
                     r.getCancelReason(),
-                    r.getCreatedAt());
+                    r.getCreatedAt(),
+                    null);
         }
     }
 }

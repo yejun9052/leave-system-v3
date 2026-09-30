@@ -128,6 +128,8 @@ export interface LeaveRequest {
   /** 경조사 규정으로 신청한 경우의 규정 이름·일수 */
   specialRuleName: string | null;
   specialRuleDays: number | null;
+  /** 결재함에서만 채워지는 결재자용 경고(예: 경조사가 팀 동시 부재 한도 초과) */
+  approvalWarning?: string | null;
   status: LeaveRequestStatus;
   reason: string | null;
   approverName: string | null;
