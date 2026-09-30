@@ -278,6 +278,20 @@ class LeaveRequestServiceApprovalTest {
         verify(notificationService).notify(eq(11L), eq("LEAVE_CANCEL_REQUESTED"), anyString(), anyString(), anyString());
     }
 
+    // --- 관리 전용 계정 ---
+
+    @Test
+    void 관리_전용_계정은_휴가를_신청할_수_없다() {
+        ReflectionTestUtils.setField(최고관리자, "systemAccount", true);
+
+        assertThatThrownBy(() -> service.create(최고관리자.getId(), 신청서()))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+                    assertThat(ex.getMessage()).contains("관리 전용 계정");
+                });
+        verify(requestRepository, never()).save(any());
+    }
+
     // --- 조회 권한은 그대로 ---
 
     @Test

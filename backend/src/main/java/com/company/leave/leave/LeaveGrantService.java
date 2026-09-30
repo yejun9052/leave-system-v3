@@ -56,12 +56,12 @@ public class LeaveGrantService {
         return grant(employee, year, policy);
     }
 
-    /** 재직 중인 전 직원에게 해당 연도 연차를 부여한다. */
+    /** 재직 중인 전 직원에게 해당 연도 연차를 부여한다(관리 전용 계정 제외). */
     @Transactional
     public int grantAll(int year) {
         LeavePolicy policy = policyService.getActivePolicy();
         int count = 0;
-        for (Employee employee : employeeRepository.findByStatus(EmployeeStatus.ACTIVE)) {
+        for (Employee employee : employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)) {
             grant(employee, year, policy);
             count++;
         }

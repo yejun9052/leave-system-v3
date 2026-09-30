@@ -45,12 +45,12 @@ public class DashboardService {
         int year = LocalDate.now().getYear();
         LocalDate today = LocalDate.now();
 
-        long totalEmployees = employeeRepository.findByStatus(EmployeeStatus.ACTIVE).size();
+        long totalEmployees = employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE);
         int onLeaveToday = requestRepository.findApprovedBetween(today, today).size();
         long pending = requestRepository.countByStatusIn(java.util.EnumSet.of(
                 LeaveRequestStatus.PENDING, LeaveRequestStatus.CANCEL_REQUESTED));
 
-        List<LeaveBalance> balances = balanceRepository.findByYear(year);
+        List<LeaveBalance> balances = balanceRepository.findByYearExcludingSystemAccounts(year);
         BigDecimal totalGranted = balances.stream()
                 .map(LeaveBalance::getGranted).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalUsed = balances.stream()

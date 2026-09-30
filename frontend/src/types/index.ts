@@ -18,6 +18,8 @@ export interface Me {
   roles: Role[];
   /** true 면 비밀번호를 바꾸기 전까지 다른 기능 사용 불가(서버가 403 으로 차단) */
   passwordChangeRequired: boolean;
+  /** true 면 직원이 아닌 관리 전용 계정(연차·휴가 신청 대상 아님) */
+  systemAccount: boolean;
 }
 
 export type EmployeeStatus = "ACTIVE" | "ON_LEAVE" | "RESIGNED";

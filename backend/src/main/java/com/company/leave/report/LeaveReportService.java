@@ -39,7 +39,7 @@ public class LeaveReportService {
 
     @Transactional(readOnly = true)
     public byte[] exportUsage(int year) {
-        List<LeaveBalance> balances = balanceRepository.findByYear(year);
+        List<LeaveBalance> balances = balanceRepository.findByYearExcludingSystemAccounts(year);
         Map<Long, Employee> employees = employeeRepository
                 .findAllById(balances.stream().map(LeaveBalance::getEmployeeId).collect(Collectors.toSet()))
                 .stream().collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a, HashMap::new));

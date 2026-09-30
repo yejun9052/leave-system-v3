@@ -37,7 +37,7 @@ public class LeavePromotionService {
     /** 해당 연도 잔여 연차가 threshold 초과인 대상자 목록. */
     @Transactional(readOnly = true)
     public List<Target> targets(int year, BigDecimal threshold) {
-        List<LeaveBalance> balances = balanceRepository.findByYear(year).stream()
+        List<LeaveBalance> balances = balanceRepository.findByYearExcludingSystemAccounts(year).stream()
                 .filter(b -> b.remaining().compareTo(threshold) > 0)
                 .toList();
         Map<Long, Employee> employees = employeeRepository

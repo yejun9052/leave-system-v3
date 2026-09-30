@@ -102,7 +102,7 @@ public class EmployeeService {
     public EmployeeResponse create(EmployeeRequests.Create req) {
         // 동시 생성 직렬화 → 라이선스 최대 사용자 수 초과(TOCTOU) 방지
         employeeRepository.lockForUserCreation();
-        licenseService.checkUserQuota(employeeRepository.countByStatus(EmployeeStatus.ACTIVE));
+        licenseService.checkUserQuota(employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE));
         validateEmailUnique(req.email(), null);
         validateEmployeeNoUnique(req.employeeNo(), null);
 

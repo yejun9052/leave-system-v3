@@ -82,6 +82,9 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequestDtos.Response create(Long employeeId, LeaveRequestDtos.Create req) {
         Employee employee = employeeService.getEntity(employeeId);
+        if (employee.isSystemAccount()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "관리 전용 계정은 휴가를 신청할 수 없습니다.");
+        }
         LeaveType type = leaveTypeService.getEntity(req.leaveTypeId());
         if (!type.isActive()) {
             throw new BusinessException(ErrorCode.LEAVE_TYPE_NOT_FOUND, "사용할 수 없는 휴가 종류입니다.");

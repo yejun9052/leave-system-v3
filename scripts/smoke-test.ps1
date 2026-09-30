@@ -53,7 +53,7 @@ function SetQaPassword($email) {
   Write-Host "  [INFO] set password $email : $out"
 }
 "===== 1. Auth / RBAC ====="
-$admin = Login "admin@company.com" "admin1234!"
+$admin = Login "admin" "admin1234!"
 Check "admin login" ($admin -ne $null)
 # pick base monday: first Monday on/after today+14 whose used dates avoid blackouts, holidays and weekends
 $blackouts = @((Req GET "$base/policy/blackouts" $admin).data.data)
@@ -81,7 +81,7 @@ for ($try = 0; $try -lt 52; $try++) {
 }
 if (-not $found) { "[ERROR] no free week"; exit 1 }
 "  [INFO] base monday = $($mon.ToString('yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture))"
-$bad = Req POST "$base/auth/login" $null (@{email="admin@company.com";password="nope"}|ConvertTo-Json)
+$bad = Req POST "$base/auth/login" $null (@{email="admin";password="nope"}|ConvertTo-Json)
 Check "wrong password -> 401" ($bad.status -eq 401) "(status=$($bad.status))"
 $me = Req GET "$base/auth/me" $admin
 Check "me = SUPER_ADMIN" ($me.data.data.roles -contains "SUPER_ADMIN")

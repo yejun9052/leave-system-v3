@@ -137,7 +137,7 @@ public class DepartmentService {
     private DepartmentResponse toResponse(Department d) {
         return DepartmentResponse.of(d,
                 d.getLead() != null ? d.getLead().getName() : null,
-                employeeRepository.countByDepartmentId(d.getId()));
+                employeeRepository.countMembersByDepartmentId(d.getId()));
     }
 
     private Map<Long, Long> memberCountMap() {
