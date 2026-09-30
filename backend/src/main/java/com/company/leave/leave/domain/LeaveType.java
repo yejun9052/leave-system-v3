@@ -3,6 +3,8 @@ package com.company.leave.leave.domain;
 import com.company.leave.common.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -26,19 +28,28 @@ public class LeaveType extends BaseTimeEntity {
     @Column(nullable = false, length = 60)
     private String name;
 
-    /** 하루당 차감 일수. 1.0=연차, 0.5=반차, 0=비차감 */
+    /** 차감 일수. 종일=하루당, 반차·반반차=1회당, 시간차=1시간당. 0=비차감 */
     @Column(name = "deduct_days", nullable = false)
     private BigDecimal deductDays = BigDecimal.ONE;
 
     @Column(nullable = false)
     private boolean paid = true;
 
-    @Column(name = "half_day", nullable = false)
-    private boolean halfDay = false;
+    /** 휴가 단위(종일·반차·반반차·시간차). */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private DayPortion portion = DayPortion.FULL;
 
     /** 연차 잔액에서 차감할지 여부 (경조/병가 등은 false 가능) */
     @Column(name = "deduct_from_annual", nullable = false)
     private boolean deductFromAnnual = true;
+
+    /**
+     * 잔여 연차를 먼저 소진해야 쓸 수 있는 종류(병가·공가). 승인 기준 잔여 1일 미만이고 대기 중인
+     * 연차 차감 신청이 없을 때만 신청·승인되며, 승인 때 남은 연차(1일 미만)는 소멸된다.
+     */
+    @Column(name = "requires_annual_exhausted", nullable = false)
+    private boolean requiresAnnualExhausted = false;
 
     @Column(name = "color_hex", nullable = false, length = 7)
     private String colorHex = "#4f46e5";
@@ -52,25 +63,35 @@ public class LeaveType extends BaseTimeEntity {
     protected LeaveType() {
     }
 
-    public LeaveType(String code, String name, BigDecimal deductDays, boolean paid,
-                     boolean halfDay, boolean deductFromAnnual, String colorHex, int sortOrder) {
+    public LeaveType(String code, String name, BigDecimal deductDays, boolean paid, DayPortion portion,
+                     boolean deductFromAnnual, boolean requiresAnnualExhausted, String colorHex, int sortOrder) {
         this.code = code;
         this.name = name;
         this.deductDays = deductDays;
         this.paid = paid;
-        this.halfDay = halfDay;
+        this.portion = portion != null ? portion : DayPortion.FULL;
         this.deductFromAnnual = deductFromAnnual;
+        this.requiresAnnualExhausted = requiresAnnualExhausted;
         this.colorHex = colorHex;
         this.sortOrder = sortOrder;
     }
 
-    public void update(String name, BigDecimal deductDays, boolean paid, boolean halfDay,
-                       boolean deductFromAnnual, String colorHex, int sortOrder, boolean active) {
+    /** 종일/반차만 구분하는 간단 생성(기존 호출부 호환). */
+    public LeaveType(String code, String name, BigDecimal deductDays, boolean paid,
+                     boolean halfDay, boolean deductFromAnnual, String colorHex, int sortOrder) {
+        this(code, name, deductDays, paid, halfDay ? DayPortion.HALF : DayPortion.FULL,
+                deductFromAnnual, false, colorHex, sortOrder);
+    }
+
+    public void update(String name, BigDecimal deductDays, boolean paid, DayPortion portion,
+                       boolean deductFromAnnual, boolean requiresAnnualExhausted,
+                       String colorHex, int sortOrder, boolean active) {
         this.name = name;
         this.deductDays = deductDays;
         this.paid = paid;
-        this.halfDay = halfDay;
+        this.portion = portion != null ? portion : DayPortion.FULL;
         this.deductFromAnnual = deductFromAnnual;
+        this.requiresAnnualExhausted = requiresAnnualExhausted;
         this.colorHex = colorHex;
         this.sortOrder = sortOrder;
         this.active = active;
@@ -96,12 +117,25 @@ public class LeaveType extends BaseTimeEntity {
         return paid;
     }
 
+    public DayPortion getPortion() {
+        return portion;
+    }
+
     public boolean isHalfDay() {
-        return halfDay;
+        return portion == DayPortion.HALF;
+    }
+
+    /** 반차·반반차·시간차(하루만, 1일 미만). */
+    public boolean isPartialDay() {
+        return portion.isPartial();
     }
 
     public boolean isDeductFromAnnual() {
         return deductFromAnnual;
+    }
+
+    public boolean isRequiresAnnualExhausted() {
+        return requiresAnnualExhausted;
     }
 
     public String getColorHex() {

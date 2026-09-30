@@ -50,6 +50,10 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "deducted_days", nullable = false)
     private BigDecimal deductedDays = BigDecimal.ZERO;
 
+    /** 이 신청(병가·공가) 승인으로 소멸시킨 남은 연차. 취소되면 되돌린다. */
+    @Column(name = "forfeited_days", nullable = false)
+    private BigDecimal forfeitedDays = BigDecimal.ZERO;
+
     @Column(name = "applied_year", nullable = false)
     private int appliedYear;
 
@@ -113,6 +117,18 @@ public class LeaveRequest extends BaseTimeEntity {
         this.deductedDays = deductedDays;
     }
 
+    /** 승인 때 소멸시킨 남은 연차를 기록한다. */
+    public void recordForfeit(BigDecimal days) {
+        this.forfeitedDays = days;
+    }
+
+    /** 소멸분을 되돌린 뒤 기록을 지운다(이중 복구 방지). 되돌릴 양을 반환. */
+    public BigDecimal takeForfeitForRestore() {
+        BigDecimal days = this.forfeitedDays;
+        this.forfeitedDays = BigDecimal.ZERO;
+        return days;
+    }
+
     /** 시스템 자동 취소(예: 기간 전체가 공휴일이 됨). 사유를 남긴다. */
     public void autoCancel(String reason) {
         this.status = LeaveRequestStatus.CANCELLED;
@@ -169,6 +185,10 @@ public class LeaveRequest extends BaseTimeEntity {
 
     public BigDecimal getDeductedDays() {
         return deductedDays;
+    }
+
+    public BigDecimal getForfeitedDays() {
+        return forfeitedDays;
     }
 
     public int getAppliedYear() {

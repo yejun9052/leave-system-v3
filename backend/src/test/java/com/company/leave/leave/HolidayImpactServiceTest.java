@@ -206,6 +206,32 @@ class HolidayImpactServiceTest {
     }
 
     @Test
+    void 병가가_공휴일로_자동_취소되면_승인_때_소멸시킨_연차도_되돌린다() {
+        LeaveRequest request = 승인된_휴가(병가, MON, MON, "1", "0");
+        balance.forfeit(new BigDecimal("0.5"));
+        request.recordForfeit(new BigDecimal("0.5"));
+
+        service.applyNewHolidays(새_공휴일);
+
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCELLED);
+        assertThat(balance.getExpired()).isEqualByComparingTo("0");
+        assertThat(request.getForfeitedDays()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void 시간차는_공휴일이_기간_밖이면_시간_수를_유지한다() {
+        LeaveType 시간차 = new LeaveType("HOURLY", "시간차", new BigDecimal("0.125"), true,
+                com.company.leave.leave.domain.DayPortion.HOURLY, true, false, "#000", 3);
+        LeaveRequest request = 승인된_휴가(시간차, MON.plusDays(1), MON.plusDays(1), "0.375", "0.375");
+        balance.addUsed(new BigDecimal("0.375"));
+
+        HolidayImpactService.ImpactSummary summary = service.applyNewHolidays(새_공휴일);
+
+        assertThat(summary.adjustedRequests()).isZero();
+        assertThat(request.getDays()).isEqualByComparingTo("0.375");
+    }
+
+    @Test
     void 취소_요청_중인_휴가도_승인_건처럼_잔액을_돌려준다() {
         LeaveRequest request = 승인된_휴가(연차, MON, MON.plusDays(2), "3", "3");
         request.requestCancel("개인 사정");

@@ -18,6 +18,17 @@ public final class AccountMailEvents {
         }
     }
 
+    /**
+     * 병가·공가 승인으로 남은 연차가 소멸됨.
+     *
+     * @param leaveTypeName 소멸을 일으킨 휴가 종류(병가·공가)
+     * @param forfeitedDays 소멸 일수(예: "0.5")
+     * @param period        휴가 기간 표시(예: "2027-05-04 ~ 2027-05-06")
+     */
+    public record LeaveForfeited(String email, String name, String leaveTypeName,
+                                 String forfeitedDays, String period) {
+    }
+
     /** 비밀번호 재설정: 1회용 토큰 링크 안내. */
     public record PasswordReset(String email, String name, String resetToken) {
 

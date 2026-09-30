@@ -42,6 +42,18 @@ public final class AccountMailTemplates {
         return new Mail("[연차관리] 비밀번호 재설정 안내", body);
     }
 
+    public static Mail leaveForfeited(String baseUrl, String name, String leaveTypeName,
+                                      String forfeitedDays, String period) {
+        String body = name + "님, " + leaveTypeName + "(" + period + ")가 승인되었습니다.\n"
+                + "\n"
+                + "회사 규정에 따라 " + leaveTypeName + "는 잔여 연차를 모두 사용한 뒤 쓸 수 있으며,\n"
+                + "승인과 함께 남아 있던 연차 " + forfeitedDays + "일이 소멸되었습니다.\n"
+                + "\n"
+                + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n"
+                + "해당 " + leaveTypeName + "가 취소되면 소멸된 연차는 다시 돌아옵니다.\n";
+        return new Mail("[연차관리] 잔여 연차 " + forfeitedDays + "일 소멸 안내", body);
+    }
+
     private static String url(String baseUrl, String path) {
         String base = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         return base + path;

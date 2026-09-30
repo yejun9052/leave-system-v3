@@ -1,6 +1,7 @@
 package com.company.leave.policy.domain;
 
 import com.company.leave.common.entity.BaseTimeEntity;
+import com.company.leave.leave.domain.DayPortion;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -59,6 +60,14 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "half_day_enabled", nullable = false)
     private boolean halfDayEnabled = true;
 
+    /** 반반차(0.25일) 사용 여부. */
+    @Column(name = "quarter_day_enabled", nullable = false)
+    private boolean quarterDayEnabled = false;
+
+    /** 시간차(1시간 = 0.125일) 사용 여부. */
+    @Column(name = "hourly_enabled", nullable = false)
+    private boolean hourlyEnabled = false;
+
     /** 같은 부서 동시 부재 최대 인원 (0 = 무제한) */
     @Column(name = "max_concurrent_absence", nullable = false)
     private int maxConcurrentAbsence = 0;
@@ -104,6 +113,8 @@ public class LeavePolicy extends BaseTimeEntity {
         this.monthlyAccrualMax = s.monthlyAccrualMax();
         this.allowNegative = s.allowNegative();
         this.halfDayEnabled = s.halfDayEnabled();
+        this.quarterDayEnabled = s.quarterDayEnabled();
+        this.hourlyEnabled = s.hourlyEnabled();
         this.maxConcurrentAbsence = s.maxConcurrentAbsence();
         this.minAdvanceDays = s.minAdvanceDays();
         this.maxConsecutiveDays = s.maxConsecutiveDays();
@@ -125,6 +136,8 @@ public class LeavePolicy extends BaseTimeEntity {
             int monthlyAccrualMax,
             boolean allowNegative,
             boolean halfDayEnabled,
+            boolean quarterDayEnabled,
+            boolean hourlyEnabled,
             int maxConcurrentAbsence,
             int minAdvanceDays,
             int maxConsecutiveDays,
@@ -179,6 +192,24 @@ public class LeavePolicy extends BaseTimeEntity {
 
     public boolean isHalfDayEnabled() {
         return halfDayEnabled;
+    }
+
+    public boolean isQuarterDayEnabled() {
+        return quarterDayEnabled;
+    }
+
+    public boolean isHourlyEnabled() {
+        return hourlyEnabled;
+    }
+
+    /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능. */
+    public boolean allows(DayPortion portion) {
+        return switch (portion) {
+            case FULL -> true;
+            case HALF -> halfDayEnabled;
+            case QUARTER -> quarterDayEnabled;
+            case HOURLY -> hourlyEnabled;
+        };
     }
 
     public int getMaxConcurrentAbsence() {

@@ -1,7 +1,9 @@
 package com.company.leave.leave.accrual;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -64,6 +66,31 @@ class WorkdayCalculatorTest {
     @Test
     void 반차_차감액은_일수와_관계없이_유형_차감값이다() {
         assertThat(calculator.deductionFor(오전반차, new BigDecimal("0.5"))).isEqualByComparingTo("0.5");
+    }
+
+    @Test
+    void 반반차는_0_25일이고_차감도_0_25일이다() {
+        LeaveType 반반차 = new LeaveType("QUARTER", "반반차", new BigDecimal("0.25"), true, DayPortion.QUARTER,
+                true, false, "#000", 3);
+
+        BigDecimal days = calculator.computeLeaveDays(WED, WED, 반반차, Set.of());
+
+        assertThat(days).isEqualByComparingTo("0.25");
+        assertThat(calculator.deductionFor(반반차, days)).isEqualByComparingTo("0.25");
+    }
+
+    @Test
+    void 시간차는_시간마다_0_125일이고_시간_수가_없으면_계산할_수_없다() {
+        LeaveType 시간차 = new LeaveType("HOURLY", "시간차", new BigDecimal("0.125"), true, DayPortion.HOURLY,
+                true, false, "#000", 3);
+
+        BigDecimal days = calculator.computeLeaveDays(WED, WED, 시간차, Set.of(), 3);
+
+        assertThat(days).isEqualByComparingTo("0.375");
+        assertThat(calculator.deductionFor(시간차, days)).isEqualByComparingTo("0.375");
+        assertThat(WorkdayCalculator.hoursOf(days)).isEqualTo(3);
+        assertThatThrownBy(() -> calculator.computeLeaveDays(WED, WED, 시간차, Set.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

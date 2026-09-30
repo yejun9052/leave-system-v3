@@ -19,17 +19,26 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByStartDateDesc(
             Long employeeId, LeaveRequestStatus status);
 
-    /** 기간이 겹치는 본인의 대기/승인 신청 존재 여부 (중복 신청 방지) */
+    /** 기간이 겹치는 본인의 대기/승인 신청 목록 (부분 휴가 같은 날 합계 검사용) */
     @Query("""
-            select count(r) > 0 from LeaveRequest r
+            select r from LeaveRequest r
             where r.employee.id = :employeeId
               and r.status in (com.company.leave.leave.domain.LeaveRequestStatus.PENDING,
                                com.company.leave.leave.domain.LeaveRequestStatus.APPROVED)
               and r.startDate <= :end and r.endDate >= :start
             """)
-    boolean existsOverlap(@Param("employeeId") Long employeeId,
-                          @Param("start") LocalDate start,
-                          @Param("end") LocalDate end);
+    List<LeaveRequest> findActiveOverlapping(@Param("employeeId") Long employeeId,
+                                             @Param("start") LocalDate start,
+                                             @Param("end") LocalDate end);
+
+    /** 본인의 특정 연도에 결재 대기 중인 연차 차감 신청(차감액 > 0)이 있는지 (병가·공가 신청 조건) */
+    @Query("""
+            select count(r) > 0 from LeaveRequest r
+            where r.employee.id = :employeeId and r.appliedYear = :year
+              and r.status = com.company.leave.leave.domain.LeaveRequestStatus.PENDING
+              and r.deductedDays > 0
+            """)
+    boolean existsPendingDeducting(@Param("employeeId") Long employeeId, @Param("year") int year);
 
     /** 본인의 특정 연도 대기중 신청의 "차감 예정액" 합계(비차감 유형은 0이라 자연히 제외) */
     @Query("""

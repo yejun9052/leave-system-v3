@@ -7,6 +7,7 @@ import com.company.leave.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -38,6 +39,17 @@ public class LeaveRequestController {
     public ApiResponse<LeaveRequestDtos.Response> create(
             @Valid @RequestBody LeaveRequestDtos.Create req) {
         return ApiResponse.ok(leaveRequestService.create(SecurityUtils.currentEmployeeId(), req));
+    }
+
+    @Operation(summary = "휴가 종류별 신청 가능 여부",
+            description = "정책 사용 여부와 병가·공가 조건(잔여 연차 1일 미만, 대기 중 연차 신청 없음)을 확인하고, "
+                    + "승인 시 소멸될 남은 연차를 알려 준다(신청 화면 경고용).")
+    @GetMapping("/eligibility")
+    public ApiResponse<LeaveRequestDtos.Eligibility> eligibility(
+            @RequestParam Long leaveTypeId,
+            @RequestParam(required = false) LocalDate startDate) {
+        return ApiResponse.ok(leaveRequestService.eligibility(
+                SecurityUtils.currentEmployeeId(), leaveTypeId, startDate));
     }
 
     @Operation(summary = "내 휴가 신청 목록")

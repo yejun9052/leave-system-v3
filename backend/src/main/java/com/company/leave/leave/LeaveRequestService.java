@@ -15,11 +15,13 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.LeaveAccrualCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
+import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveRequestDtos;
 import com.company.leave.leave.repository.LeaveRequestRepository;
+import com.company.leave.mail.AccountMailEvents;
 import com.company.leave.notification.NotificationService;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.GrantBasis;
@@ -32,6 +34,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -52,6 +55,7 @@ public class LeaveRequestService {
     private final NotificationService notificationService;
     private final DepartmentRepository departmentRepository;
     private final BlackoutPeriodRepository blackoutPeriodRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public LeaveRequestService(LeaveRequestRepository requestRepository,
                                LeaveTypeService leaveTypeService,
@@ -64,7 +68,8 @@ public class LeaveRequestService {
                                CalendarEventRepository calendarEventRepository,
                                NotificationService notificationService,
                                DepartmentRepository departmentRepository,
-                               BlackoutPeriodRepository blackoutPeriodRepository) {
+                               BlackoutPeriodRepository blackoutPeriodRepository,
+                               ApplicationEventPublisher eventPublisher) {
         this.requestRepository = requestRepository;
         this.leaveTypeService = leaveTypeService;
         this.employeeService = employeeService;
@@ -77,6 +82,7 @@ public class LeaveRequestService {
         this.notificationService = notificationService;
         this.departmentRepository = departmentRepository;
         this.blackoutPeriodRepository = blackoutPeriodRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -89,10 +95,16 @@ public class LeaveRequestService {
         if (!type.isActive()) {
             throw new BusinessException(ErrorCode.LEAVE_TYPE_NOT_FOUND, "사용할 수 없는 휴가 종류입니다.");
         }
+        LeavePolicy policy = policyService.getActivePolicy();
+        if (!policy.allows(type.getPortion())) {
+            throw new BusinessException(ErrorCode.LEAVE_TYPE_DISABLED,
+                    "현재 정책에서 사용할 수 없는 휴가 종류입니다: " + type.getName());
+        }
 
         LocalDate start = req.startDate();
         LocalDate end = req.endDate();
         validatePeriod(start, end, type);
+        Integer hours = hoursFor(type, req.hours());
 
         Set<LocalDate> holidays = holidaysBetween(start, end);
         // 시작일은 근무일이어야 한다(반차 포함). 기간 중간·끝의 주말·공휴일은 허용하고 차감에서만 뺀다.
@@ -100,18 +112,24 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
                     "시작일이 주말 또는 공휴일입니다. 근무일부터 신청해 주세요.");
         }
-        BigDecimal days = workdayCalculator.computeLeaveDays(start, end, type, holidays);
+        BigDecimal days = workdayCalculator.computeLeaveDays(start, end, type, holidays, hours);
         if (days.signum() <= 0) {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "신청 기간에 근무일이 없습니다.");
         }
 
-        if (requestRepository.existsOverlap(employeeId, start, end)) {
-            throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP);
-        }
+        validateNoOverlap(employeeId, start, end, type, days);
 
-        LeavePolicy policy = policyService.getActivePolicy();
         validateUsagePolicy(employee, start, end, days, policy);
         int appliedYear = appliedYear(start, policy);
+
+        if (type.isRequiresAnnualExhausted()) {
+            BigDecimal forfeit = requireAnnualExhausted(employeeId, appliedYear, type, false);
+            if (forfeit.signum() > 0 && !Boolean.TRUE.equals(req.forfeitAcknowledged())) {
+                throw new BusinessException(ErrorCode.LEAVE_FORFEIT_NOT_ACKNOWLEDGED,
+                        type.getName() + "가 승인되면 남은 연차 " + plain(forfeit)
+                                + "일이 소멸됩니다. 안내를 확인한 뒤 신청해 주세요.");
+            }
+        }
 
         // 실제 차감액 = 근무일수 × 휴가유형 deductDays (반차는 deductDays, 비차감 유형은 0)
         BigDecimal deduction = workdayCalculator.deductionFor(type, days);
@@ -132,6 +150,32 @@ public class LeaveRequestService {
 
         notifyApprovers(employee, request);
         return LeaveRequestDtos.Response.from(request);
+    }
+
+    /**
+     * 휴가 종류별 신청 가능 여부(신청 화면 안내용). 정책·병가·공가 조건만 본다(기간·잔액 검사는 신청 때).
+     *
+     * @param startDate 신청 예정 시작일(적용 연도 판단). 없으면 오늘
+     */
+    @Transactional
+    public LeaveRequestDtos.Eligibility eligibility(Long employeeId, Long leaveTypeId, LocalDate startDate) {
+        LeaveType type = leaveTypeService.getEntity(leaveTypeId);
+        LeavePolicy policy = policyService.getActivePolicy();
+        if (!type.isActive() || !policy.allows(type.getPortion())) {
+            return new LeaveRequestDtos.Eligibility(false, "현재 정책에서 사용할 수 없는 휴가 종류입니다.",
+                    null, BigDecimal.ZERO);
+        }
+        int year = appliedYear(startDate != null ? startDate : LocalDate.now(), policy);
+        BigDecimal remaining = balanceService.getOrCreate(employeeId, year).remaining();
+        if (!type.isRequiresAnnualExhausted()) {
+            return new LeaveRequestDtos.Eligibility(true, null, remaining, BigDecimal.ZERO);
+        }
+        try {
+            BigDecimal forfeit = requireAnnualExhausted(employeeId, year, type, false);
+            return new LeaveRequestDtos.Eligibility(true, null, remaining, forfeit);
+        } catch (BusinessException ex) {
+            return new LeaveRequestDtos.Eligibility(false, ex.getMessage(), remaining, BigDecimal.ZERO);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -201,6 +245,16 @@ public class LeaveRequestService {
             }
             balance.addUsed(deduction);
         }
+        BigDecimal forfeited = BigDecimal.ZERO;
+        if (request.getLeaveType().isRequiresAnnualExhausted()) {
+            // 신청 후 상황이 바뀌었을 수 있으므로 승인 시점에 조건을 다시 확인하고, 남은 연차(1일 미만)를 소멸
+            Long employeeId = request.getEmployee().getId();
+            forfeited = requireAnnualExhausted(employeeId, request.getAppliedYear(), request.getLeaveType(), true);
+            if (forfeited.signum() > 0) {
+                balanceService.getOrCreate(employeeId, request.getAppliedYear()).forfeit(forfeited);
+                request.recordForfeit(forfeited);
+            }
+        }
         request.approve(approver, Instant.now());
         createCalendarEvent(request);
 
@@ -208,6 +262,9 @@ public class LeaveRequestService {
                 "휴가가 승인되었습니다.",
                 request.getLeaveType().getName() + " " + request.getStartDate()
                         + " ~ " + request.getEndDate(), "/my-leaves");
+        if (forfeited.signum() > 0) {
+            notifyForfeited(request, forfeited);
+        }
         return LeaveRequestDtos.Response.from(request);
     }
 
@@ -317,6 +374,12 @@ public class LeaveRequestService {
                     request.getEmployee().getId(), request.getAppliedYear());
             balance.restoreUsed(request.getDeductedDays());
         }
+        // 병가·공가 승인으로 소멸시켰던 남은 연차 되돌림
+        BigDecimal forfeited = request.takeForfeitForRestore();
+        if (forfeited.signum() > 0) {
+            balanceService.getOrCreate(request.getEmployee().getId(), request.getAppliedYear())
+                    .restoreForfeit(forfeited);
+        }
         calendarEventRepository.deleteByLeaveRequestId(request.getId());
         request.cancel();
     }
@@ -370,9 +433,83 @@ public class LeaveRequestService {
         if (end.isBefore(start)) {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "종료일이 시작일보다 빠릅니다.");
         }
-        if (type.isHalfDay() && !start.isEqual(end)) {
-            throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "반차는 하루만 신청할 수 있습니다.");
+        if (type.isPartialDay() && !start.isEqual(end)) {
+            throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
+                    type.getName() + "는 하루만 신청할 수 있습니다.");
         }
+    }
+
+    /** 시간차는 1~3시간 필수, 그 외 종류는 시간 수를 쓰지 않는다. */
+    private Integer hoursFor(LeaveType type, Integer hours) {
+        if (type.getPortion() != DayPortion.HOURLY) {
+            return null;
+        }
+        if (hours == null || hours < 1 || hours > DayPortion.MAX_HOURLY_HOURS) {
+            throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
+                    "시간차는 1~" + DayPortion.MAX_HOURLY_HOURS + "시간으로 신청합니다.");
+        }
+        return hours;
+    }
+
+    /**
+     * 겹침 검사. 종일 휴가는 대기·승인 중인 어떤 신청과도 겹칠 수 없다.
+     * 부분 휴가(반차·반반차·시간차)는 같은 날 부분 휴가끼리 합계 1일까지 허용한다.
+     */
+    private void validateNoOverlap(Long employeeId, LocalDate start, LocalDate end, LeaveType type,
+                                   BigDecimal days) {
+        List<LeaveRequest> overlapping = requestRepository.findActiveOverlapping(employeeId, start, end);
+        if (overlapping.isEmpty()) {
+            return;
+        }
+        if (!type.isPartialDay() || overlapping.stream().anyMatch(r -> !r.getLeaveType().isPartialDay())) {
+            throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP);
+        }
+        BigDecimal sameDay = overlapping.stream().map(LeaveRequest::getDays).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (sameDay.add(days).compareTo(BigDecimal.ONE) > 0) {
+            throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP,
+                    "같은 날 반차·반반차·시간차 합계는 1일을 넘을 수 없습니다. (이미 신청 " + plain(sameDay) + "일)");
+        }
+    }
+
+    /**
+     * 잔여 연차를 먼저 소진해야 하는 종류(병가·공가)의 조건:
+     * 승인 기준 잔여 연차 1일 미만 + 결재 대기 중인 연차 차감 신청 없음. 신청과 승인 때 모두 확인한다.
+     *
+     * @param approving 승인 시점 확인이면 true(결재자에게 보이는 문구)
+     * @return 승인 시 소멸될 남은 연차(0 이상 1 미만)
+     */
+    private BigDecimal requireAnnualExhausted(Long employeeId, int year, LeaveType type, boolean approving) {
+        BigDecimal remaining = balanceService.getOrCreate(employeeId, year).remaining();
+        if (remaining.compareTo(BigDecimal.ONE) >= 0) {
+            throw new BusinessException(ErrorCode.LEAVE_ANNUAL_NOT_EXHAUSTED,
+                    (approving ? "신청자의 " : "") + "잔여 연차가 " + plain(remaining) + "일 남아 있습니다. "
+                            + type.getName() + "는 잔여 연차가 1일 미만일 때 "
+                            + (approving ? "승인할" : "신청할") + " 수 있습니다.");
+        }
+        if (requestRepository.existsPendingDeducting(employeeId, year)) {
+            throw new BusinessException(ErrorCode.LEAVE_PENDING_ANNUAL_EXISTS, approving
+                    ? "신청자에게 결재 대기 중인 연차 신청이 있어 승인할 수 없습니다. 연차 신청을 먼저 처리해 주세요."
+                    : "결재 대기 중인 연차 신청이 있습니다. 먼저 처리(승인·반려·취소)된 뒤 신청해 주세요.");
+        }
+        return remaining.max(BigDecimal.ZERO);
+    }
+
+    /** 남은 연차 소멸 안내: 앱 알림 + 메일(커밋 후 발송). */
+    private void notifyForfeited(LeaveRequest request, BigDecimal forfeited) {
+        Employee employee = request.getEmployee();
+        String typeName = request.getLeaveType().getName();
+        String period = request.getStartDate().equals(request.getEndDate())
+                ? request.getStartDate().toString()
+                : request.getStartDate() + " ~ " + request.getEndDate();
+        notificationService.notify(employee.getId(), "LEAVE_FORFEITED", "잔여 연차 소멸 안내",
+                typeName + "(" + period + ") 승인으로 남은 연차 " + plain(forfeited) + "일이 소멸되었습니다.",
+                "/my-leaves");
+        eventPublisher.publishEvent(new AccountMailEvents.LeaveForfeited(
+                employee.getEmail(), employee.getName(), typeName, plain(forfeited), period));
+    }
+
+    private static String plain(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
     }
 
     private Set<LocalDate> holidaysBetween(LocalDate start, LocalDate end) {
@@ -390,7 +527,9 @@ public class LeaveRequestService {
     private void createCalendarEvent(LeaveRequest request) {
         Employee e = request.getEmployee();
         CalendarEvent event = CalendarEvent.builder()
-                .title(e.getName() + " - " + request.getLeaveType().getName())
+                .title(e.getName() + " - " + request.getLeaveType().getName()
+                        + (request.getLeaveType().getPortion() == DayPortion.HOURLY
+                                ? " " + WorkdayCalculator.hoursOf(request.getDays()) + "시간" : ""))
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .allDay(true)

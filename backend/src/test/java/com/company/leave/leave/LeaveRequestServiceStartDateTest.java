@@ -41,6 +41,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -88,6 +89,8 @@ class LeaveRequestServiceStartDateTest {
     private BlackoutPeriodRepository blackoutPeriodRepository;
     @Mock
     private LeavePolicy policy;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private LeaveRequestService service;
 
@@ -99,7 +102,8 @@ class LeaveRequestServiceStartDateTest {
     void setUp() {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
                 holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
-                calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository);
+                calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
+                eventPublisher);
 
         Employee employee = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동").build();
         ReflectionTestUtils.setField(employee, "id", 10L);
@@ -115,6 +119,7 @@ class LeaveRequestServiceStartDateTest {
         // 사용 정책은 모두 통과(잔액 부족 허용, 제한 없음)
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
         lenient().when(policy.isAllowNegative()).thenReturn(true);
+        lenient().when(policy.allows(any())).thenReturn(true);
         lenient().when(balanceService.getOrCreate(anyLong(), anyInt())).thenReturn(new LeaveBalance(10L, 2027));
         lenient().when(requestRepository.sumPendingDeductedDays(anyLong(), anyInt())).thenReturn(BigDecimal.ZERO);
     }

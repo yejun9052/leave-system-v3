@@ -5,6 +5,8 @@ import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveTypeDtos;
 import com.company.leave.leave.repository.LeaveTypeRepository;
+import com.company.leave.policy.PolicyService;
+import com.company.leave.policy.domain.LeavePolicy;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,9 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class LeaveTypeService {
 
     private final LeaveTypeRepository leaveTypeRepository;
+    private final PolicyService policyService;
 
-    public LeaveTypeService(LeaveTypeRepository leaveTypeRepository) {
+    public LeaveTypeService(LeaveTypeRepository leaveTypeRepository, PolicyService policyService) {
         this.leaveTypeRepository = leaveTypeRepository;
+        this.policyService = policyService;
     }
 
     @Transactional(readOnly = true)
@@ -23,7 +27,8 @@ public class LeaveTypeService {
         List<LeaveType> types = includeInactive
                 ? leaveTypeRepository.findAllByOrderBySortOrderAscIdAsc()
                 : leaveTypeRepository.findByActiveTrueOrderBySortOrderAscIdAsc();
-        return types.stream().map(LeaveTypeDtos.Response::from).toList();
+        LeavePolicy policy = policyService.getActivePolicy();
+        return types.stream().map(t -> LeaveTypeDtos.Response.from(t, policy)).toList();
     }
 
     @Transactional
@@ -32,18 +37,18 @@ public class LeaveTypeService {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 존재하는 휴가 코드입니다: " + req.code());
         }
         LeaveType type = new LeaveType(req.code(), req.name(), req.deductDays(), req.paid(),
-                req.halfDay(), req.deductFromAnnual(), req.colorHex(),
+                req.portion(), req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0);
-        return LeaveTypeDtos.Response.from(leaveTypeRepository.save(type));
+        return LeaveTypeDtos.Response.from(leaveTypeRepository.save(type), policyService.getActivePolicy());
     }
 
     @Transactional
     public LeaveTypeDtos.Response update(Long id, LeaveTypeDtos.Update req) {
         LeaveType type = getEntity(id);
-        type.update(req.name(), req.deductDays(), req.paid(), req.halfDay(),
-                req.deductFromAnnual(), req.colorHex(),
+        type.update(req.name(), req.deductDays(), req.paid(), req.portion(),
+                req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0, req.active());
-        return LeaveTypeDtos.Response.from(type);
+        return LeaveTypeDtos.Response.from(type, policyService.getActivePolicy());
     }
 
     @Transactional

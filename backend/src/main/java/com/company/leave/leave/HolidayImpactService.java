@@ -5,6 +5,7 @@ import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
 import com.company.leave.leave.accrual.WorkdayCalculator;
+import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.domain.LeaveType;
@@ -125,6 +126,7 @@ public class HolidayImpactService {
         if (workdayCalculator.countWorkdays(request.getStartDate(), request.getEndDate(), holidays) == 0) {
             BigDecimal restored = chargedBalance ? oldDeducted : BigDecimal.ZERO;
             restore(request, restored);
+            restoreForfeit(request); // 병가·공가 승인으로 소멸시켰던 연차도 되돌림
             calendarEventRepository.deleteByLeaveRequestId(request.getId());
             request.autoCancel(AUTO_CANCEL_REASON);
             String message = period + ": " + holidayText + " 지정으로 근무일이 없어 자동 취소되었습니다. "
@@ -133,8 +135,9 @@ public class HolidayImpactService {
             return new Adjustment(true, restored, message);
         }
 
+        Integer hours = type.getPortion() == DayPortion.HOURLY ? WorkdayCalculator.hoursOf(oldDays) : null;
         BigDecimal newDays = workdayCalculator.computeLeaveDays(
-                request.getStartDate(), request.getEndDate(), type, holidays);
+                request.getStartDate(), request.getEndDate(), type, holidays, hours);
         BigDecimal newDeducted = workdayCalculator.deductionFor(type, newDays);
         if (newDays.compareTo(oldDays) == 0 && newDeducted.compareTo(oldDeducted) == 0) {
             return null;
@@ -151,6 +154,14 @@ public class HolidayImpactService {
     private void restore(LeaveRequest request, BigDecimal days) {
         if (days.signum() > 0) {
             balanceService.getOrCreate(request.getEmployee().getId(), request.getAppliedYear()).restoreUsed(days);
+        }
+    }
+
+    private void restoreForfeit(LeaveRequest request) {
+        BigDecimal forfeited = request.takeForfeitForRestore();
+        if (forfeited.signum() > 0) {
+            balanceService.getOrCreate(request.getEmployee().getId(), request.getAppliedYear())
+                    .restoreForfeit(forfeited);
         }
     }
 

@@ -50,6 +50,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -92,6 +93,8 @@ class LeaveRequestServiceApprovalTest {
     private BlackoutPeriodRepository blackoutPeriodRepository;
     @Mock
     private LeavePolicy policy;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private LeaveRequestService service;
 
@@ -111,7 +114,8 @@ class LeaveRequestServiceApprovalTest {
     void setUp() {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
                 holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
-                calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository);
+                calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
+                eventPublisher);
 
         Department 본사 = 부서(1L, "본사", null);
         Department 제품개발팀 = 부서(2L, "제품개발팀", 본사);
@@ -142,6 +146,7 @@ class LeaveRequestServiceApprovalTest {
                 .thenAnswer(inv -> Optional.ofNullable(requests.get(inv.<Long>getArgument(0))));
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
         lenient().when(policy.isAllowNegative()).thenReturn(true);
+        lenient().when(policy.allows(any())).thenReturn(true);
         lenient().when(balanceService.getOrCreate(anyLong(), anyInt())).thenReturn(new LeaveBalance(0L, 2027));
         lenient().when(requestRepository.sumPendingDeductedDays(anyLong(), anyInt())).thenReturn(BigDecimal.ZERO);
         lenient().when(leaveTypeService.getEntity(1L)).thenReturn(연차);

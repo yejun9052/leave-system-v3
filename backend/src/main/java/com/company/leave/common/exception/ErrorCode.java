@@ -54,6 +54,10 @@ public enum ErrorCode {
     LEAVE_MAX_CONSECUTIVE(HttpStatus.BAD_REQUEST, "최대 연속 사용일을 초과했습니다."),
     LEAVE_BLACKOUT(HttpStatus.CONFLICT, "연차 사용이 제한된 기간입니다."),
     LEAVE_TEAM_LIMIT(HttpStatus.CONFLICT, "같은 기간 팀 내 휴가 인원 제한을 초과했습니다."),
+    LEAVE_ANNUAL_NOT_EXHAUSTED(HttpStatus.CONFLICT, "잔여 연차를 먼저 사용해야 신청할 수 있습니다."),
+    LEAVE_PENDING_ANNUAL_EXISTS(HttpStatus.CONFLICT, "결재 대기 중인 연차 신청이 있어 신청할 수 없습니다."),
+    LEAVE_FORFEIT_NOT_ACKNOWLEDGED(HttpStatus.BAD_REQUEST, "남은 연차 소멸 안내를 확인해야 신청할 수 있습니다."),
+    LEAVE_TYPE_DISABLED(HttpStatus.BAD_REQUEST, "현재 정책에서 사용할 수 없는 휴가 종류입니다."),
 
     // 캘린더
     CALENDAR_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "캘린더 일정을 찾을 수 없습니다."),

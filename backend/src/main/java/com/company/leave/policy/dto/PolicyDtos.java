@@ -25,6 +25,8 @@ public final class PolicyDtos {
             int monthlyAccrualMax,
             boolean allowNegative,
             boolean halfDayEnabled,
+            boolean quarterDayEnabled,
+            boolean hourlyEnabled,
             int maxConcurrentAbsence,
             int minAdvanceDays,
             int maxConsecutiveDays,
@@ -37,6 +39,7 @@ public final class PolicyDtos {
                     p.getFiscalStartDay(), p.getBaseAnnualDays(), p.getSeniorityStepYears(),
                     p.getSeniorityIncrementDays(), p.getMaxAnnualDays(), p.isMonthlyAccrualEnabled(),
                     p.getMonthlyAccrualMax(), p.isAllowNegative(), p.isHalfDayEnabled(),
+                    p.isQuarterDayEnabled(), p.isHourlyEnabled(),
                     p.getMaxConcurrentAbsence(), p.getMinAdvanceDays(), p.getMaxConsecutiveDays(),
                     p.isPromotionEnabled(), p.isCarryOverEnabled(), p.getMaxCarryOverDays());
         }
@@ -54,6 +57,8 @@ public final class PolicyDtos {
             @Min(0) int monthlyAccrualMax,
             boolean allowNegative,
             boolean halfDayEnabled,
+            boolean quarterDayEnabled,
+            boolean hourlyEnabled,
             @Min(0) int maxConcurrentAbsence,
             @Min(0) int minAdvanceDays,
             @Min(0) int maxConsecutiveDays,
@@ -65,7 +70,7 @@ public final class PolicyDtos {
             return new LeavePolicy.Settings(grantBasis, fiscalStartMonth, fiscalStartDay,
                     baseAnnualDays, seniorityStepYears, seniorityIncrementDays, maxAnnualDays,
                     monthlyAccrualEnabled, monthlyAccrualMax, allowNegative, halfDayEnabled,
-                    maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
+                    quarterDayEnabled, hourlyEnabled, maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
                     promotionEnabled, carryOverEnabled, maxCarryOverDays);
         }
     }
