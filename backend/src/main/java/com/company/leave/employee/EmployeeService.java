@@ -28,7 +28,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Service
 public class EmployeeService {
@@ -104,7 +103,6 @@ public class EmployeeService {
         employeeRepository.lockForUserCreation();
         licenseService.checkUserQuota(employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE));
         validateEmailUnique(req.email(), null);
-        validateEmployeeNoUnique(req.employeeNo(), null);
 
         // 초기 비밀번호는 서버가 생성해 메일로만 전달(관리자는 값을 알 수 없음) → 첫 로그인 시 변경 강제
         String temporaryPassword = temporaryPasswordGenerator.generate();
@@ -113,7 +111,6 @@ public class EmployeeService {
                 .email(req.email())
                 .passwordHash(passwordEncoder.encode(temporaryPassword))
                 .name(req.name())
-                .employeeNo(emptyToNull(req.employeeNo()))
                 .department(resolveDepartment(req.departmentId()))
                 .position(req.position())
                 .phone(req.phone())
@@ -135,11 +132,9 @@ public class EmployeeService {
     public EmployeeResponse update(Long id, EmployeeRequests.Update req) {
         Employee employee = getManageable(id);
         validateEmailUnique(req.email(), id);
-        validateEmployeeNoUnique(req.employeeNo(), id);
 
         employee.changeEmail(req.email());
         employee.updateProfile(req.name(), req.position(), req.phone());
-        employee.changeEmployeeNo(emptyToNull(req.employeeNo()));
         employee.changeHireDate(req.hireDate());
         employee.assignDepartment(resolveDepartment(req.departmentId()));
         employee.replaceRoles(resolveRoles(req.roles()));
@@ -238,21 +233,6 @@ public class EmployeeService {
                 throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
             }
         });
-    }
-
-    private void validateEmployeeNoUnique(String employeeNo, Long selfId) {
-        if (!StringUtils.hasText(employeeNo)) {
-            return;
-        }
-        employeeRepository.findByEmployeeNo(employeeNo.trim()).ifPresent(existing -> {
-            if (!existing.getId().equals(selfId)) {
-                throw new BusinessException(ErrorCode.EMPLOYEE_NO_DUPLICATED);
-            }
-        });
-    }
-
-    private String emptyToNull(String s) {
-        return StringUtils.hasText(s) ? s.trim() : null;
     }
 
     /** 신규 사용자 생성 이벤트 (연차 초기 부여 트리거). */

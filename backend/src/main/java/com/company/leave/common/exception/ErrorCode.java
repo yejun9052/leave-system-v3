@@ -30,7 +30,6 @@ public enum ErrorCode {
     // 사용자
     EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     EMAIL_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
-    EMPLOYEE_NO_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 사번입니다."),
 
     // 부서
     DEPARTMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "부서를 찾을 수 없습니다."),

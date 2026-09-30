@@ -13,11 +13,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
 
     Optional<Employee> findByEmail(String email);
 
-    Optional<Employee> findByEmployeeNo(String employeeNo);
-
     boolean existsByEmail(String email);
-
-    boolean existsByEmployeeNo(String employeeNo);
 
     // 주의: Employee 에는 편의 getter getDepartmentId() 가 있어 파생 쿼리(findByDepartmentId)가
     // department.id 로 분해되지 않고 충돌한다. 따라서 명시적 JPQL 로 작성한다.

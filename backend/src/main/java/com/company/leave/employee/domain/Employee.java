@@ -39,9 +39,6 @@ public class Employee extends BaseTimeEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "employee_no", length = 50)
-    private String employeeNo;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id")
     private Department department;
@@ -83,7 +80,6 @@ public class Employee extends BaseTimeEntity {
         this.email = b.email;
         this.passwordHash = b.passwordHash;
         this.name = b.name;
-        this.employeeNo = b.employeeNo;
         this.department = b.department;
         this.position = b.position;
         this.phone = b.phone;
@@ -125,10 +121,6 @@ public class Employee extends BaseTimeEntity {
 
     public void changeEmail(String email) {
         this.email = email;
-    }
-
-    public void changeEmployeeNo(String employeeNo) {
-        this.employeeNo = employeeNo;
     }
 
     public void assignDepartment(Department department) {
@@ -184,10 +176,6 @@ public class Employee extends BaseTimeEntity {
         return name;
     }
 
-    public String getEmployeeNo() {
-        return employeeNo;
-    }
-
     public Department getDepartment() {
         return department;
     }
@@ -232,7 +220,6 @@ public class Employee extends BaseTimeEntity {
         private String email;
         private String passwordHash;
         private String name;
-        private String employeeNo;
         private Department department;
         private String position;
         private String phone;
@@ -253,11 +240,6 @@ public class Employee extends BaseTimeEntity {
 
         public Builder name(String name) {
             this.name = name;
-            return this;
-        }
-
-        public Builder employeeNo(String employeeNo) {
-            this.employeeNo = employeeNo;
             return this;
         }
 

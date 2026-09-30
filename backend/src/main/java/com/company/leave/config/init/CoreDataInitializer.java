@@ -70,7 +70,6 @@ public class CoreDataInitializer implements ApplicationRunner {
                 .email(ADMIN_LOGIN_ID)
                 .passwordHash(passwordEncoder.encode(initialPassword))
                 .name("시스템관리자")
-                .employeeNo("ADMIN")
                 .department(root)
                 .position("관리자")
                 .hireDate(LocalDate.now())

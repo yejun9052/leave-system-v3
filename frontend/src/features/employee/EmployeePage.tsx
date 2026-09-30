@@ -166,7 +166,7 @@ export default function EmployeePage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="이름, 이메일, 사번 검색"
+            placeholder="이름, 이메일 검색"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -357,7 +357,6 @@ function EmployeeDialog({
   const [form, setForm] = useState<EmployeeCreate>({
     email: employee?.email ?? "",
     name: employee?.name ?? "",
-    employeeNo: employee?.employeeNo ?? "",
     departmentId: employee?.departmentId ?? null,
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
@@ -379,7 +378,6 @@ function EmployeeDialog({
       const payload = {
         email: form.email,
         name: form.name,
-        employeeNo: form.employeeNo || undefined,
         departmentId: form.departmentId ?? null,
         position: form.position || undefined,
         phone: form.phone || undefined,
@@ -412,9 +410,6 @@ function EmployeeDialog({
           </Field>
           <Field label="이메일">
             <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
-          </Field>
-          <Field label="사번">
-            <Input value={form.employeeNo} onChange={(e) => set("employeeNo", e.target.value)} />
           </Field>
           <Field label="직급">
             <Input value={form.position} onChange={(e) => set("position", e.target.value)} />

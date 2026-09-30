@@ -78,7 +78,7 @@ class EmployeeServicePasswordTest {
             return e;
         });
 
-        service.create(new EmployeeRequests.Create(EMAIL, "신입", null, null, null, null,
+        service.create(new EmployeeRequests.Create(EMAIL, "신입", null, null, null,
                 LocalDate.of(2027, 1, 4), Set.of(Role.EMPLOYEE)));
 
         ArgumentCaptor<Employee> saved = ArgumentCaptor.forClass(Employee.class);
@@ -101,7 +101,7 @@ class EmployeeServicePasswordTest {
         when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
         when(employeeRepository.save(any(Employee.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        var response = service.create(new EmployeeRequests.Create(EMAIL, "신입", null, null, null, null,
+        var response = service.create(new EmployeeRequests.Create(EMAIL, "신입", null, null, null,
                 LocalDate.of(2027, 1, 4), Set.of(Role.EMPLOYEE)));
 
         ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);

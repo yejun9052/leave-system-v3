@@ -16,7 +16,6 @@ public final class EmployeeRequests {
     public record Create(
             @NotBlank @Email String email,
             @NotBlank @Size(max = 100) String name,
-            @Size(max = 50) String employeeNo,
             Long departmentId,
             @Size(max = 50) String position,
             @Size(max = 30) String phone,
@@ -27,7 +26,6 @@ public final class EmployeeRequests {
     public record Update(
             @NotBlank @Email String email,
             @NotBlank @Size(max = 100) String name,
-            @Size(max = 50) String employeeNo,
             Long departmentId,
             @Size(max = 50) String position,
             @Size(max = 30) String phone,

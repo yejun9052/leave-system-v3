@@ -60,7 +60,6 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
         }
         String like = "%" + keyword.trim() + "%";
         return e.name.likeIgnoreCase(like)
-                .or(e.email.likeIgnoreCase(like))
-                .or(e.employeeNo.likeIgnoreCase(like));
+                .or(e.email.likeIgnoreCase(like));
     }
 }

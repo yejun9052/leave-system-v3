@@ -39,7 +39,6 @@ export interface Employee {
   id: number;
   email: string;
   name: string;
-  employeeNo: string | null;
   departmentId: number | null;
   departmentName: string | null;
   position: string | null;

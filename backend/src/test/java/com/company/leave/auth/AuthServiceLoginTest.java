@@ -209,7 +209,6 @@ class AuthServiceLoginTest {
                 .email(EMAIL)
                 .passwordHash("$2a$10$hash")
                 .name("테스트사원")
-                .employeeNo("E042")
                 .status(status)
                 .roles(Set.of(Role.EMPLOYEE))
                 .build();

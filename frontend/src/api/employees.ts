@@ -4,7 +4,6 @@ import type { Employee, EmployeeStatus, Page, Role } from "@/types";
 export interface EmployeeCreate {
   email: string;
   name: string;
-  employeeNo?: string;
   departmentId?: number | null;
   position?: string;
   phone?: string;

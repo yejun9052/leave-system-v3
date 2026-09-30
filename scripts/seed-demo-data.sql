@@ -32,54 +32,53 @@ WHERE NOT EXISTS (SELECT 1 FROM departments WHERE name = '데이터전략팀');
 -- The hash is the BCrypt hash already used by the local admin account.
 -- ---------------------------------------------------------------------
 INSERT INTO employees (
-    email, password_hash, name, employee_no, department_id, position, phone,
+    email, password_hash, name, department_id, position, phone,
     hire_date, status, system_account
 )
 SELECT v.email, '$2a$10$aM6NzZE.r0pbj/iIFH4Fk.J593PVuIXwvA52GWAAzlA0azODGdGt.',
-       v.name, v.employee_no,
+       v.name,
        (SELECT d.id FROM departments d WHERE d.name = v.department_name ORDER BY d.id LIMIT 1),
        v.position, v.phone, v.hire_date, 'ACTIVE', FALSE
 FROM (VALUES
-    ('minjun.kim@example.com', '김민준', 'E002', '경영지원팀', '인사팀장', '010-2000-1001', DATE '2022-03-14'),
-    ('seoyeon.park@example.com', '박서연', 'E003', '플랫폼파트', '플랫폼 파트장', '010-2000-1002', DATE '2023-01-09'),
-    ('jihoon.choi@example.com', '최지훈', 'E004', '서비스파트', '서비스 파트장', '010-2000-1003', DATE '2024-02-19'),
-    ('haeun.jeong@example.com', '정하은', 'E005', '디자인팀', '디자인팀장', '010-2000-1004', DATE '2021-07-05'),
-    ('yujin.han@example.com', '한유진', 'E006', '영업마케팅팀', '영업마케팅팀장', '010-2000-1005', DATE '2022-11-21'),
-    ('jimin.oh@example.com', '오지민', 'E007', '고객성공팀', '고객성공팀장', '010-2000-1006', DATE '2023-04-03'),
-    ('hyunwoo.kang@example.com', '강현우', 'E008', '데이터전략팀', '데이터전략팀장', '010-2000-1007', DATE '2021-09-13'),
-    ('seoah.yoon@example.com', '윤서아', 'E009', '플랫폼파트', '백엔드 엔지니어', '010-2000-1008', DATE '2024-05-13'),
-    ('jiho.song@example.com', '송지호', 'E010', '서비스파트', '프론트엔드 엔지니어', '010-2000-1009', DATE '2024-08-26'),
-    ('seojun.kim@example.com', '김서준', 'E011', '영업마케팅팀', '영업 매니저', '010-2000-1010', DATE '2025-01-06'),
-    ('jieun.park@example.com', '박지은', 'E012', '고객성공팀', '고객성공 매니저', '010-2000-1011', DATE '2024-10-07'),
-    ('sujin.bae@example.com', '배수진', 'E013', '경영지원팀', '재무 담당', '010-2000-1012', DATE '2023-06-12'),
-    ('yerin.moon@example.com', '문예린', 'E014', '디자인팀', '브랜드 디자이너', '010-2000-1013', DATE '2022-12-05'),
-    ('doyoon.lee@example.com', '이도윤', 'E015', '데이터전략팀', '데이터 분석가', '010-2000-1014', DATE '2025-02-03'),
-    ('daeun.choi@example.com', '최다은', 'E016', '제품개발팀', 'QA 엔지니어', '010-2000-1015', DATE '2025-03-10')
-) AS v(email, name, employee_no, department_name, position, phone, hire_date)
+    ('minjun.kim@example.com', '김민준', '경영지원팀', '인사팀장', '010-2000-1001', DATE '2022-03-14'),
+    ('seoyeon.park@example.com', '박서연', '플랫폼파트', '플랫폼 파트장', '010-2000-1002', DATE '2023-01-09'),
+    ('jihoon.choi@example.com', '최지훈', '서비스파트', '서비스 파트장', '010-2000-1003', DATE '2024-02-19'),
+    ('haeun.jeong@example.com', '정하은', '디자인팀', '디자인팀장', '010-2000-1004', DATE '2021-07-05'),
+    ('yujin.han@example.com', '한유진', '영업마케팅팀', '영업마케팅팀장', '010-2000-1005', DATE '2022-11-21'),
+    ('jimin.oh@example.com', '오지민', '고객성공팀', '고객성공팀장', '010-2000-1006', DATE '2023-04-03'),
+    ('hyunwoo.kang@example.com', '강현우', '데이터전략팀', '데이터전략팀장', '010-2000-1007', DATE '2021-09-13'),
+    ('seoah.yoon@example.com', '윤서아', '플랫폼파트', '백엔드 엔지니어', '010-2000-1008', DATE '2024-05-13'),
+    ('jiho.song@example.com', '송지호', '서비스파트', '프론트엔드 엔지니어', '010-2000-1009', DATE '2024-08-26'),
+    ('seojun.kim@example.com', '김서준', '영업마케팅팀', '영업 매니저', '010-2000-1010', DATE '2025-01-06'),
+    ('jieun.park@example.com', '박지은', '고객성공팀', '고객성공 매니저', '010-2000-1011', DATE '2024-10-07'),
+    ('sujin.bae@example.com', '배수진', '경영지원팀', '재무 담당', '010-2000-1012', DATE '2023-06-12'),
+    ('yerin.moon@example.com', '문예린', '디자인팀', '브랜드 디자이너', '010-2000-1013', DATE '2022-12-05'),
+    ('doyoon.lee@example.com', '이도윤', '데이터전략팀', '데이터 분석가', '010-2000-1014', DATE '2025-02-03'),
+    ('daeun.choi@example.com', '최다은', '제품개발팀', 'QA 엔지니어', '010-2000-1015', DATE '2025-03-10')
+) AS v(email, name, department_name, position, phone, hire_date)
 WHERE NOT EXISTS (SELECT 1 FROM employees e WHERE e.email = v.email);
 
 -- Also normalize rows when this seed is re-run after a non-UTF-8 import.
-WITH demo_employees (email, name, employee_no, department_name, position, phone, hire_date) AS (
+WITH demo_employees (email, name, department_name, position, phone, hire_date) AS (
     VALUES
-    ('minjun.kim@example.com', '김민준', 'E002', '경영지원팀', '인사팀장', '010-2000-1001', DATE '2022-03-14'),
-    ('seoyeon.park@example.com', '박서연', 'E003', '플랫폼파트', '플랫폼 파트장', '010-2000-1002', DATE '2023-01-09'),
-    ('jihoon.choi@example.com', '최지훈', 'E004', '서비스파트', '서비스 파트장', '010-2000-1003', DATE '2024-02-19'),
-    ('haeun.jeong@example.com', '정하은', 'E005', '디자인팀', '디자인팀장', '010-2000-1004', DATE '2021-07-05'),
-    ('yujin.han@example.com', '한유진', 'E006', '영업마케팅팀', '영업마케팅팀장', '010-2000-1005', DATE '2022-11-21'),
-    ('jimin.oh@example.com', '오지민', 'E007', '고객성공팀', '고객성공팀장', '010-2000-1006', DATE '2023-04-03'),
-    ('hyunwoo.kang@example.com', '강현우', 'E008', '데이터전략팀', '데이터전략팀장', '010-2000-1007', DATE '2021-09-13'),
-    ('seoah.yoon@example.com', '윤서아', 'E009', '플랫폼파트', '백엔드 엔지니어', '010-2000-1008', DATE '2024-05-13'),
-    ('jiho.song@example.com', '송지호', 'E010', '서비스파트', '프론트엔드 엔지니어', '010-2000-1009', DATE '2024-08-26'),
-    ('seojun.kim@example.com', '김서준', 'E011', '영업마케팅팀', '영업 매니저', '010-2000-1010', DATE '2025-01-06'),
-    ('jieun.park@example.com', '박지은', 'E012', '고객성공팀', '고객성공 매니저', '010-2000-1011', DATE '2024-10-07'),
-    ('sujin.bae@example.com', '배수진', 'E013', '경영지원팀', '재무 담당', '010-2000-1012', DATE '2023-06-12'),
-    ('yerin.moon@example.com', '문예린', 'E014', '디자인팀', '브랜드 디자이너', '010-2000-1013', DATE '2022-12-05'),
-    ('doyoon.lee@example.com', '이도윤', 'E015', '데이터전략팀', '데이터 분석가', '010-2000-1014', DATE '2025-02-03'),
-    ('daeun.choi@example.com', '최다은', 'E016', '제품개발팀', 'QA 엔지니어', '010-2000-1015', DATE '2025-03-10')
+    ('minjun.kim@example.com', '김민준', '경영지원팀', '인사팀장', '010-2000-1001', DATE '2022-03-14'),
+    ('seoyeon.park@example.com', '박서연', '플랫폼파트', '플랫폼 파트장', '010-2000-1002', DATE '2023-01-09'),
+    ('jihoon.choi@example.com', '최지훈', '서비스파트', '서비스 파트장', '010-2000-1003', DATE '2024-02-19'),
+    ('haeun.jeong@example.com', '정하은', '디자인팀', '디자인팀장', '010-2000-1004', DATE '2021-07-05'),
+    ('yujin.han@example.com', '한유진', '영업마케팅팀', '영업마케팅팀장', '010-2000-1005', DATE '2022-11-21'),
+    ('jimin.oh@example.com', '오지민', '고객성공팀', '고객성공팀장', '010-2000-1006', DATE '2023-04-03'),
+    ('hyunwoo.kang@example.com', '강현우', '데이터전략팀', '데이터전략팀장', '010-2000-1007', DATE '2021-09-13'),
+    ('seoah.yoon@example.com', '윤서아', '플랫폼파트', '백엔드 엔지니어', '010-2000-1008', DATE '2024-05-13'),
+    ('jiho.song@example.com', '송지호', '서비스파트', '프론트엔드 엔지니어', '010-2000-1009', DATE '2024-08-26'),
+    ('seojun.kim@example.com', '김서준', '영업마케팅팀', '영업 매니저', '010-2000-1010', DATE '2025-01-06'),
+    ('jieun.park@example.com', '박지은', '고객성공팀', '고객성공 매니저', '010-2000-1011', DATE '2024-10-07'),
+    ('sujin.bae@example.com', '배수진', '경영지원팀', '재무 담당', '010-2000-1012', DATE '2023-06-12'),
+    ('yerin.moon@example.com', '문예린', '디자인팀', '브랜드 디자이너', '010-2000-1013', DATE '2022-12-05'),
+    ('doyoon.lee@example.com', '이도윤', '데이터전략팀', '데이터 분석가', '010-2000-1014', DATE '2025-02-03'),
+    ('daeun.choi@example.com', '최다은', '제품개발팀', 'QA 엔지니어', '010-2000-1015', DATE '2025-03-10')
 )
 UPDATE employees e
 SET name = d.name,
-    employee_no = d.employee_no,
     department_id = (SELECT dept.id FROM departments dept WHERE dept.name = d.department_name ORDER BY dept.id LIMIT 1),
     position = d.position,
     phone = d.phone,

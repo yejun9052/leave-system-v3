@@ -26,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class LeaveReportService {
 
     private static final String[] HEADERS =
-            {"이름", "사번", "부서", "입사일", "부여", "이월", "사용", "소멸", "잔여"};
+            {"이름", "부서", "입사일", "부여", "이월", "사용", "소멸", "잔여"};
 
     private final LeaveBalanceRepository balanceRepository;
     private final EmployeeRepository employeeRepository;
@@ -58,14 +58,13 @@ public class LeaveReportService {
                 }
                 Row row = sheet.createRow(r++);
                 row.createCell(0).setCellValue(e.getName());
-                row.createCell(1).setCellValue(e.getEmployeeNo() != null ? e.getEmployeeNo() : "");
-                row.createCell(2).setCellValue(e.getDepartment() != null ? e.getDepartment().getName() : "");
-                row.createCell(3).setCellValue(e.getHireDate() != null ? e.getHireDate().toString() : "");
-                row.createCell(4).setCellValue(b.getGranted().doubleValue());
-                row.createCell(5).setCellValue(b.getCarriedOver().doubleValue());
-                row.createCell(6).setCellValue(b.getUsed().doubleValue());
-                row.createCell(7).setCellValue(b.getExpired().doubleValue());
-                row.createCell(8).setCellValue(b.remaining().doubleValue());
+                row.createCell(1).setCellValue(e.getDepartment() != null ? e.getDepartment().getName() : "");
+                row.createCell(2).setCellValue(e.getHireDate() != null ? e.getHireDate().toString() : "");
+                row.createCell(3).setCellValue(b.getGranted().doubleValue());
+                row.createCell(4).setCellValue(b.getCarriedOver().doubleValue());
+                row.createCell(5).setCellValue(b.getUsed().doubleValue());
+                row.createCell(6).setCellValue(b.getExpired().doubleValue());
+                row.createCell(7).setCellValue(b.remaining().doubleValue());
             }
             for (int i = 0; i < HEADERS.length; i++) {
                 sheet.autoSizeColumn(i);
