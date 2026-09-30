@@ -205,6 +205,14 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   );
 }
 
+/** 마지막 글자에 받침이 있는지(한글이 아니면 받침 없음으로 본다). */
+function hasFinalConsonant(word: string): boolean {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  return code >= 0 && code <= 11171 && code % 28 !== 0;
+}
+const topicParticle = (word: string) => (hasFinalConsonant(word) ? "은" : "는");
+const objectParticle = (word: string) => (hasFinalConsonant(word) ? "을" : "를");
+
 function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const { toast } = useToast();
   const { data: types = [] } = useQuery({ queryKey: ["leaveTypes", "active"], queryFn: leaveApi.activeTypes });
@@ -235,10 +243,25 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     })),
   });
   const blockedReasons = new Map<number, string>();
+  const blockedNames: string[] = [];
+  let blockedRemaining: number | null = null;
   restrictedTypes.forEach((t, i) => {
     const e = restrictedEligibility[i]?.data;
-    if (e && !e.allowed) blockedReasons.set(t.id, e.reason ?? "지금은 신청할 수 없습니다.");
+    if (e && !e.allowed) {
+      blockedReasons.set(t.id, e.reason ?? "지금은 신청할 수 없습니다.");
+      blockedNames.push(t.name);
+      blockedRemaining = e.remainingDays;
+    }
   });
+  // 불가 사유는 종류마다 같은 조건이라 한 줄로 합쳐 보여 준다(예: "병가·공가는 …")
+  const blockedHint = (() => {
+    if (blockedNames.length === 0) return null;
+    const names = blockedNames.join("·");
+    if (blockedRemaining !== null && blockedRemaining >= 1) {
+      return `${names}${topicParticle(names)} 잔여 연차를 1일 미만으로 모두 사용한 뒤 신청할 수 있습니다. (현재 잔여 ${formatDays(blockedRemaining)}일)`;
+    }
+    return `결재 대기 중인 연차·반차 신청이 있어 ${names}${objectParticle(names)} 신청할 수 없습니다. 대기 중인 신청이 처리된 뒤 신청해 주세요.`;
+  })();
 
   const { data: eligibility, isFetching: eligibilityLoading } = useQuery({
     queryKey: ["eligibility", typeId, start],
@@ -308,11 +331,7 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                 ))}
               </SelectContent>
             </Select>
-            {[...new Set(blockedReasons.values())].map((reason) => (
-              <p key={reason} className="text-xs text-muted-foreground">
-                {reason}
-              </p>
-            ))}
+            {blockedHint && <p className="text-xs text-muted-foreground">{blockedHint}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
