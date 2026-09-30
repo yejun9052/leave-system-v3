@@ -33,12 +33,16 @@ export function formatKoreanDate(date: string): string {
   return `${y}년 ${m}월 ${d}일 (${weekdayLabel(date)})`;
 }
 
+/** Date 의 로컬 날짜 "YYYY-MM-DD"(FullCalendar 가 넘기는 날짜는 로컬 자정) */
+export function localDateString(date: Date): string {
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${m}-${d}`;
+}
+
 /** 로컬 시간 기준 오늘 "YYYY-MM-DD" */
 export function todayString(): string {
-  const now = new Date();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${now.getFullYear()}-${m}-${d}`;
+  return localDateString(new Date());
 }
 
 /** 캘린더 신청 선택. end 가 null 이면 시작일만 고른 상태(그대로 신청하면 그 하루). */
