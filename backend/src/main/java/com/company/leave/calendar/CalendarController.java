@@ -39,6 +39,15 @@ public class CalendarController {
         return ApiResponse.ok(calendarService.getEvents(start, end, SecurityUtils.currentPrincipal()));
     }
 
+    @Operation(summary = "날짜 상세",
+            description = "그날의 휴가 목록(승인 휴가는 모두에게, 결재 대기 휴가는 본인·결재할 수 있는 팀장·인사관리자에게만, "
+                    + "사유 제외), 볼 수 있는 등록 일정, 공휴일 이름.")
+    @GetMapping("/day")
+    public ApiResponse<CalendarDtos.DayDetail> day(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponse.ok(calendarService.getDay(date, SecurityUtils.currentPrincipal()));
+    }
+
     @Operation(summary = "일정 생성 (관리자/팀장)")
     @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
     @PostMapping("/events")

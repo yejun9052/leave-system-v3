@@ -84,6 +84,46 @@ public final class LeaveRequestDtos {
         }
     }
 
+    /**
+     * 캘린더 날짜 상세의 휴가 한 건. 사유는 넣지 않는다(본인·결재자는 기존 화면에서 확인).
+     *
+     * @param hours 시간차만 시간 수, 그 외 null
+     * @param mine  조회한 본인의 휴가인지
+     */
+    public record DayLeave(
+            Long id,
+            Long employeeId,
+            String employeeName,
+            Long departmentId,
+            String departmentName,
+            String leaveTypeName,
+            String leaveTypeColor,
+            DayPortion portion,
+            Integer hours,
+            LocalDate startDate,
+            LocalDate endDate,
+            LeaveRequestStatus status,
+            boolean mine) {
+
+        public static DayLeave from(LeaveRequest r, boolean mine) {
+            DayPortion portion = r.getLeaveType().getPortion();
+            return new DayLeave(
+                    r.getId(),
+                    r.getEmployee().getId(),
+                    r.getEmployee().getName(),
+                    r.getEmployee().getDepartmentId(),
+                    r.getEmployee().getDepartment() != null ? r.getEmployee().getDepartment().getName() : null,
+                    r.getLeaveType().getName(),
+                    r.getLeaveType().getColorHex(),
+                    portion,
+                    portion == DayPortion.HOURLY ? WorkdayCalculator.hoursOf(r.getDays()) : null,
+                    r.getStartDate(),
+                    r.getEndDate(),
+                    r.getStatus(),
+                    mine);
+        }
+    }
+
     public record Reject(@Size(max = 500) String reason) {
     }
 

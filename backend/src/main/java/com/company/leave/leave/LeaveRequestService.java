@@ -322,6 +322,31 @@ public class LeaveRequestService {
     }
 
     /**
+     * 캘린더 날짜 상세용: 그날에 걸친 휴가 목록(부서·이름 순).
+     * <ul>
+     *   <li>승인(취소 요청 중 포함): 캘린더처럼 모두에게 보인다</li>
+     *   <li>결재 대기(대기·1차 승인): 본인, 인사관리자·최고관리자, 그 신청을 팀장 단계로 결재할 수 있는 팀장에게만</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public List<LeaveRequestDtos.DayLeave> leavesOnDay(Long callerId, LocalDate date) {
+        Employee caller = employeeService.getEntity(callerId);
+        boolean admin = isAdmin(caller);
+        return requestRepository.findByStatusInOverlapping(EnumSet.of(LeaveRequestStatus.PENDING,
+                        LeaveRequestStatus.LEAD_APPROVED, LeaveRequestStatus.APPROVED,
+                        LeaveRequestStatus.CANCEL_REQUESTED), date, date).stream()
+                .filter(r -> !r.isAwaitingApproval() || r.getEmployee().getId().equals(callerId)
+                        || admin || canLeadApprove(caller, r.getEmployee()))
+                .sorted(java.util.Comparator
+                        .comparing((LeaveRequest r) -> r.getEmployee().getDepartment() != null
+                                        ? r.getEmployee().getDepartment().getName() : null,
+                                java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                        .thenComparing(r -> r.getEmployee().getName()))
+                .map(r -> LeaveRequestDtos.DayLeave.from(r, r.getEmployee().getId().equals(callerId)))
+                .toList();
+    }
+
+    /**
      * 다른 직원의 데이터(연차 잔액 등) 조회 권한 검증.
      * 본인 · 관리자 · 대상자의 팀장(하위 부서 포함)만 허용. 그 외 FORBIDDEN.
      */
