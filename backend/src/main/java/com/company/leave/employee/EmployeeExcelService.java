@@ -96,6 +96,19 @@ public class EmployeeExcelService {
         int shift = 0; // 예전 양식이면 1: 이름 뒤 열을 한 칸씩 밀어 읽는다
         try (Workbook wb = new XSSFWorkbook(in)) {
             Sheet sheet = wb.getSheetAt(0);
+            // 금지 권한은 파일 전체를 등록 전에 검사한다. 앞선 정상 행도 저장하지 않고 400으로 거부.
+            Row header = sheet.getRow(0);
+            int roleColumn = header != null && LEGACY_EMPLOYEE_NO_HEADER.equals(cell(header, 2)) ? 7 : 6;
+            for (Row row : sheet) {
+                if (row.getRowNum() == 0 || !StringUtils.hasText(cell(row, 0))) {
+                    continue;
+                }
+                String roles = cell(row, roleColumn);
+                if (StringUtils.hasText(roles) && Arrays.stream(roles.split(","))
+                        .map(String::trim).anyMatch(Role.SUPER_ADMIN.name()::equals)) {
+                    throw new BusinessException(ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+                }
+            }
             for (Row row : sheet) {
                 if (row.getRowNum() == 0) {
                     shift = LEGACY_EMPLOYEE_NO_HEADER.equals(cell(row, 2)) ? 1 : 0;

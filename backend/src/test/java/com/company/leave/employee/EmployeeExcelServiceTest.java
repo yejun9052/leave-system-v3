@@ -1,12 +1,16 @@
 package com.company.leave.employee;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.company.leave.department.domain.Department;
+import com.company.leave.common.exception.BusinessException;
+import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.domain.EmployeeStatus;
 import com.company.leave.employee.domain.Role;
@@ -128,6 +132,31 @@ class EmployeeExcelServiceTest {
     }
 
     // --- helpers ---
+    @Test
+    void 시스템_관리자_권한이_뒤쪽_행에_있어도_아무_직원도_등록하지_않고_400으로_거부한다() throws IOException {
+        byte[] file = 엑셀(NEW_HEADERS,
+                new String[] {"ok@company.com", "정상", "", "", "", "2024-01-02", "EMPLOYEE"},
+                new String[] {"bad@company.com", "권한상승", "", "", "", "2024-01-02", " HR_ADMIN, SUPER_ADMIN "});
+
+        assertForbiddenRoles(file);
+    }
+
+    @Test
+    void 예전_양식의_시스템_관리자_권한도_거부한다() throws IOException {
+        byte[] file = 엑셀(LEGACY_HEADERS,
+                new String[] {"bad@company.com", "권한상승", "E001", "", "", "", "2024-01-02", "SUPER_ADMIN"});
+
+        assertForbiddenRoles(file);
+    }
+
+    private void assertForbiddenRoles(byte[] file) {
+        assertThatThrownBy(() -> excelService.importFrom(new ByteArrayInputStream(file)))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+                    assertThat(ex.getErrorCode().status().value()).isEqualTo(400);
+                });
+        verify(employeeService, never()).create(any());
+    }
 
     private List<EmployeeRequests.Create> 등록_요청들() {
         ArgumentCaptor<EmployeeRequests.Create> captor = ArgumentCaptor.forClass(EmployeeRequests.Create.class);
