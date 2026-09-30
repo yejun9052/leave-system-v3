@@ -7,7 +7,11 @@ import com.company.leave.leave.dto.LeaveTypeDtos;
 import com.company.leave.leave.repository.LeaveTypeRepository;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.LeavePolicy;
+import com.company.leave.policy.domain.SpecialLeaveRule;
+import com.company.leave.policy.repository.SpecialLeaveRuleRepository;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,10 +20,13 @@ public class LeaveTypeService {
 
     private final LeaveTypeRepository leaveTypeRepository;
     private final PolicyService policyService;
+    private final SpecialLeaveRuleRepository specialRuleRepository;
 
-    public LeaveTypeService(LeaveTypeRepository leaveTypeRepository, PolicyService policyService) {
+    public LeaveTypeService(LeaveTypeRepository leaveTypeRepository, PolicyService policyService,
+                            SpecialLeaveRuleRepository specialRuleRepository) {
         this.leaveTypeRepository = leaveTypeRepository;
         this.policyService = policyService;
+        this.specialRuleRepository = specialRuleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -28,7 +35,13 @@ public class LeaveTypeService {
                 ? leaveTypeRepository.findAllByOrderBySortOrderAscIdAsc()
                 : leaveTypeRepository.findByActiveTrueOrderBySortOrderAscIdAsc();
         LeavePolicy policy = policyService.getActivePolicy();
-        return types.stream().map(t -> LeaveTypeDtos.Response.from(t, policy)).toList();
+        Map<String, List<SpecialLeaveRule>> rulesByCode = specialRuleRepository.findAllByOrderBySortOrderAscIdAsc()
+                .stream()
+                .filter(r -> r.getLeaveTypeCode() != null)
+                .collect(Collectors.groupingBy(SpecialLeaveRule::getLeaveTypeCode));
+        return types.stream()
+                .map(t -> LeaveTypeDtos.Response.from(t, policy, rulesByCode.getOrDefault(t.getCode(), List.of())))
+                .toList();
     }
 
     @Transactional
@@ -39,7 +52,7 @@ public class LeaveTypeService {
         LeaveType type = new LeaveType(req.code(), req.name(), req.deductDays(), req.paid(),
                 req.portion(), req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0);
-        return LeaveTypeDtos.Response.from(leaveTypeRepository.save(type), policyService.getActivePolicy());
+        return toResponse(leaveTypeRepository.save(type));
     }
 
     @Transactional
@@ -48,7 +61,7 @@ public class LeaveTypeService {
         type.update(req.name(), req.deductDays(), req.paid(), req.portion(),
                 req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0, req.active());
-        return LeaveTypeDtos.Response.from(type, policyService.getActivePolicy());
+        return toResponse(type);
     }
 
     @Transactional
@@ -62,5 +75,15 @@ public class LeaveTypeService {
     public LeaveType getEntity(Long id) {
         return leaveTypeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LEAVE_TYPE_NOT_FOUND));
+    }
+
+    /** 이 종류에 연결된 경조사 규정(신청 때 선택). */
+    @Transactional(readOnly = true)
+    public List<SpecialLeaveRule> specialRulesOf(LeaveType type) {
+        return specialRuleRepository.findByLeaveTypeCodeOrderBySortOrderAscIdAsc(type.getCode());
+    }
+
+    private LeaveTypeDtos.Response toResponse(LeaveType type) {
+        return LeaveTypeDtos.Response.from(type, policyService.getActivePolicy(), specialRulesOf(type));
     }
 }

@@ -54,6 +54,16 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "forfeited_days", nullable = false)
     private BigDecimal forfeitedDays = BigDecimal.ZERO;
 
+    /** 신청 때 고른 경조사 규정(규정이 삭제되면 null, 이름·일수는 신청 당시 값으로 남음). */
+    @Column(name = "special_rule_id")
+    private Long specialRuleId;
+
+    @Column(name = "special_rule_name", length = 60)
+    private String specialRuleName;
+
+    @Column(name = "special_rule_days")
+    private BigDecimal specialRuleDays;
+
     @Column(name = "applied_year", nullable = false)
     private int appliedYear;
 
@@ -115,6 +125,13 @@ public class LeaveRequest extends BaseTimeEntity {
     public void adjustDays(BigDecimal days, BigDecimal deductedDays) {
         this.days = days;
         this.deductedDays = deductedDays;
+    }
+
+    /** 경조사 규정 연결(신청 당시 이름·일수를 함께 기록). */
+    public void attachSpecialRule(Long ruleId, String ruleName, BigDecimal ruleDays) {
+        this.specialRuleId = ruleId;
+        this.specialRuleName = ruleName;
+        this.specialRuleDays = ruleDays;
     }
 
     /** 승인 때 소멸시킨 남은 연차를 기록한다. */
@@ -185,6 +202,18 @@ public class LeaveRequest extends BaseTimeEntity {
 
     public BigDecimal getDeductedDays() {
         return deductedDays;
+    }
+
+    public Long getSpecialRuleId() {
+        return specialRuleId;
+    }
+
+    public String getSpecialRuleName() {
+        return specialRuleName;
+    }
+
+    public BigDecimal getSpecialRuleDays() {
+        return specialRuleDays;
     }
 
     public BigDecimal getForfeitedDays() {

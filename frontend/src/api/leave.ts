@@ -10,6 +10,8 @@ export interface LeaveRequestCreate {
   hours?: number;
   /** 소멸분이 있는 병가·공가면 true */
   forfeitAcknowledged?: boolean;
+  /** 종류에 경조사 규정이 있으면 필수 */
+  specialRuleId?: number;
 }
 
 export interface LeaveEligibility {

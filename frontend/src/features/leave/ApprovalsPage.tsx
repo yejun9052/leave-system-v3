@@ -26,14 +26,15 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import type { LeaveRequest } from "@/types";
-import { formatDays, formatLeaveAmount } from "@/lib/leaveFormat";
+import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
 
 type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
 
 /** 확인창용 요약: "홍길동 · 연차 2026-10-14 ~ 2026-10-15 (2일)" */
 function summary(r: LeaveRequest): string {
   const period = r.startDate === r.endDate ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
-  return `${r.employeeName} · ${r.leaveTypeName} ${period} (${formatLeaveAmount(r)})`;
+  const rule = r.specialRuleName ? ` ${formatSpecialRule(r)}` : "";
+  return `${r.employeeName} · ${r.leaveTypeName}${rule} ${period} (${formatLeaveAmount(r)})`;
 }
 
 export default function ApprovalsPage() {
@@ -132,6 +133,9 @@ export default function ApprovalsPage() {
                           style={{ backgroundColor: r.leaveTypeColor }}
                         />
                         {r.leaveTypeName}
+                        {r.specialRuleName && (
+                          <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell>

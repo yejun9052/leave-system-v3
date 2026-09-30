@@ -72,6 +72,12 @@ export const LEAVE_STATUS_LABEL: Record<LeaveRequestStatus, string> = {
   CANCELLED: "취소",
 };
 
+export interface LeaveTypeSpecialRule {
+  id: number;
+  name: string;
+  days: number;
+}
+
 export type LeavePortion = "FULL" | "HALF" | "QUARTER" | "HOURLY";
 
 export interface LeaveType {
@@ -85,6 +91,8 @@ export interface LeaveType {
   requiresAnnualExhausted: boolean;
   /** 현재 정책에서 사용 가능한 종류인지 */
   policyEnabled: boolean;
+  /** 연결된 경조사 규정(없으면 빈 배열). 있으면 신청 때 하나를 반드시 선택 */
+  specialRules: LeaveTypeSpecialRule[];
   deductFromAnnual: boolean;
   colorHex: string;
   sortOrder: number;
@@ -117,6 +125,9 @@ export interface LeaveRequest {
   hours: number | null;
   /** 승인으로 소멸되는 연차(병가·공가) */
   forfeitedDays: number;
+  /** 경조사 규정으로 신청한 경우의 규정 이름·일수 */
+  specialRuleName: string | null;
+  specialRuleDays: number | null;
   status: LeaveRequestStatus;
   reason: string | null;
   approverName: string | null;

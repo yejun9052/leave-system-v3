@@ -26,6 +26,7 @@ import com.company.leave.notification.NotificationService;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.GrantBasis;
 import com.company.leave.policy.domain.LeavePolicy;
+import com.company.leave.policy.domain.SpecialLeaveRule;
 import com.company.leave.policy.repository.BlackoutPeriodRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -117,6 +118,8 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "신청 기간에 근무일이 없습니다.");
         }
 
+        SpecialLeaveRule specialRule = resolveSpecialRule(type, req.specialRuleId(), days);
+
         validateNoOverlap(employeeId, start, end, type, days);
 
         validateUsagePolicy(employee, start, end, days, policy);
@@ -146,6 +149,9 @@ public class LeaveRequestService {
 
         LeaveRequest request = new LeaveRequest(
                 employee, type, start, end, days, deduction, appliedYear, req.reason());
+        if (specialRule != null) {
+            request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
+        }
         requestRepository.save(request);
 
         notifyApprovers(employee, request);
@@ -439,6 +445,36 @@ public class LeaveRequestService {
         }
     }
 
+    /**
+     * 경조사 규정 확인. 종류에 규정이 연결돼 있으면 하나를 골라야 하고,
+     * 신청 근무일 수(주말·공휴일 제외)가 규정 일수를 넘을 수 없다. 횟수 제한은 없다.
+     *
+     * @return 고른 규정(규정이 없는 종류면 null)
+     */
+    private SpecialLeaveRule resolveSpecialRule(LeaveType type, Long specialRuleId, BigDecimal workdays) {
+        List<SpecialLeaveRule> rules = leaveTypeService.specialRulesOf(type);
+        if (rules.isEmpty()) {
+            if (specialRuleId != null) {
+                throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
+                        type.getName() + "에는 선택할 경조사 규정이 없습니다.");
+            }
+            return null;
+        }
+        if (specialRuleId == null) {
+            throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
+                    type.getName() + "는 사유(규정)를 선택해야 신청할 수 있습니다.");
+        }
+        SpecialLeaveRule rule = rules.stream().filter(r -> r.getId().equals(specialRuleId)).findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
+                        type.getName() + "에 해당하지 않는 규정입니다."));
+        if (workdays.compareTo(rule.getDays()) > 0) {
+            throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_EXCEEDED,
+                    rule.getName() + "은(는) 근무일 기준 최대 " + plain(rule.getDays()) + "일까지 신청할 수 있습니다. (신청 "
+                            + plain(workdays) + "일)");
+        }
+        return rule;
+    }
+
     /** 시간차는 1~3시간 필수, 그 외 종류는 시간 수를 쓰지 않는다. */
     private Integer hoursFor(LeaveType type, Integer hours) {
         if (type.getPortion() != DayPortion.HOURLY) {
@@ -528,6 +564,7 @@ public class LeaveRequestService {
         Employee e = request.getEmployee();
         CalendarEvent event = CalendarEvent.builder()
                 .title(e.getName() + " - " + request.getLeaveType().getName()
+                        + (request.getSpecialRuleName() != null ? "(" + request.getSpecialRuleName() + ")" : "")
                         + (request.getLeaveType().getPortion() == DayPortion.HOURLY
                                 ? " " + WorkdayCalculator.hoursOf(request.getDays()) + "시간" : ""))
                 .startDate(request.getStartDate())

@@ -20,6 +20,7 @@ public final class LeaveRequestDtos {
     /**
      * @param hours               시간차의 시간 수(1~3). 다른 종류는 무시
      * @param forfeitAcknowledged 병가·공가 승인 시 남은 연차가 소멸된다는 안내를 확인했는지(소멸분이 있을 때 필수)
+     * @param specialRuleId       경조사 규정(규정이 연결된 종류면 필수, 신청 근무일 수 ≤ 규정 일수)
      */
     public record Create(
             @NotNull Long leaveTypeId,
@@ -27,10 +28,16 @@ public final class LeaveRequestDtos {
             @NotNull LocalDate endDate,
             @Size(max = 500) String reason,
             @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
-            Boolean forfeitAcknowledged) {
+            Boolean forfeitAcknowledged,
+            Long specialRuleId) {
 
         public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason) {
-            this(leaveTypeId, startDate, endDate, reason, null, null);
+            this(leaveTypeId, startDate, endDate, reason, null, null, null);
+        }
+
+        public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
+                      Integer hours, Boolean forfeitAcknowledged) {
+            this(leaveTypeId, startDate, endDate, reason, hours, forfeitAcknowledged, null);
         }
     }
 
@@ -65,6 +72,8 @@ public final class LeaveRequestDtos {
             DayPortion portion,
             Integer hours,
             BigDecimal forfeitedDays,
+            String specialRuleName,
+            BigDecimal specialRuleDays,
             LeaveRequestStatus status,
             String reason,
             String approverName,
@@ -90,6 +99,8 @@ public final class LeaveRequestDtos {
                     portion,
                     portion == DayPortion.HOURLY ? WorkdayCalculator.hoursOf(r.getDays()) : null,
                     r.getForfeitedDays(),
+                    r.getSpecialRuleName(),
+                    r.getSpecialRuleDays(),
                     r.getStatus(),
                     r.getReason(),
                     r.getApprover() != null ? r.getApprover().getName() : null,

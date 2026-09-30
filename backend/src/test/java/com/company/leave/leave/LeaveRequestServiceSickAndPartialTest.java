@@ -33,6 +33,7 @@ import com.company.leave.mail.AccountMailEvents;
 import com.company.leave.notification.NotificationService;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.LeavePolicy;
+import com.company.leave.policy.domain.SpecialLeaveRule;
 import com.company.leave.policy.repository.BlackoutPeriodRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -423,6 +424,88 @@ class LeaveRequestServiceSickAndPartialTest {
             assertThatThrownBy(() -> 신청(연차, null, null))
                     .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_DATE_OVERLAP));
+        }
+    }
+
+    @Nested
+    @DisplayName("경조사 규정")
+    @DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
+    class 경조사_규정 {
+
+        // 2027-05-04(화) ~ 05-10(월): 달력 7일, 근무일 5일(주말 제외)
+        private static final LocalDate MON_NEXT = LocalDate.of(2027, 5, 10);
+        private final SpecialLeaveRule 본인_결혼 = 규정(1L, "본인 결혼", "5.0");
+        private final SpecialLeaveRule 자녀_결혼 = 규정(2L, "자녀 결혼", "1.0");
+
+        @BeforeEach
+        void 규정_연결() {
+            lenient().when(leaveTypeService.specialRulesOf(경조사)).thenReturn(List.of(본인_결혼, 자녀_결혼));
+        }
+
+        @Test
+        void 규정이_있는_종류는_규정을_고르지_않으면_신청할_수_없다() {
+            assertThatThrownBy(() -> 경조사_신청(TUE, TUE, null))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_INVALID);
+                        assertThat(ex.getMessage()).contains("사유(규정)를 선택");
+                    });
+        }
+
+        @Test
+        void 해당_종류의_규정이_아니면_신청할_수_없다() {
+            assertThatThrownBy(() -> 경조사_신청(TUE, TUE, 99L))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_INVALID));
+        }
+
+        @Test
+        void 주말을_뺀_근무일이_규정_일수_이내면_신청되고_규정을_기록한다() {
+            LeaveRequest request = 경조사_신청(TUE, MON_NEXT, 본인_결혼.getId());
+
+            assertThat(request.getDays()).isEqualByComparingTo("5");
+            assertThat(request.getSpecialRuleId()).isEqualTo(1L);
+            assertThat(request.getSpecialRuleName()).isEqualTo("본인 결혼");
+            assertThat(request.getSpecialRuleDays()).isEqualByComparingTo("5");
+            assertThat(request.getDeductedDays()).isEqualByComparingTo("0");
+        }
+
+        @Test
+        void 근무일이_규정_일수를_넘으면_거부한다() {
+            assertThatThrownBy(() -> 경조사_신청(TUE, MON_NEXT.plusDays(1), 본인_결혼.getId()))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_EXCEEDED);
+                        assertThat(ex.getMessage()).contains("최대 5일").contains("신청 6일");
+                    });
+            verify(requestRepository, never()).save(any());
+        }
+
+        @Test
+        void 같은_규정을_여러_번_신청할_수_있다() {
+            경조사_신청(TUE, TUE, 자녀_결혼.getId());
+            경조사_신청(TUE.plusDays(7), TUE.plusDays(7), 자녀_결혼.getId());
+
+            assertThat(saved.values()).hasSize(2)
+                    .allSatisfy(r -> assertThat(r.getSpecialRuleName()).isEqualTo("자녀 결혼"));
+        }
+
+        @Test
+        void 규정이_없는_종류에_규정을_보내면_거부한다() {
+            assertThatThrownBy(() -> service.create(EMP,
+                    new LeaveRequestDtos.Create(연차.getId(), TUE, TUE, "사유", null, null, 본인_결혼.getId())))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_INVALID));
+        }
+
+        private LeaveRequest 경조사_신청(LocalDate start, LocalDate end, Long ruleId) {
+            LeaveRequestDtos.Response response = service.create(EMP,
+                    new LeaveRequestDtos.Create(경조사.getId(), start, end, "사유", null, null, ruleId));
+            return saved.get(response.id());
+        }
+
+        private static SpecialLeaveRule 규정(long id, String name, String days) {
+            SpecialLeaveRule rule = new SpecialLeaveRule(name, new BigDecimal(days), "CONDOLENCE", (int) id);
+            ReflectionTestUtils.setField(rule, "id", id);
+            return rule;
         }
     }
 

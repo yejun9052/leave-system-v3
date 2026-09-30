@@ -12,3 +12,11 @@ export function formatLeaveAmount(r: { days: number; portion?: LeavePortion; hou
   }
   return `${formatDays(r.days)}일`;
 }
+
+/** 경조사 규정으로 신청한 건의 표시: "· 본인 결혼(규정 5일)", 규정이 없으면 빈 문자열. */
+export function formatSpecialRule(r: { specialRuleName?: string | null; specialRuleDays?: number | null }): string {
+  if (!r.specialRuleName) return "";
+  return r.specialRuleDays != null
+    ? `· ${r.specialRuleName}(규정 ${formatDays(r.specialRuleDays)}일)`
+    : `· ${r.specialRuleName}`;
+}

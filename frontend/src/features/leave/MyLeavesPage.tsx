@@ -33,7 +33,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
-import { formatDays, formatLeaveAmount } from "@/lib/leaveFormat";
+import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
   PENDING: "warning",
@@ -112,6 +112,9 @@ export default function MyLeavesPage() {
                           style={{ backgroundColor: r.leaveTypeColor }}
                         />
                         {r.leaveTypeName}
+                        {r.specialRuleName && (
+                          <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
+                        )}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -223,6 +226,7 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const [reason, setReason] = useState("");
   const [hours, setHours] = useState<string>("");
   const [forfeitAck, setForfeitAck] = useState(false);
+  const [specialRuleId, setSpecialRuleId] = useState<string>("");
 
   const usableTypes = useMemo(() => types.filter((t) => t.policyEnabled), [types]);
   const selectedType: LeaveType | undefined = useMemo(
@@ -232,6 +236,9 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   // 종일이 아닌 종류(반차·반반차·시간차)는 하루만 신청할 수 있다
   const isPartial = !!selectedType && selectedType.portion !== "FULL";
   const isHourly = selectedType?.portion === "HOURLY";
+  // 경조사 규정이 연결된 종류는 규정 하나를 반드시 선택해야 한다
+  const specialRules = selectedType?.specialRules ?? [];
+  const needsRule = specialRules.length > 0;
 
   // 병가·공가처럼 잔여 연차 소진 후 쓰는 종류는 목록을 열기 전에 신청 가능 여부를 미리 조회해,
   // 불가하면 드롭다운에서 회색으로 표시하고 선택할 수 없게 한다(아래 단건 조회와 같은 캐시 키).
@@ -277,6 +284,11 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     if (selectedBlocked) setTypeId("");
   }, [selectedBlocked]);
 
+  // 종류를 바꾸면 규정 선택을 초기화한다
+  useEffect(() => {
+    setSpecialRuleId("");
+  }, [typeId]);
+
   // 종류·날짜가 바뀌면 소멸 안내 확인을 다시 받는다
   useEffect(() => {
     setForfeitAck(false);
@@ -291,6 +303,7 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         reason: reason || undefined,
         hours: isHourly ? Number(hours) : undefined,
         forfeitAcknowledged: forfeitDays > 0 ? true : undefined,
+        specialRuleId: needsRule ? Number(specialRuleId) : undefined,
       };
       return leaveApi.create(body);
     },
@@ -307,6 +320,7 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     !eligibilityLoading &&
     !notAllowed &&
     (!isHourly || !!hours) &&
+    (!needsRule || !!specialRuleId) &&
     (forfeitDays <= 0 || forfeitAck);
 
   return (
@@ -333,6 +347,28 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
             </Select>
             {blockedHint && <p className="text-xs text-muted-foreground">{blockedHint}</p>}
           </div>
+          {needsRule && (
+            <div className="space-y-2">
+              <Label>사유(규정)</Label>
+              <Select value={specialRuleId} onValueChange={setSpecialRuleId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="규정 선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {specialRules.map((r) => (
+                    <SelectItem key={r.id} value={String(r.id)}>
+                      {r.name} (최대 {formatDays(r.days)}일)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {specialRuleId
+                  ? `근무일 기준(주말·공휴일 제외) 최대 ${formatDays(specialRules.find((r) => String(r.id) === specialRuleId)?.days)}일까지 신청할 수 있습니다.`
+                  : "근무일 기준(주말·공휴일 제외) 규정 일수까지 신청할 수 있습니다."}
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>{isPartial ? "날짜" : "시작일"}</Label>
