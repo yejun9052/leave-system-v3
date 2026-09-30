@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { DatesSetArg, EventClickArg } from "@fullcalendar/core";
+import type { DatesSetArg, EventClickArg, EventInput } from "@fullcalendar/core";
+import type { DateClickArg } from "@fullcalendar/interaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { calendarApi, type CalendarEventDto, type CalendarEventInput } from "@/api/calendar";
@@ -29,6 +30,8 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { cn } from "@/lib/utils";
+import LeaveEntryPanel from "./LeaveEntryPanel";
+import { PARTIAL_ONE_DAY_MESSAGE, addDays, isWeekend, useDateSelection } from "./useDateSelection";
 
 type ViewScope = "ALL" | "COMPANY" | "DEPARTMENT" | "PERSONAL";
 
@@ -43,6 +46,8 @@ export default function CalendarPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const canManage = useAuthStore((s) => s.hasAnyRole("TEAM_LEAD", "HR_ADMIN", "SUPER_ADMIN"));
+  // 관리 전용 계정은 직원이 아니므로 휴가를 신청하지 않는다
+  const canApply = useAuthStore((s) => !!s.user && !s.user.systemAccount);
   const [range, setRange] = useState<{ start: string; end: string }>(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
@@ -62,6 +67,65 @@ export default function CalendarPage() {
     () => (view === "ALL" ? events : events.filter((e) => e.scope === view || e.source === "HOLIDAY")),
     [events, view],
   );
+
+  // 신청 시작일 검사용 공휴일(보이는 달 범위만 불러오지만, 누를 수 있는 날짜도 그 범위 안이다)
+  const holidays = useMemo(
+    () => new Set(events.filter((e) => e.source === "HOLIDAY").map((e) => e.start)),
+    [events],
+  );
+  const isWorkday = useCallback((date: string) => !isWeekend(date) && !holidays.has(date), [holidays]);
+  const notify = useCallback((message: string) => toast({ title: message }), [toast]);
+  const selector = useDateSelection(isWorkday, notify);
+  const { selection } = selector;
+  const [panelOpen, setPanelOpen] = useState(false);
+  // 패널에서 반차·반반차·시간차를 고른 상태면 누를 때마다 그 하루만 선택한다
+  const [partial, setPartial] = useState(false);
+
+  const onDateClick = (arg: DateClickArg) => {
+    if (!canApply) return;
+    if (selector.pick(arg.dateStr, partial)) setPanelOpen(true);
+  };
+
+  const onPartialChange = (next: boolean) => {
+    setPartial(next);
+    if (next && selector.collapseToStart()) notify(PARTIAL_ONE_DAY_MESSAGE);
+  };
+
+  const closePanel = () => {
+    setPanelOpen(false);
+    setPartial(false);
+    selector.clear();
+  };
+
+  const onLeaveSaved = () => {
+    qc.invalidateQueries({ queryKey: ["myRequests"] });
+    qc.invalidateQueries({ queryKey: ["myBalance"] });
+    qc.invalidateQueries({ queryKey: ["calendarEvents"] });
+    qc.invalidateQueries({ queryKey: ["calendarDay"] });
+    closePanel();
+  };
+
+  const calendarEvents: EventInput[] = filtered.map((e) => ({
+    id: e.id,
+    title: e.title,
+    start: e.start,
+    end: e.end,
+    allDay: e.allDay,
+    backgroundColor: e.colorHex,
+    borderColor: e.colorHex,
+    editable: false,
+  }));
+  if (selection) {
+    // 신청할 기간을 배경색으로 강조(배경 이벤트는 날짜 클릭을 막지 않는다)
+    calendarEvents.push({
+      id: "selection",
+      start: selection.start,
+      end: addDays(selection.end ?? selection.start, 1),
+      allDay: true,
+      display: "background",
+      backgroundColor: "#4f46e5",
+    });
+  }
 
   const onDatesSet = (arg: DatesSetArg) => {
     const start = arg.start.toISOString().slice(0, 10);
@@ -124,22 +188,23 @@ export default function CalendarPage() {
             height="auto"
             headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
             buttonText={{ today: "오늘" }}
-            events={filtered.map((e) => ({
-              id: e.id,
-              title: e.title,
-              start: e.start,
-              end: e.end,
-              allDay: e.allDay,
-              backgroundColor: e.colorHex,
-              borderColor: e.colorHex,
-              editable: false,
-            }))}
+            events={calendarEvents}
             datesSet={onDatesSet}
             eventClick={onEventClick}
+            dateClick={onDateClick}
             dayMaxEvents={3}
           />
         </CardContent>
       </Card>
+
+      {panelOpen && selection && (
+        <LeaveEntryPanel
+          selection={selection}
+          onClose={closePanel}
+          onSaved={onLeaveSaved}
+          onPartialChange={onPartialChange}
+        />
+      )}
 
       {(creating || editing) && (
         <EventDialog
