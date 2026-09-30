@@ -24,6 +24,9 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.DisplayNameGeneration;
+import org.junit.jupiter.api.DisplayNameGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -35,6 +38,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
+@DisplayName("사용자 권한 제한")
+@DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
 class EmployeeServiceRoleTest {
     @Mock private EmployeeRepository employees;
     @Mock private DepartmentRepository departments;
@@ -63,7 +68,7 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void hrCannotCreateSuperAdminEvenWithOtherRoles() {
+    void 다른_권한과_함께여도_시스템_관리자_권한으로는_직원을_만들_수_없다() {
         EmployeeRequests.Create req = new EmployeeRequests.Create("new@company.com", "신입", null, null, null,
                 LocalDate.of(2024, 1, 1), Set.of(Role.HR_ADMIN, Role.SUPER_ADMIN));
         expectError(() -> service.create(req), ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
@@ -73,7 +78,7 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void hrCannotGrantSuperAdminToAnotherEmployeeAndProfileIsNotChanged() {
+    void 다른_직원에게_시스템_관리자_권한을_줄_수_없고_정보도_바뀌지_않는다() {
         Employee target = employee(20L, false, Set.of(Role.EMPLOYEE));
         when(employees.findById(20L)).thenReturn(Optional.of(target));
         expectError(() -> service.update(20L, update(Set.of(Role.SUPER_ADMIN))),
@@ -83,7 +88,7 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void hrCannotGrantSuperAdminToSelf() {
+    void 인사관리자는_자신에게_시스템_관리자_권한을_줄_수_없다() {
         when(employees.findById(hr.getId())).thenReturn(Optional.of(hr));
         expectError(() -> service.update(hr.getId(), update(Set.of(Role.HR_ADMIN, Role.SUPER_ADMIN))),
                 ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
@@ -91,7 +96,7 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void systemAccountCannotBeChangedThroughEmployeeUpdate() {
+    void 관리_전용_계정은_직원_수정으로_권한을_바꿀_수_없다() {
         Employee admin = employee(1L, true, Set.of(Role.SUPER_ADMIN));
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
         for (Set<Role> roles : java.util.List.of(Set.of(Role.HR_ADMIN), Set.of(Role.SUPER_ADMIN),
@@ -102,7 +107,7 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void systemAccountCanStillChangeOwnPassword() {
+    void 관리_전용_계정도_자기_비밀번호는_바꿀_수_있다() {
         Employee admin = employee(1L, true, Set.of(Role.SUPER_ADMIN));
         admin.setTemporaryPassword(encoder.encode("old-password"));
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
@@ -113,7 +118,7 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void ordinaryRolesRemainEditable() {
+    void 일반_권한은_그대로_수정할_수_있다() {
         Employee target = employee(20L, false, Set.of(Role.EMPLOYEE));
         when(employees.findById(20L)).thenReturn(Optional.of(target));
         service.update(20L, update(Set.of(Role.HR_ADMIN, Role.TEAM_LEAD)));
@@ -121,7 +126,7 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void approvalRecipientsAreOnlyActiveHrAdmins() {
+    void 결재_알림_수신자는_재직_중인_인사관리자뿐이다() {
         when(employees.findIdsByAnyRoleAndStatus(Set.of(Role.HR_ADMIN),
                 com.company.leave.employee.domain.EmployeeStatus.ACTIVE)).thenReturn(java.util.List.of(11L));
         assertThat(service.activeAdminIds()).containsExactly(11L);

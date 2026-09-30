@@ -29,6 +29,9 @@ import com.company.leave.report.ReportController;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.DisplayNameGeneration;
+import org.junit.jupiter.api.DisplayNameGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Configuration;
@@ -43,6 +46,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /** 관리 전용 계정이 기존 관리 API의 실제 인가 프록시를 통과하는지 검증한다. */
+@DisplayName("시스템 관리자 관리 API 접근")
+@DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
 class SystemAdminManagementAccessTest {
     @Configuration(proxyBeanMethods = false)
     @EnableMethodSecurity
@@ -98,7 +103,7 @@ class SystemAdminManagementAccessTest {
     }
 
     @Test
-    void systemAdminCanSearchCreateAndUpdateOrdinaryEmployees() throws Exception {
+    void 시스템_관리자는_일반_직원을_조회_생성_수정할_수_있다() throws Exception {
         when(employees.search(any(), any())).thenReturn(Page.empty(PageRequest.of(0, 20)));
         mvc.perform(get("/api/employees")).andExpect(status().isOk());
         String body = """
@@ -114,7 +119,7 @@ class SystemAdminManagementAccessTest {
     }
 
     @Test
-    void systemAdminCanStillUpdatePolicy() throws Exception {
+    void 시스템_관리자는_정책을_수정할_수_있다() throws Exception {
         mvc.perform(put("/api/policy").contentType(MediaType.APPLICATION_JSON).content("""
                 {"grantBasis":"HIRE_DATE","fiscalStartMonth":1,"fiscalStartDay":1,
                  "baseAnnualDays":15,"seniorityStepYears":2,"seniorityIncrementDays":1,"maxAnnualDays":25,
@@ -127,7 +132,7 @@ class SystemAdminManagementAccessTest {
     }
 
     @Test
-    void systemAdminCanStillDownloadReport() throws Exception {
+    void 시스템_관리자는_보고서를_내려받을_수_있다() throws Exception {
         when(reports.exportUsage(2027)).thenReturn(new byte[] {1, 2, 3});
         mvc.perform(get("/api/reports/leave-usage/export").param("year", "2027"))
                 .andExpect(status().isOk());
@@ -135,14 +140,14 @@ class SystemAdminManagementAccessTest {
     }
 
     @Test
-    void systemAdminCanStillReadAuditLog() throws Exception {
+    void 시스템_관리자는_감사_로그를_볼_수_있다() throws Exception {
         when(audit.search(isNull(), any())).thenReturn(Page.empty(PageRequest.of(0, 30)));
         mvc.perform(get("/api/audit-logs")).andExpect(status().isOk());
         verify(audit).search(isNull(), any());
     }
 
     @Test
-    void systemAdminCanStillGrantAnnualLeave() throws Exception {
+    void 시스템_관리자는_연차를_부여할_수_있다() throws Exception {
         when(grants.grantAll(2027)).thenReturn(3);
         mvc.perform(post("/api/leave/admin/grant").param("year", "2027"))
                 .andExpect(status().isOk());
