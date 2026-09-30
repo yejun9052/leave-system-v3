@@ -31,6 +31,8 @@ import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { cn } from "@/lib/utils";
 import LeaveEntryPanel from "./LeaveEntryPanel";
+import DayContextMenu, { type DayMenuTarget } from "./DayContextMenu";
+import DayDetailDialog from "./DayDetailDialog";
 import { PARTIAL_ONE_DAY_MESSAGE, addDays, isWeekend, useDateSelection } from "./useDateSelection";
 
 type ViewScope = "ALL" | "COMPANY" | "DEPARTMENT" | "PERSONAL";
@@ -84,6 +86,37 @@ export default function CalendarPage() {
   const onDateClick = (arg: DateClickArg) => {
     if (!canApply) return;
     if (selector.pick(arg.dateStr, partial)) setPanelOpen(true);
+  };
+
+  // 날짜 우클릭 메뉴와 날짜 상세 창
+  const [menu, setMenu] = useState<DayMenuTarget | null>(null);
+  const [detailDate, setDetailDate] = useState<string | null>(null);
+
+  /**
+   * FullCalendar 에는 우클릭 콜백이 없어 달력 영역의 contextmenu 에서 날짜 칸(data-date)을 찾는다.
+   * 여러 날에 걸친 막대는 시작 칸 안에 그려지므로, 막대 위에서는 포인터 바로 아래 날짜 칸을 쓴다.
+   */
+  const dateAtPoint = (target: EventTarget | null, x: number, y: number): string | null => {
+    if (!(target instanceof Element)) return null;
+    if (target.closest(".fc-event:not(.fc-bg-event)")) {
+      const cell = document.elementsFromPoint(x, y).find((el) => el.matches(".fc-daygrid-day[data-date]"));
+      if (cell) return cell.getAttribute("data-date");
+    }
+    return target.closest("[data-date]")?.getAttribute("data-date") ?? null;
+  };
+
+  const onContextMenu = (e: React.MouseEvent) => {
+    const date = dateAtPoint(e.target, e.clientX, e.clientY);
+    if (!date) return; // 날짜 칸이 아니면(툴바 등) 브라우저 기본 메뉴
+    e.preventDefault();
+    setMenu({ date, x: e.clientX, y: e.clientY });
+  };
+
+  /** 그 날짜를 시작일로 선택을 새로 시작하고 패널을 연다. */
+  const applyFrom = (date: string) => {
+    setMenu(null);
+    setDetailDate(null);
+    if (selector.startAt(date)) setPanelOpen(true);
   };
 
   const onPartialChange = (next: boolean) => {
@@ -181,21 +214,46 @@ export default function CalendarPage() {
 
       <Card>
         <CardContent className="p-2 sm:p-4">
-          <FullCalendar
-            plugins={[dayGridPlugin, interactionPlugin]}
-            initialView="dayGridMonth"
-            locale="ko"
-            height="auto"
-            headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
-            buttonText={{ today: "오늘" }}
-            events={calendarEvents}
-            datesSet={onDatesSet}
-            eventClick={onEventClick}
-            dateClick={onDateClick}
-            dayMaxEvents={3}
-          />
+          <div onContextMenu={onContextMenu}>
+            <FullCalendar
+              plugins={[dayGridPlugin, interactionPlugin]}
+              initialView="dayGridMonth"
+              locale="ko"
+              height="auto"
+              headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
+              buttonText={{ today: "오늘" }}
+              events={calendarEvents}
+              datesSet={onDatesSet}
+              eventClick={onEventClick}
+              dateClick={onDateClick}
+              dayMaxEvents={3}
+            />
+          </div>
         </CardContent>
       </Card>
+
+      {menu && (
+        <DayContextMenu
+          key={`${menu.date}-${menu.x}-${menu.y}`}
+          target={menu}
+          canApply={canApply}
+          onApply={applyFrom}
+          onDetail={(date) => {
+            setMenu(null);
+            setDetailDate(date);
+          }}
+          onClose={() => setMenu(null)}
+        />
+      )}
+
+      {detailDate && (
+        <DayDetailDialog
+          date={detailDate}
+          canApply={canApply}
+          onApply={applyFrom}
+          onClose={() => setDetailDate(null)}
+        />
+      )}
 
       {panelOpen && selection && (
         <LeaveEntryPanel
