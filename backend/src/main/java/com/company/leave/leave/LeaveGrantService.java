@@ -73,11 +73,13 @@ public class LeaveGrantService {
         LocalDate asOf = referenceDate(employee.getHireDate(), year, policy);
         BigDecimal entitlement = calculator.annualEntitlement(employee.getHireDate(), asOf, policy);
 
-        // 장기근속 포상: 해당 연도에 근속 N년에 도달하면 보너스 연차 가산
-        int completedYears = Period.between(employee.getHireDate(), asOf).getYears();
-        BigDecimal bonus = awardRuleRepository.findByYears(completedYears)
-                .map(r -> r.getBonusDays()).orElse(BigDecimal.ZERO);
-        entitlement = entitlement.add(bonus);
+        // [일시 중지 2026-09-30] 장기근속 포상 자동 가산. 정책 정리 전까지 연차 부여에 포상을 더하지 않는다.
+        // 다시 켤 때 주의: 2월 29일 입사자는 평년 기념일(2/28) 기준 근속이 1년 적게 계산되어
+        //   포상이 1년 늦게 붙는 문제가 있다(Period.between). 근속 계산을 먼저 고칠 것.
+        // int completedYears = Period.between(employee.getHireDate(), asOf).getYears();
+        // BigDecimal bonus = awardRuleRepository.findByYears(completedYears)
+        //         .map(r -> r.getBonusDays()).orElse(BigDecimal.ZERO);
+        // entitlement = entitlement.add(bonus);
 
         LeaveBalance balance = balanceService.getOrCreate(employee.getId(), year);
         balance.setGranted(entitlement);
