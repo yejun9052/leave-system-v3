@@ -60,6 +60,7 @@ public enum ErrorCode {
     LEAVE_PENDING_ANNUAL_EXISTS(HttpStatus.CONFLICT, "결재 대기 중인 연차 신청이 있어 신청할 수 없습니다."),
     LEAVE_FORFEIT_NOT_ACKNOWLEDGED(HttpStatus.BAD_REQUEST, "남은 연차 소멸 안내를 확인해야 신청할 수 있습니다."),
     LEAVE_TYPE_DISABLED(HttpStatus.BAD_REQUEST, "현재 정책에서 사용할 수 없는 휴가 종류입니다."),
+    LEAVE_HR_DIRECT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "팀장이 부재 중일 때만 인사관리자에게 바로 신청할 수 있습니다."),
     LEAVE_SPECIAL_RULE_INVALID(HttpStatus.BAD_REQUEST, "경조사 규정을 올바르게 선택해 주세요."),
     LEAVE_SPECIAL_RULE_EXCEEDED(HttpStatus.BAD_REQUEST, "규정 일수를 넘겨 신청할 수 없습니다."),
 

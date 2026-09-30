@@ -60,6 +60,10 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "half_day_enabled", nullable = false)
     private boolean halfDayEnabled = true;
 
+    /** ON: 팀장 1차 승인 → 인사관리자 최종 승인. OFF: 모든 신청을 인사관리자가 바로 결재. */
+    @Column(name = "lead_approval_required", nullable = false)
+    private boolean leadApprovalRequired = true;
+
     /** 반반차(0.25일) 사용 여부. */
     @Column(name = "quarter_day_enabled", nullable = false)
     private boolean quarterDayEnabled = false;
@@ -113,6 +117,7 @@ public class LeavePolicy extends BaseTimeEntity {
         this.monthlyAccrualMax = s.monthlyAccrualMax();
         this.allowNegative = s.allowNegative();
         this.halfDayEnabled = s.halfDayEnabled();
+        this.leadApprovalRequired = s.leadApprovalRequired();
         this.quarterDayEnabled = s.quarterDayEnabled();
         this.hourlyEnabled = s.hourlyEnabled();
         this.maxConcurrentAbsence = s.maxConcurrentAbsence();
@@ -138,6 +143,7 @@ public class LeavePolicy extends BaseTimeEntity {
             boolean halfDayEnabled,
             boolean quarterDayEnabled,
             boolean hourlyEnabled,
+            boolean leadApprovalRequired,
             int maxConcurrentAbsence,
             int minAdvanceDays,
             int maxConsecutiveDays,
@@ -192,6 +198,10 @@ public class LeavePolicy extends BaseTimeEntity {
 
     public boolean isHalfDayEnabled() {
         return halfDayEnabled;
+    }
+
+    public boolean isLeadApprovalRequired() {
+        return leadApprovalRequired;
     }
 
     public boolean isQuarterDayEnabled() {

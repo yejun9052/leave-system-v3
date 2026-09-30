@@ -40,7 +40,8 @@ public class HolidayImpactService {
 
     private static final Logger log = LoggerFactory.getLogger(HolidayImpactService.class);
     static final Set<LeaveRequestStatus> TARGET_STATUSES = EnumSet.of(
-            LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED);
+            LeaveRequestStatus.PENDING, LeaveRequestStatus.LEAD_APPROVED, LeaveRequestStatus.APPROVED,
+            LeaveRequestStatus.CANCEL_REQUESTED);
     static final String AUTO_CANCEL_REASON = "공휴일 지정으로 자동 취소";
 
     private final LeaveRequestRepository requestRepository;
@@ -118,7 +119,8 @@ public class HolidayImpactService {
                 .map(Holiday::getDate).collect(Collectors.toSet());
         BigDecimal oldDays = request.getDays();
         BigDecimal oldDeducted = request.getDeductedDays();
-        boolean chargedBalance = request.getStatus() != LeaveRequestStatus.PENDING && type.isDeductFromAnnual();
+        // 최종 승인 전(대기·1차 승인)은 아직 잔액에서 빠지지 않았다
+        boolean chargedBalance = !request.isAwaitingApproval() && type.isDeductFromAnnual();
         String holidayText = hit.entrySet().stream()
                 .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", "));
         String period = type.getName() + " " + request.getStartDate() + " ~ " + request.getEndDate();

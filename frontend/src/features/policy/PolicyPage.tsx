@@ -173,6 +173,12 @@ function PolicyTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <ToggleRow
+            label="팀장 1차 승인"
+            desc="ON: 팀장 1차 승인 후 인사관리자 최종 승인 / OFF: 모든 신청을 인사관리자가 바로 결재"
+            checked={form.leadApprovalRequired}
+            onChange={(v) => set("leadApprovalRequired", v)}
+          />
+          <ToggleRow
             label="반차 사용 허용"
             checked={form.halfDayEnabled}
             onChange={(v) => set("halfDayEnabled", v)}

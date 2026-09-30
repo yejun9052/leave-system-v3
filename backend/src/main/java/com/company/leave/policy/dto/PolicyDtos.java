@@ -27,6 +27,7 @@ public final class PolicyDtos {
             boolean halfDayEnabled,
             boolean quarterDayEnabled,
             boolean hourlyEnabled,
+            boolean leadApprovalRequired,
             int maxConcurrentAbsence,
             int minAdvanceDays,
             int maxConsecutiveDays,
@@ -39,7 +40,7 @@ public final class PolicyDtos {
                     p.getFiscalStartDay(), p.getBaseAnnualDays(), p.getSeniorityStepYears(),
                     p.getSeniorityIncrementDays(), p.getMaxAnnualDays(), p.isMonthlyAccrualEnabled(),
                     p.getMonthlyAccrualMax(), p.isAllowNegative(), p.isHalfDayEnabled(),
-                    p.isQuarterDayEnabled(), p.isHourlyEnabled(),
+                    p.isQuarterDayEnabled(), p.isHourlyEnabled(), p.isLeadApprovalRequired(),
                     p.getMaxConcurrentAbsence(), p.getMinAdvanceDays(), p.getMaxConsecutiveDays(),
                     p.isPromotionEnabled(), p.isCarryOverEnabled(), p.getMaxCarryOverDays());
         }
@@ -59,6 +60,8 @@ public final class PolicyDtos {
             boolean halfDayEnabled,
             boolean quarterDayEnabled,
             boolean hourlyEnabled,
+            /** 없으면(구 화면) ON 으로 본다: 결재 단계가 모르는 사이 꺼지지 않도록 */
+            Boolean leadApprovalRequired,
             @Min(0) int maxConcurrentAbsence,
             @Min(0) int minAdvanceDays,
             @Min(0) int maxConsecutiveDays,
@@ -70,7 +73,8 @@ public final class PolicyDtos {
             return new LeavePolicy.Settings(grantBasis, fiscalStartMonth, fiscalStartDay,
                     baseAnnualDays, seniorityStepYears, seniorityIncrementDays, maxAnnualDays,
                     monthlyAccrualEnabled, monthlyAccrualMax, allowNegative, halfDayEnabled,
-                    quarterDayEnabled, hourlyEnabled, maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
+                    quarterDayEnabled, hourlyEnabled, leadApprovalRequired == null || leadApprovalRequired,
+                    maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
                     promotionEnabled, carryOverEnabled, maxCarryOverDays);
         }
     }

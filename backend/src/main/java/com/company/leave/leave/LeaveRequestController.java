@@ -52,6 +52,14 @@ public class LeaveRequestController {
                 SecurityUtils.currentEmployeeId(), leaveTypeId, startDate));
     }
 
+    @Operation(summary = "내 결재 경로",
+            description = "신청하면 누가 먼저 결재하는지(팀장/인사관리자)와, 팀장이 오늘 종일 휴가로 부재라서 "
+                    + "인사관리자에게 바로 신청할 수 있는지 알려 준다.")
+    @GetMapping("/approval-route")
+    public ApiResponse<LeaveRequestDtos.ApprovalRoute> approvalRoute() {
+        return ApiResponse.ok(leaveRequestService.approvalRoute(SecurityUtils.currentEmployeeId()));
+    }
+
     @Operation(summary = "내 휴가 신청 목록")
     @GetMapping("/me")
     public ApiResponse<Page<LeaveRequestDtos.Response>> myRequests(

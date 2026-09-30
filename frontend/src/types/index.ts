@@ -59,6 +59,7 @@ export interface Page<T> {
 // ---- Leave domain ----
 export type LeaveRequestStatus =
   | "PENDING"
+  | "LEAD_APPROVED"
   | "APPROVED"
   | "REJECTED"
   | "CANCEL_REQUESTED"
@@ -66,6 +67,7 @@ export type LeaveRequestStatus =
 
 export const LEAVE_STATUS_LABEL: Record<LeaveRequestStatus, string> = {
   PENDING: "대기",
+  LEAD_APPROVED: "1차 승인",
   APPROVED: "승인",
   REJECTED: "반려",
   CANCEL_REQUESTED: "취소대기",
@@ -130,6 +132,12 @@ export interface LeaveRequest {
   specialRuleDays: number | null;
   /** 결재함에서만 채워지는 결재자용 경고(예: 경조사가 팀 동시 부재 한도 초과) */
   approvalWarning?: string | null;
+  /** 2단계 결재: 팀장 1차 승인자·시각, 팀장 부재로 인사 직행한 사유 */
+  leadApproverName: string | null;
+  leadApprovedAt: string | null;
+  hrDirectReason: string | null;
+  /** 결재함 응답에서만 채워짐: 지금 이 결재자가 처리할 단계 */
+  approvalStage: "LEAD" | "HR" | null;
   status: LeaveRequestStatus;
   reason: string | null;
   approverName: string | null;

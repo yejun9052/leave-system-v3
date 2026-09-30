@@ -15,9 +15,11 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.LeaveAccrualCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
+import com.company.leave.leave.domain.ApprovalStage;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
+import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveRequestDtos;
 import com.company.leave.leave.repository.LeaveRequestRepository;
@@ -31,8 +33,11 @@ import com.company.leave.policy.repository.BlackoutPeriodRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
@@ -147,15 +152,38 @@ public class LeaveRequestService {
             }
         }
 
+        String hrDirectReason = resolveHrDirect(employee, req.hrDirectReason(), policy);
+
         LeaveRequest request = new LeaveRequest(
                 employee, type, start, end, days, deduction, appliedYear, req.reason());
         if (specialRule != null) {
             request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
         }
+        if (hrDirectReason != null) {
+            request.routeDirectToHr(hrDirectReason);
+        }
         requestRepository.save(request);
 
-        notifyApprovers(employee, request);
+        notifyApprovers(request, policy);
         return LeaveRequestDtos.Response.from(request);
+    }
+
+    /**
+     * 신청자의 결재 경로(신청 화면 안내용). 정책이 ON 이고 1차 결재할 팀장이 있으면 팀장 단계,
+     * 팀장이 오늘 종일 휴가로 부재면 인사관리자에게 바로 신청할 수 있다.
+     */
+    @Transactional(readOnly = true)
+    public LeaveRequestDtos.ApprovalRoute approvalRoute(Long employeeId) {
+        Employee employee = employeeService.getEntity(employeeId);
+        LeavePolicy policy = policyService.getActivePolicy();
+        Employee lead = policy.isLeadApprovalRequired() ? leadApproverOf(employee) : null;
+        if (lead == null) {
+            return new LeaveRequestDtos.ApprovalRoute(policy.isLeadApprovalRequired(), ApprovalStage.HR,
+                    null, false, null, false);
+        }
+        LeaveRequest absence = leadAbsenceToday(lead);
+        return new LeaveRequestDtos.ApprovalRoute(true, ApprovalStage.LEAD, lead.getName(), absence != null,
+                absence != null ? absence.getLeaveType().getName() : null, absence != null);
     }
 
     /**
@@ -190,27 +218,38 @@ public class LeaveRequestService {
                 .map(LeaveRequestDtos.Response::from);
     }
 
-    /** 결재자(팀장/관리자)가 처리해야 할 목록: 신규 신청 + 취소 요청. */
+    /**
+     * 결재자가 처리해야 할 목록.
+     * <ul>
+     *   <li>인사관리자·최고관리자: 인사 단계 건(1차 승인 건, 인사 직행 대기 건, 취소 요청)</li>
+     *   <li>팀장: 담당 부서 일반 직원의 팀장 단계 대기 건(정책 ON 일 때만)</li>
+     * </ul>
+     * 팀장이면서 관리자인 사람은 둘 다 본다.
+     */
     @Transactional(readOnly = true)
     public List<LeaveRequestDtos.Response> pendingForApprover(Long approverId) {
         Employee approver = employeeService.getEntity(approverId);
-        var statuses = java.util.EnumSet.of(
-                com.company.leave.leave.domain.LeaveRequestStatus.PENDING,
-                com.company.leave.leave.domain.LeaveRequestStatus.CANCEL_REQUESTED);
-        List<LeaveRequest> list;
-        if (isAdmin(approver)) {
-            list = requestRepository.findForApproval(allEmployeeIds(), statuses);
-        } else {
-            Set<Long> memberIds = subordinateEmployeeIds(approver);
-            // 팀장(본인 포함)의 신청은 관리자만 결재하므로 팀장 결재함에서 뺀다
-            list = memberIds.isEmpty() ? List.of()
-                    : requestRepository.findForApproval(memberIds, statuses).stream()
-                            .filter(r -> !isTeamLead(r.getEmployee()))
-                            .toList();
-        }
         LeavePolicy policy = policyService.getActivePolicy();
-        return list.stream()
-                .map(r -> LeaveRequestDtos.Response.from(r).withApprovalWarning(teamLimitWarning(r, policy)))
+        Map<Long, LeaveRequest> inbox = new LinkedHashMap<>();
+        if (isAdmin(approver)) {
+            requestRepository.findForApproval(allEmployeeIds(), EnumSet.of(LeaveRequestStatus.PENDING,
+                            LeaveRequestStatus.LEAD_APPROVED, LeaveRequestStatus.CANCEL_REQUESTED)).stream()
+                    .filter(r -> stageOf(r, policy) == ApprovalStage.HR)
+                    .forEach(r -> inbox.put(r.getId(), r));
+        }
+        if (policy.isLeadApprovalRequired()) {
+            Set<Long> memberIds = subordinateEmployeeIds(approver);
+            if (!memberIds.isEmpty()) {
+                requestRepository.findForApproval(memberIds, EnumSet.of(LeaveRequestStatus.PENDING)).stream()
+                        .filter(r -> stageOf(r, policy) == ApprovalStage.LEAD && canLeadApprove(approver, r.getEmployee()))
+                        .forEach(r -> inbox.putIfAbsent(r.getId(), r));
+            }
+        }
+        return inbox.values().stream()
+                .sorted(java.util.Comparator.comparing(LeaveRequest::getCreatedAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .map(r -> LeaveRequestDtos.Response.from(r)
+                        .withInbox(stageOf(r, policy), teamLimitWarning(r, policy)))
                 .toList();
     }
 
@@ -230,15 +269,29 @@ public class LeaveRequestService {
         }
     }
 
+    /**
+     * 승인. 팀장 단계면 1차 승인(인사 결재 대기로), 인사 단계면 최종 승인(잔액 차감·캘린더 등록·병가 소멸).
+     * 팀장 단계 건은 팀장만, 인사 단계 건은 인사관리자·최고관리자만 결재한다.
+     */
     @Transactional
     public LeaveRequestDtos.Response approve(Long requestId, Long approverId) {
         LeaveRequest request = getRequest(requestId);
         Employee approver = employeeService.getEntity(approverId);
-        if (!request.isPending()) {
+        if (!request.isAwaitingApproval()) {
             throw new BusinessException(ErrorCode.LEAVE_NOT_PENDING);
         }
-        if (!canApprove(approver, request.getEmployee())) {
-            throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION);
+        LeavePolicy policy = policyService.getActivePolicy();
+        if (stageOf(request, policy) == ApprovalStage.LEAD) {
+            if (!canLeadApprove(approver, request.getEmployee())) {
+                throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION,
+                        "팀장 1차 승인 단계입니다. 담당 팀장만 승인할 수 있습니다.");
+            }
+            request.leadApprove(approver, Instant.now());
+            notifyLeadApproved(request);
+            return LeaveRequestDtos.Response.from(request);
+        }
+        if (!isAdmin(approver)) {
+            throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION, "최종 승인은 인사관리자가 합니다.");
         }
 
         if (request.getLeaveType().isDeductFromAnnual()) {
@@ -277,14 +330,18 @@ public class LeaveRequestService {
         return LeaveRequestDtos.Response.from(request);
     }
 
+    /** 반려. 팀장 단계는 팀장이, 인사 단계(1차 승인 건 포함)는 인사관리자가 반려한다. */
     @Transactional
     public LeaveRequestDtos.Response reject(Long requestId, Long approverId, String reason) {
         LeaveRequest request = getRequest(requestId);
         Employee approver = employeeService.getEntity(approverId);
-        if (!request.isPending()) {
+        if (!request.isAwaitingApproval()) {
             throw new BusinessException(ErrorCode.LEAVE_NOT_PENDING);
         }
-        if (!canApprove(approver, request.getEmployee())) {
+        boolean allowed = stageOf(request, policyService.getActivePolicy()) == ApprovalStage.LEAD
+                ? canLeadApprove(approver, request.getEmployee())
+                : isAdmin(approver);
+        if (!allowed) {
             throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION);
         }
         request.reject(approver, reason, Instant.now());
@@ -297,8 +354,8 @@ public class LeaveRequestService {
     /**
      * 취소 처리.
      * <ul>
-     *   <li>대기(PENDING): 본인/관리자 → 즉시 취소</li>
-     *   <li>승인(APPROVED): 관리자 → 즉시 취소(환원), 본인 → 취소 요청(팀장 재승인 대기)</li>
+     *   <li>대기·1차 승인(PENDING·LEAD_APPROVED): 본인/관리자 → 즉시 취소(아직 확정 전)</li>
+     *   <li>승인(APPROVED): 관리자 → 즉시 취소(환원), 본인 → 취소 요청(인사관리자 결재 대기)</li>
      *   <li>취소요청(CANCEL_REQUESTED): 관리자 → 즉시 확정 취소</li>
      *   <li>이미 시작된 휴가: 취소 불가</li>
      * </ul>
@@ -314,7 +371,7 @@ public class LeaveRequestService {
         }
 
         switch (request.getStatus()) {
-            case PENDING -> request.cancel();
+            case PENDING, LEAD_APPROVED -> request.cancel();
             case APPROVED -> {
                 if (!request.getStartDate().isAfter(LocalDate.now())) {
                     throw new BusinessException(ErrorCode.LEAVE_ALREADY_STARTED);
@@ -339,7 +396,7 @@ public class LeaveRequestService {
         return LeaveRequestDtos.Response.from(request);
     }
 
-    /** 팀장/관리자가 취소 요청을 승인 → 확정 취소(잔액 환원, 캘린더 삭제). */
+    /** 인사관리자가 취소 요청을 승인 → 확정 취소(잔액 환원, 캘린더 삭제, 팀장에게 안내). */
     @Transactional
     public LeaveRequestDtos.Response approveCancellation(Long requestId, Long approverId) {
         LeaveRequest request = getRequest(requestId);
@@ -347,8 +404,8 @@ public class LeaveRequestService {
         if (!request.isCancelRequested()) {
             throw new BusinessException(ErrorCode.CONFLICT, "취소 요청 상태가 아닙니다.");
         }
-        if (!canApprove(approver, request.getEmployee())) {
-            throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION);
+        if (!isAdmin(approver)) {
+            throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION, "취소 요청은 인사관리자가 결재합니다.");
         }
         finalizeCancel(request);
         notificationService.notify(request.getEmployee().getId(), "LEAVE_CANCEL_APPROVED",
@@ -358,7 +415,7 @@ public class LeaveRequestService {
         return LeaveRequestDtos.Response.from(request);
     }
 
-    /** 팀장/관리자가 취소 요청을 반려 → 승인 상태로 복귀. */
+    /** 인사관리자가 취소 요청을 반려 → 승인 상태로 복귀. */
     @Transactional
     public LeaveRequestDtos.Response rejectCancellation(Long requestId, Long approverId, String reason) {
         LeaveRequest request = getRequest(requestId);
@@ -366,8 +423,8 @@ public class LeaveRequestService {
         if (!request.isCancelRequested()) {
             throw new BusinessException(ErrorCode.CONFLICT, "취소 요청 상태가 아닙니다.");
         }
-        if (!canApprove(approver, request.getEmployee())) {
-            throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION);
+        if (!isAdmin(approver)) {
+            throw new BusinessException(ErrorCode.LEAVE_NO_APPROVAL_PERMISSION, "취소 요청은 인사관리자가 결재합니다.");
         }
         request.rejectCancel();
         notificationService.notify(request.getEmployee().getId(), "LEAVE_CANCEL_REJECTED",
@@ -391,16 +448,115 @@ public class LeaveRequestService {
         }
         calendarEventRepository.deleteByLeaveRequestId(request.getId());
         request.cancel();
+        // 승인됐던 휴가가 취소되면 팀장에게 안내만 보낸다(취소 결재는 인사관리자)
+        Employee lead = leadApproverOf(request.getEmployee());
+        if (lead != null) {
+            notificationService.notify(lead.getId(), "LEAVE_CANCELLED_INFO", "팀원 휴가 취소",
+                    request.getEmployee().getName() + "님의 " + request.getLeaveType().getName() + "("
+                            + period(request) + ") 사용이 취소되었습니다.", "/calendar");
+        }
     }
 
+    /** 승인된 휴가의 취소 요청은 인사관리자에게 바로 간다. */
     private void notifyApproversForCancel(LeaveRequest request) {
         Employee employee = request.getEmployee();
-        for (Long approverId : approverIdsFor(employee)) {
-            notificationService.notify(approverId, "LEAVE_CANCEL_REQUESTED",
+        for (Long adminId : adminIdsExcept(employee)) {
+            notificationService.notify(adminId, "LEAVE_CANCEL_REQUESTED",
                     "휴가 취소 요청",
-                    employee.getName() + " - " + request.getLeaveType().getName() + " "
-                            + request.getStartDate() + " ~ " + request.getEndDate(), "/approvals");
+                    employee.getName() + " - " + request.getLeaveType().getName() + " " + period(request),
+                    "/approvals");
         }
+    }
+
+    /** 팀장 1차 승인 알림: 인사관리자에게 최종 승인 요청, 신청자에게 진행 안내. */
+    private void notifyLeadApproved(LeaveRequest request) {
+        Employee employee = request.getEmployee();
+        String summary = employee.getName() + " - " + request.getLeaveType().getName() + " " + period(request);
+        for (Long adminId : adminIdsExcept(employee)) {
+            notificationService.notify(adminId, "LEAVE_FINAL_APPROVAL_REQUESTED", "휴가 최종 승인 요청",
+                    summary + " (팀장 1차 승인 완료)", "/approvals");
+        }
+        notificationService.notify(employee.getId(), "LEAVE_LEAD_APPROVED", "팀장이 휴가를 1차 승인했습니다.",
+                request.getLeaveType().getName() + " " + period(request) + " · 인사관리자 최종 승인 대기", "/my-leaves");
+    }
+
+    // --- 2단계 결재 ---
+
+    /**
+     * 신청 건의 현재 결재 단계. 신청 때 고정하지 않고 결재 시점의 정책·조직으로 판단한다
+     * (정책을 바꾸면 대기 중인 건도 바뀐 흐름을 따른다).
+     */
+    private ApprovalStage stageOf(LeaveRequest request, LeavePolicy policy) {
+        if (request.getStatus() != LeaveRequestStatus.PENDING) {
+            return ApprovalStage.HR; // 1차 승인 건, 취소 요청
+        }
+        if (!policy.isLeadApprovalRequired() || request.getHrDirectReason() != null
+                || leadApproverOf(request.getEmployee()) == null) {
+            return ApprovalStage.HR;
+        }
+        return ApprovalStage.LEAD;
+    }
+
+    /**
+     * 신청자를 1차 결재할 팀장: 소속 부서부터 상위로 올라가며 처음 만나는 재직 중인 부서장(본인 제외).
+     * 팀장 본인의 신청이거나 부서장이 없으면 null(인사관리자가 바로 결재).
+     */
+    private Employee leadApproverOf(Employee applicant) {
+        if (isTeamLead(applicant)) {
+            return null;
+        }
+        for (Department d = applicant.getDepartment(); d != null; d = d.getParent()) {
+            Employee lead = d.getLead();
+            if (lead != null && !lead.getId().equals(applicant.getId()) && lead.isActive()) {
+                return lead;
+            }
+        }
+        return null;
+    }
+
+    /** 팀장 단계 결재 권한: 신청자가 일반 직원이고, 결재자가 담당 부서(하위 포함)의 팀장. */
+    private boolean canLeadApprove(Employee approver, Employee target) {
+        return !isTeamLead(target) && isInChargeOf(approver, target);
+    }
+
+    /** 팀장이 오늘 종일 휴가(최종 승인)로 부재인지. 부재면 그 휴가, 아니면 null. 반차·시간차는 부재로 보지 않는다. */
+    private LeaveRequest leadAbsenceToday(Employee lead) {
+        LocalDate today = LocalDate.now();
+        return requestRepository.findApprovedBetween(today, today).stream()
+                .filter(r -> r.getEmployee().getId().equals(lead.getId()))
+                .filter(r -> !r.getLeaveType().isPartialDay())
+                .findFirst().orElse(null);
+    }
+
+    /**
+     * 팀장 부재로 인사관리자에게 바로 신청하는 경우의 사유 확인.
+     * 정책 OFF 이거나 팀장이 없으면 원래 인사관리자에게 가므로 사유를 쓰지 않는다(null).
+     */
+    private String resolveHrDirect(Employee applicant, String reason, LeavePolicy policy) {
+        if (reason == null || reason.isBlank()) {
+            return null;
+        }
+        Employee lead = policy.isLeadApprovalRequired() ? leadApproverOf(applicant) : null;
+        if (lead == null) {
+            return null;
+        }
+        if (leadAbsenceToday(lead) == null) {
+            throw new BusinessException(ErrorCode.LEAVE_HR_DIRECT_NOT_ALLOWED,
+                    "팀장(" + lead.getName() + ")님이 오늘 부재 중이 아니어서 인사관리자에게 바로 신청할 수 없습니다.");
+        }
+        return reason.trim();
+    }
+
+    private List<Long> adminIdsExcept(Employee employee) {
+        return employeeService.activeAdminIds().stream()
+                .filter(id -> !id.equals(employee.getId()))
+                .toList();
+    }
+
+    private static String period(LeaveRequest request) {
+        return request.getStartDate().equals(request.getEndDate())
+                ? request.getStartDate().toString()
+                : request.getStartDate() + " ~ " + request.getEndDate();
     }
 
     // --- helpers ---
@@ -454,7 +610,7 @@ public class LeaveRequestService {
      * 넘으면 알려 주고, 승인 여부는 결재자가 판단한다. 해당 없으면 null.
      */
     private String teamLimitWarning(LeaveRequest request, LeavePolicy policy) {
-        if (!request.isPending() || request.getLeaveType().isDeductFromAnnual()
+        if (!request.isAwaitingApproval() || request.getLeaveType().isDeductFromAnnual()
                 || !exceedsTeamLimit(request.getEmployee(), request.getStartDate(), request.getEndDate(), policy)) {
             return null;
         }
@@ -610,28 +766,20 @@ public class LeaveRequestService {
         calendarEventRepository.save(event);
     }
 
-    private void notifyApprovers(Employee employee, LeaveRequest request) {
-        for (Long approverId : approverIdsFor(employee)) {
-            notificationService.notify(approverId, "LEAVE_REQUESTED",
-                    "새 휴가 결재 요청",
-                    employee.getName() + " - " + request.getLeaveType().getName() + " "
-                            + request.getStartDate() + " ~ " + request.getEndDate(), "/approvals");
-        }
-    }
-
     /**
-     * 결재 알림 수신자. 일반 직원은 소속 부서 팀장, 팀장의 신청이나 결재할 팀장이 없는 부서는
-     * 재직 관리자(인사관리자·최고관리자). 본인은 제외.
+     * 새 신청 결재 알림. 팀장 단계면 1차 결재할 팀장, 인사 단계(정책 OFF·팀장 신청·팀장 없음·팀장 부재 직행)면
+     * 재직 관리자(인사관리자·최고관리자, 본인 제외).
      */
-    private List<Long> approverIdsFor(Employee applicant) {
-        Department dept = applicant.getDepartment();
-        if (!isTeamLead(applicant) && dept != null && dept.getLead() != null
-                && !dept.getLead().getId().equals(applicant.getId())) {
-            return List.of(dept.getLead().getId());
+    private void notifyApprovers(LeaveRequest request, LeavePolicy policy) {
+        Employee employee = request.getEmployee();
+        List<Long> recipients = stageOf(request, policy) == ApprovalStage.LEAD
+                ? List.of(leadApproverOf(employee).getId())
+                : adminIdsExcept(employee);
+        String message = employee.getName() + " - " + request.getLeaveType().getName() + " " + period(request)
+                + (request.getHrDirectReason() != null ? " (팀장 부재로 인사 직행: " + request.getHrDirectReason() + ")" : "");
+        for (Long approverId : recipients) {
+            notificationService.notify(approverId, "LEAVE_REQUESTED", "새 휴가 결재 요청", message, "/approvals");
         }
-        return employeeService.activeAdminIds().stream()
-                .filter(id -> !id.equals(applicant.getId()))
-                .toList();
     }
 
     private boolean isAdmin(Employee e) {
@@ -641,20 +789,6 @@ public class LeaveRequestService {
     /** 팀장: TEAM_LEAD 역할이 있거나 부서장으로 지정된 직원. */
     private boolean isTeamLead(Employee e) {
         return e.hasRole(Role.TEAM_LEAD) || !departmentRepository.findByLeadId(e.getId()).isEmpty();
-    }
-
-    /**
-     * 결재 권한. 관리자(인사관리자·최고관리자)는 모두 결재(본인 건 포함).
-     * 팀장의 신청(본인 건 포함)은 관리자만 결재하고, 팀장은 담당 부서(하위 포함)의 일반 직원만 결재한다.
-     */
-    private boolean canApprove(Employee approver, Employee target) {
-        if (isAdmin(approver)) {
-            return true;
-        }
-        if (isTeamLead(target)) {
-            return false;
-        }
-        return isInChargeOf(approver, target);
     }
 
     /** 대상자가 본인이 팀장인 부서(하위 포함)에 속함. 조회 권한 판단에도 쓴다. */

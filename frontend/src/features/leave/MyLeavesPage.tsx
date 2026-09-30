@@ -37,6 +37,7 @@ import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFor
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
   PENDING: "warning",
+  LEAD_APPROVED: "default",
   APPROVED: "success",
   REJECTED: "destructive",
   CANCEL_REQUESTED: "warning",
@@ -131,10 +132,15 @@ export default function MyLeavesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
+                      {r.status === "LEAD_APPROVED" && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {r.leadApproverName ? `팀장 ${r.leadApproverName} 승인 · 인사 결재 대기` : "인사 결재 대기"}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{r.approverName ?? "-"}</TableCell>
                     <TableCell className="text-right">
-                      {r.status === "PENDING" && (
+                      {(r.status === "PENDING" || r.status === "LEAD_APPROVED") && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -213,6 +219,11 @@ function hasFinalConsonant(word: string): boolean {
   const code = word.charCodeAt(word.length - 1) - 0xac00;
   return code >= 0 && code <= 11171 && code % 28 !== 0;
 }
+/** "로/으로" 조사(받침이 있고 ㄹ 받침이 아니면 "으로"). */
+const roParticle = (word: string) => {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  return hasFinalConsonant(word) && code % 28 !== 8 ? "으로" : "로";
+};
 const topicParticle = (word: string) => (hasFinalConsonant(word) ? "은" : "는");
 const objectParticle = (word: string) => (hasFinalConsonant(word) ? "을" : "를");
 
@@ -227,6 +238,10 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const [hours, setHours] = useState<string>("");
   const [forfeitAck, setForfeitAck] = useState(false);
   const [specialRuleId, setSpecialRuleId] = useState<string>("");
+  const [hrDirect, setHrDirect] = useState(false);
+  const [hrReasonEdited, setHrReasonEdited] = useState<string | null>(null);
+
+  const { data: route } = useQuery({ queryKey: ["approvalRoute"], queryFn: leaveApi.approvalRoute });
 
   const usableTypes = useMemo(() => types.filter((t) => t.policyEnabled), [types]);
   const selectedType: LeaveType | undefined = useMemo(
@@ -239,6 +254,12 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   // 경조사 규정이 연결된 종류는 규정 하나를 반드시 선택해야 한다
   const specialRules = selectedType?.specialRules ?? [];
   const needsRule = specialRules.length > 0;
+  // 팀장이 오늘 부재면 인사관리자에게 바로 신청할 수 있다(사유 필수, 기본 문구는 수정 가능)
+  const hrDirectOn = hrDirect && !!route?.hrDirectAvailable;
+  const hrReasonDefault = selectedType
+    ? `팀장 ${route?.leadName ?? ""}님의 ${route?.leadAbsenceType ?? ""} 부재로 인사관리자에게 이 ${selectedType.name}${objectParticle(selectedType.name)} 신청합니다.`
+    : "";
+  const hrReason = hrReasonEdited ?? hrReasonDefault;
 
   // 병가·공가처럼 잔여 연차 소진 후 쓰는 종류는 목록을 열기 전에 신청 가능 여부를 미리 조회해,
   // 불가하면 드롭다운에서 회색으로 표시하고 선택할 수 없게 한다(아래 단건 조회와 같은 캐시 키).
@@ -304,6 +325,7 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         hours: isHourly ? Number(hours) : undefined,
         forfeitAcknowledged: forfeitDays > 0 ? true : undefined,
         specialRuleId: needsRule ? Number(specialRuleId) : undefined,
+        hrDirectReason: hrDirectOn ? hrReason.trim() : undefined,
       };
       return leaveApi.create(body);
     },
@@ -321,6 +343,7 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     !notAllowed &&
     (!isHourly || !!hours) &&
     (!needsRule || !!specialRuleId) &&
+    (!hrDirectOn || !!hrReason.trim()) &&
     (forfeitDays <= 0 || forfeitAck);
 
   return (
@@ -422,6 +445,35 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
             <Label>사유 (선택)</Label>
             <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 개인 사유" />
           </div>
+          {route && (
+            <p className="text-sm text-muted-foreground">
+              {route.firstStage === "LEAD"
+                ? `팀장(${route.leadName ?? "-"}) 1차 승인 → 인사관리자 최종 승인`
+                : "인사관리자가 결재합니다"}
+            </p>
+          )}
+          {route?.hrDirectAvailable && (
+            <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <p>
+                팀장({route.leadName ?? "-"})님이 오늘 {route.leadAbsenceType ?? "휴가"}
+                {roParticle(route.leadAbsenceType ?? "휴가")} 부재 중입니다.
+              </p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={hrDirect} onChange={(e) => setHrDirect(e.target.checked)} />
+                인사관리자에게 바로 신청
+              </label>
+              {hrDirect && (
+                <div className="space-y-1">
+                  <Label className="text-xs">사유(필수)</Label>
+                  <Input
+                    value={hrReason}
+                    maxLength={500}
+                    onChange={(e) => setHrReasonEdited(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

@@ -34,7 +34,9 @@ type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
 function summary(r: LeaveRequest): string {
   const period = r.startDate === r.endDate ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
   const rule = r.specialRuleName ? ` ${formatSpecialRule(r)}` : "";
-  return `${r.employeeName} · ${r.leaveTypeName}${rule} ${period} (${formatLeaveAmount(r)})`;
+  const lead = r.approvalStage === "HR" && r.leadApproverName ? `\n팀장 ${r.leadApproverName} 1차 승인` : "";
+  const direct = r.hrDirectReason ? `\n팀장 부재로 인사 직행: ${r.hrDirectReason}` : "";
+  return `${r.employeeName} · ${r.leaveTypeName}${rule} ${period} (${formatLeaveAmount(r)})${lead}${direct}`;
 }
 
 export default function ApprovalsPage() {
@@ -43,10 +45,12 @@ export default function ApprovalsPage() {
   const confirm = useConfirm();
 
   const onApprove = async (r: LeaveRequest) => {
+    const isLead = r.approvalStage === "LEAD";
+    const base = r.approvalWarning ? `${summary(r)}\n⚠ ${r.approvalWarning}` : summary(r);
     const ok = await confirm({
-      title: "휴가를 승인할까요?",
-      description: r.approvalWarning ? `${summary(r)}\n⚠ ${r.approvalWarning}` : summary(r),
-      confirmText: "승인",
+      title: isLead ? "1차 승인할까요?" : r.approvalStage === "HR" ? "최종 승인할까요?" : "휴가를 승인할까요?",
+      description: isLead ? `${base}\n승인하면 인사관리자에게 최종 승인 요청이 갑니다.` : base,
+      confirmText: isLead ? "1차 승인" : r.approvalStage === "HR" ? "최종 승인" : "승인",
     });
     if (ok) approve.mutate(r.id);
   };
@@ -124,6 +128,10 @@ export default function ApprovalsPage() {
                     <TableCell>
                       {r.status === "CANCEL_REQUESTED" ? (
                         <Badge variant="destructive">취소요청</Badge>
+                      ) : r.approvalStage === "LEAD" ? (
+                        <Badge variant="secondary">팀장 결재</Badge>
+                      ) : r.approvalStage === "HR" ? (
+                        <Badge variant="default">인사 결재</Badge>
                       ) : (
                         <Badge variant="secondary">신규</Badge>
                       )}
@@ -143,6 +151,12 @@ export default function ApprovalsPage() {
                       </span>
                       {r.approvalWarning && (
                         <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
+                      )}
+                      {r.approvalStage === "HR" && r.leadApproverName && (
+                        <p className="mt-1 text-xs text-muted-foreground">팀장 {r.leadApproverName} 1차 승인</p>
+                      )}
+                      {r.hrDirectReason && (
+                        <p className="mt-1 text-xs text-muted-foreground">팀장 부재로 인사 직행: {r.hrDirectReason}</p>
                       )}
                     </TableCell>
                     <TableCell>
@@ -186,7 +200,8 @@ export default function ApprovalsPage() {
                               onClick={() => onApprove(r)}
                               disabled={approve.isPending}
                             >
-                              <Check className="h-4 w-4" /> 승인
+                              <Check className="h-4 w-4" />{" "}
+                              {r.approvalStage === "LEAD" ? "1차 승인" : r.approvalStage === "HR" ? "최종 승인" : "승인"}
                             </Button>
                             <Button
                               size="sm"

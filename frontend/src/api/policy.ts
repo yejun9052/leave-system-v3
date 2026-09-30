@@ -16,6 +16,7 @@ export interface Policy {
   monthlyAccrualMax: number;
   allowNegative: boolean;
   halfDayEnabled: boolean;
+  leadApprovalRequired: boolean;
   quarterDayEnabled: boolean;
   hourlyEnabled: boolean;
   maxConcurrentAbsence: number;

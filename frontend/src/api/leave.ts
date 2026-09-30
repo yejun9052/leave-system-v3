@@ -12,6 +12,8 @@ export interface LeaveRequestCreate {
   forfeitAcknowledged?: boolean;
   /** 종류에 경조사 규정이 있으면 필수 */
   specialRuleId?: number;
+  /** 팀장 부재로 인사관리자에게 바로 신청할 때만(최대 500자) */
+  hrDirectReason?: string;
 }
 
 export interface LeaveEligibility {
@@ -21,9 +23,20 @@ export interface LeaveEligibility {
   forfeitDays: number;
 }
 
+export interface ApprovalRoute {
+  leadApprovalRequired: boolean;
+  firstStage: "LEAD" | "HR";
+  leadName: string | null;
+  leadAbsent: boolean;
+  leadAbsenceType: string | null;
+  hrDirectAvailable: boolean;
+}
+
 export const leaveApi = {
   activeTypes: () =>
     unwrap<LeaveType[]>(api.get("/leave-types", { params: { includeInactive: false } })),
+
+  approvalRoute: () => unwrap<ApprovalRoute>(api.get("/leave-requests/approval-route")),
 
   eligibility: (leaveTypeId: number, startDate?: string) =>
     unwrap<LeaveEligibility>(
