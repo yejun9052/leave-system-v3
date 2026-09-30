@@ -36,7 +36,7 @@ const NAV: NavItem[] = [
   { to: "/calendar", label: "캘린더", icon: CalendarDays },
   { to: "/my-leaves", label: "내 휴가", icon: CalendarCheck2 },
   { to: "/me", label: "내 정보", icon: UserRound },
-  { to: "/approvals", label: "결재함", icon: Inbox, roles: ["TEAM_LEAD", "HR_ADMIN", "SUPER_ADMIN"] },
+  { to: "/approvals", label: "결재함", icon: Inbox, roles: ["TEAM_LEAD", "HR_ADMIN"] },
   { to: "/admin/employees", label: "사용자 관리", icon: Users, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
   { to: "/admin/departments", label: "부서 관리", icon: Building2, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
   { to: "/admin/policy", label: "정책 · 휴가종류", icon: Settings, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
@@ -51,7 +51,8 @@ export default function AppLayout() {
 
   // 관리 전용 계정은 직원이 아니므로 "내 휴가" 메뉴를 숨긴다
   const visibleNav = NAV.filter(
-    (n) => (!n.roles || hasAnyRole(...n.roles)) && !(user?.systemAccount && n.to === "/my-leaves"),
+    (n) => (!n.roles || hasAnyRole(...n.roles)) && !(user?.systemAccount && n.to === "/my-leaves")
+      && !(n.to === "/approvals" && (user?.systemAccount || hasAnyRole("SUPER_ADMIN"))),
   );
 
   const onLogout = async () => {

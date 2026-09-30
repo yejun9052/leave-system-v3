@@ -50,7 +50,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { cn } from "@/lib/utils";
 import { extractErrorMessage } from "@/api/client";
 
-const ALL_ROLES: Role[] = ["SUPER_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
+const ALL_ROLES: Role[] = ["HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
 const STATUS_LABEL: Record<EmployeeStatus, string> = {
   ACTIVE: "재직",
   ON_LEAVE: "휴직",
@@ -366,7 +366,7 @@ function EmployeeDialog({
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
     hireDate: employee?.hireDate ?? new Date().toISOString().slice(0, 10),
-    roles: employee?.roles ?? ["EMPLOYEE"],
+    roles: employee?.roles.filter((role) => role !== "SUPER_ADMIN") ?? ["EMPLOYEE"],
   });
 
   const set = <K extends keyof EmployeeCreate>(k: K, v: EmployeeCreate[K]) =>

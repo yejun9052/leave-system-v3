@@ -111,13 +111,22 @@ public final class LeaveRequestDtos {
             /** 결재함에서만: 이 건의 현재 결재 단계(LEAD 팀장 / HR 인사관리자) */
             ApprovalStage approvalStage,
             /** 결재함에서만: 결재자에게 보여 줄 경고(예: 경조사가 팀 동시 부재 한도 초과) */
-            String approvalWarning) {
+            String approvalWarning,
+            /** 신청 응답: 결재할 인사관리자가 없는 경우의 안내 */
+            String requestWarning) {
 
         public Response withInbox(ApprovalStage stage, String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
                     leaveTypeColor, startDate, endDate, days, portion, hours, forfeitedDays, specialRuleName,
                     specialRuleDays, status, reason, approverName, approvedAt, rejectReason, cancelReason,
-                    createdAt, leadApproverName, leadApprovedAt, hrDirectReason, stage, warning);
+                    createdAt, leadApproverName, leadApprovedAt, hrDirectReason, stage, warning, requestWarning);
+        }
+
+        public Response withRequestWarning(String warning) {
+            return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
+                    leaveTypeColor, startDate, endDate, days, portion, hours, forfeitedDays, specialRuleName,
+                    specialRuleDays, status, reason, approverName, approvedAt, rejectReason, cancelReason,
+                    createdAt, leadApproverName, leadApprovedAt, hrDirectReason, approvalStage, approvalWarning, warning);
         }
 
         public static Response from(LeaveRequest r) {
@@ -149,6 +158,7 @@ public final class LeaveRequestDtos {
                     r.getLeadApprover() != null ? r.getLeadApprover().getName() : null,
                     r.getLeadApprovedAt(),
                     r.getHrDirectReason(),
+                    null,
                     null,
                     null);
         }

@@ -33,6 +33,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
+import { useAuthStore } from "@/store/auth";
 import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
@@ -45,10 +46,13 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warnin
 };
 
 export default function MyLeavesPage() {
+  const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
   const { toast } = useToast();
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
+  const [requestWarning, setRequestWarning] = useState<string | null>(null);
+  const canCancelOwn = !!user && !user.systemAccount && !user.roles.includes("SUPER_ADMIN");
 
   const { data: balance } = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
   const { data: requests } = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
@@ -58,7 +62,7 @@ export default function MyLeavesPage() {
       leaveApi.cancel(id).then((r) => ({ r, approved })),
     onSuccess: ({ approved }) => {
       toast({
-        title: approved ? "취소 요청되었습니다. 팀장 승인 후 확정됩니다." : "신청이 취소되었습니다.",
+        title: approved ? "취소 요청되었습니다. 인사관리자 승인 후 확정됩니다." : "신청이 취소되었습니다.",
         variant: "success",
       });
       qc.invalidateQueries({ queryKey: ["myRequests"] });
@@ -69,6 +73,11 @@ export default function MyLeavesPage() {
 
   return (
     <div className="space-y-6">
+      {requestWarning && (
+        <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {requestWarning}
+        </p>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">내 휴가</h1>
@@ -140,7 +149,7 @@ export default function MyLeavesPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">{r.approverName ?? "-"}</TableCell>
                     <TableCell className="text-right">
-                      {(r.status === "PENDING" || r.status === "LEAD_APPROVED") && (
+                      {canCancelOwn && r.employeeId === user?.id && (r.status === "PENDING" || r.status === "LEAD_APPROVED") && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -158,7 +167,7 @@ export default function MyLeavesPage() {
                           <X className="h-4 w-4" /> 취소
                         </Button>
                       )}
-                      {r.status === "APPROVED" && (
+                      {canCancelOwn && r.employeeId === user?.id && r.status === "APPROVED" && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -194,7 +203,8 @@ export default function MyLeavesPage() {
         </CardContent>
       </Card>
 
-      {open && <RequestDialog onClose={() => setOpen(false)} onSaved={() => {
+      {open && <RequestDialog onClose={() => setOpen(false)} onSaved={(warning) => {
+        setRequestWarning(warning ?? null);
         setOpen(false);
         qc.invalidateQueries({ queryKey: ["myRequests"] });
         qc.invalidateQueries({ queryKey: ["myBalance"] });
@@ -227,7 +237,7 @@ const roParticle = (word: string) => {
 const topicParticle = (word: string) => (hasFinalConsonant(word) ? "은" : "는");
 const objectParticle = (word: string) => (hasFinalConsonant(word) ? "을" : "를");
 
-function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: (warning?: string | null) => void }) {
   const { toast } = useToast();
   const { data: types = [] } = useQuery({ queryKey: ["leaveTypes", "active"], queryFn: leaveApi.activeTypes });
   const [typeId, setTypeId] = useState<string>("");
@@ -329,9 +339,10 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
       };
       return leaveApi.create(body);
     },
-    onSuccess: () => {
-      toast({ title: "휴가를 신청했습니다.", variant: "success" });
-      onSaved();
+    onSuccess: (response) => {
+      toast({ title: "휴가를 신청했습니다.", description: response.requestWarning ?? undefined,
+        variant: response.requestWarning ? "default" : "success" });
+      onSaved(response.requestWarning);
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });

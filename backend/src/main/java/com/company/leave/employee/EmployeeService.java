@@ -99,6 +99,7 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeResponse create(EmployeeRequests.Create req) {
+        Set<Role> roles = resolveRoles(req.roles());
         // 동시 생성 직렬화 → 라이선스 최대 사용자 수 초과(TOCTOU) 방지
         employeeRepository.lockForUserCreation();
         licenseService.checkUserQuota(employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE));
@@ -115,7 +116,7 @@ public class EmployeeService {
                 .position(req.position())
                 .phone(req.phone())
                 .hireDate(req.hireDate())
-                .roles(resolveRoles(req.roles()))
+                .roles(roles)
                 .build();
         employee.requirePasswordChange();
         Employee saved = employeeRepository.save(employee);
@@ -130,14 +131,18 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeResponse update(Long id, EmployeeRequests.Update req) {
-        Employee employee = getManageable(id);
+        Employee employee = getEntity(id);
+        if (employee.isSystemAccount()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
+        }
+        Set<Role> roles = resolveRoles(req.roles());
         validateEmailUnique(req.email(), id);
 
         employee.changeEmail(req.email());
         employee.updateProfile(req.name(), req.position(), req.phone());
         employee.changeHireDate(req.hireDate());
         employee.assignDepartment(resolveDepartment(req.departmentId()));
-        employee.replaceRoles(resolveRoles(req.roles()));
+        employee.replaceRoles(roles);
         return EmployeeResponse.from(employee);
     }
 
@@ -201,11 +206,11 @@ public class EmployeeService {
         return employeeRepository.findAllIds();
     }
 
-    /** 재직 중인 관리자(HR_ADMIN·SUPER_ADMIN) ID. 팀장 휴가 결재 알림 수신자. */
+    /** 재직 중인 인사관리자 ID. 휴가 결재 알림 수신자(시스템 관리자는 제외). */
     @Transactional(readOnly = true)
     public java.util.List<Long> activeAdminIds() {
         return employeeRepository.findIdsByAnyRoleAndStatus(
-                EnumSet.of(Role.HR_ADMIN, Role.SUPER_ADMIN), EmployeeStatus.ACTIVE);
+                EnumSet.of(Role.HR_ADMIN), EmployeeStatus.ACTIVE);
     }
 
     @Transactional(readOnly = true)
@@ -224,6 +229,9 @@ public class EmployeeService {
     }
 
     private Set<Role> resolveRoles(Set<Role> roles) {
+        if (roles != null && roles.contains(Role.SUPER_ADMIN)) {
+            throw new BusinessException(ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+        }
         return (roles == null || roles.isEmpty()) ? EnumSet.of(Role.EMPLOYEE) : roles;
     }
 
