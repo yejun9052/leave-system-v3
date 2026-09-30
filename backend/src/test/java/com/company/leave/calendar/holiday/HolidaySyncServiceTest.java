@@ -164,6 +164,56 @@ class HolidaySyncServiceTest {
         verify(apiClient, never()).fetchMonth(anyInt(), anyInt());
     }
 
+    @Test
+    void 합친_이름이_60자를_넘으면_컬럼_길이에_맞춰_자른다() {
+        when(apiClient.fetchMonth(YEAR, 9)).thenReturn(List.of(
+                항목(LocalDate.of(2025, 9, 1), "가".repeat(40)),
+                항목(LocalDate.of(2025, 9, 1), "나".repeat(40))));
+
+        service.sync(YEAR);
+
+        assertThat(table).singleElement().extracting(Holiday::getName).asString()
+                .hasSize(HolidaySyncService.NAME_MAX_LENGTH)
+                .startsWith("가".repeat(40) + ", ");
+    }
+
+    @Test
+    void 같은_날짜에_같은_이름이_두_번_오면_한_번만_쓴다() {
+        when(apiClient.fetchMonth(YEAR, 10)).thenReturn(List.of(
+                항목(LocalDate.of(2025, 10, 3), "개천절"), 항목(LocalDate.of(2025, 10, 3), "개천절")));
+
+        service.sync(YEAR);
+
+        assertThat(table).singleElement().extracting(Holiday::getName).isEqualTo("개천절");
+    }
+
+    @Test
+    void 결과에_연도와_휴가_조정_요약을_담는다() {
+        when(apiClient.fetchMonth(YEAR, 5)).thenReturn(List.of(항목(LocalDate.of(2025, 5, 6), "대체공휴일")));
+        when(impactService.applyNewHolidays(anyMap()))
+                .thenReturn(new HolidayImpactService.ImpactSummary(3, new BigDecimal("2.5")));
+
+        HolidaySyncService.SyncResult result = service.sync(YEAR);
+
+        assertThat(result.year()).isEqualTo(YEAR);
+        assertThat(result.added()).containsExactly(
+                new HolidaySyncService.NamedDate(LocalDate.of(2025, 5, 6), "대체공휴일"));
+        assertThat(result.adjustedRequests()).isEqualTo(3);
+        assertThat(result.restoredDays()).isEqualByComparingTo("2.5");
+    }
+
+    @Test
+    void 올해_동기화가_실패해도_내년_동기화는_진행한다() {
+        int thisYear = LocalDate.now().getYear();
+        when(apiClient.fetchMonth(eq(thisYear), anyInt())).thenThrow(new HolidayApiException("올해 실패"));
+        when(apiClient.fetchMonth(eq(thisYear + 1), anyInt())).thenReturn(List.of());
+
+        List<HolidaySyncService.SyncResult> results = service.syncCurrentAndNextYear();
+
+        assertThat(results).extracting(HolidaySyncService.SyncResult::year).containsExactly(thisYear + 1);
+        verify(apiClient).fetchMonth(thisYear + 1, 12);
+    }
+
     private static HolidayApiClient.HolidayItem 항목(LocalDate date, String name) {
         return new HolidayApiClient.HolidayItem(date, name, true);
     }

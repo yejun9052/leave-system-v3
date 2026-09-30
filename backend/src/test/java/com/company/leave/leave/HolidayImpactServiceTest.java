@@ -8,6 +8,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.company.leave.audit.AuditService;
 import com.company.leave.calendar.domain.Holiday;
@@ -25,6 +26,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +38,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 공휴일 추가 시 기존 휴가 자동 재계산·환원. 일수 계산은 실제 WorkdayCalculator(휴가 신청과 같은 규칙)로 한다.
@@ -199,6 +203,75 @@ class HolidayImpactServiceTest {
 
         verify(auditService).record(eq(null), eq("SYSTEM"), eq("HOLIDAY_ADJUST"), eq("leave_request"),
                 eq(null), anyString(), eq(true));
+    }
+
+    @Test
+    void 취소_요청_중인_휴가도_승인_건처럼_잔액을_돌려준다() {
+        LeaveRequest request = 승인된_휴가(연차, MON, MON.plusDays(2), "3", "3");
+        request.requestCancel("개인 사정");
+        balance.addUsed(new BigDecimal("3"));
+
+        service.applyNewHolidays(새_공휴일);
+
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCEL_REQUESTED);
+        assertThat(request.getDeductedDays()).isEqualByComparingTo("2");
+        assertThat(balance.getUsed()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void 한_휴가에_새_공휴일이_여러_날_걸리면_한_번에_모두_반영한다() {
+        LocalDate wed = MON.plusDays(2);
+        lenient().when(holidayRepository.findByDateBetweenOrderByDateAsc(any(), any()))
+                .thenReturn(List.of(new Holiday(MON, "대체공휴일(노동절)"), new Holiday(wed, "어린이날")));
+        LeaveRequest request = 승인된_휴가(연차, MON, MON.plusDays(4), "5", "5");
+        balance.addUsed(new BigDecimal("5"));
+
+        HolidayImpactService.ImpactSummary summary = service.applyNewHolidays(
+                Map.of(MON, "대체공휴일(노동절)", wed, "어린이날"));
+
+        assertThat(request.getDays()).isEqualByComparingTo("3");
+        assertThat(balance.getUsed()).isEqualByComparingTo("3");
+        assertThat(summary.adjustedRequests()).isEqualTo(1);
+        assertThat(summary.restoredDays()).isEqualByComparingTo("2");
+        verify(notificationService, times(1)).notify(any(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void 대기_승인_취소요청_상태만_새_공휴일_기간으로_조회한다() {
+        LocalDate wed = MON.plusDays(2);
+
+        service.applyNewHolidays(Map.of(wed, "어린이날", MON, "대체공휴일(노동절)"));
+
+        verify(requestRepository).findByStatusInOverlapping(
+                EnumSet.of(LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED,
+                        LeaveRequestStatus.CANCEL_REQUESTED),
+                MON, wed);
+    }
+
+    @Test
+    void 새_공휴일이_없으면_아무것도_조회하지_않는다() {
+        HolidayImpactService.ImpactSummary summary = service.applyNewHolidays(Map.of());
+
+        assertThat(summary.adjustedRequests()).isZero();
+        verifyNoInteractions(requestRepository, notificationService, auditService);
+    }
+
+    @Test
+    void 트랜잭션_안에서는_감사_로그를_커밋_뒤에만_남긴다() {
+        승인된_휴가(연차, MON, MON.plusDays(2), "3", "3");
+        balance.addUsed(new BigDecimal("3"));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.applyNewHolidays(새_공휴일);
+            verifyNoInteractions(auditService);
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+
+            verify(auditService).record(eq(null), eq("SYSTEM"), eq("HOLIDAY_ADJUST"), eq("leave_request"),
+                    eq(null), anyString(), eq(true));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     // --- 테스트 데이터 ---
