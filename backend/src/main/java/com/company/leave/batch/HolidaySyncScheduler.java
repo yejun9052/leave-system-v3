@@ -29,6 +29,11 @@ public class HolidaySyncScheduler {
             return;
         }
         log.info("[스케줄러] 공휴일 동기화 시작");
-        syncService.syncCurrentAndNextYear();
+        long startedAt = System.currentTimeMillis();
+        try {
+            syncService.syncCurrentAndNextYear();
+        } finally {
+            log.info("[스케줄러] 공휴일 동기화 종료 ({}ms)", System.currentTimeMillis() - startedAt);
+        }
     }
 }

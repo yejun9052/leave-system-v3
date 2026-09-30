@@ -43,8 +43,8 @@ public class LeaveAccrualScheduler {
         leaveGrantService.grantAll(year);
     }
 
-    /** 매년 1월 1일 00:10 - 새해 연차 부여 및 이월 */
-    @Scheduled(cron = "0 10 0 1 1 *", zone = "Asia/Seoul")
+    /** 매년 1월 1일 00:30 - 새해 연차 부여 및 이월 (00:10 공휴일 동기화 이후) */
+    @Scheduled(cron = "0 30 0 1 1 *", zone = "Asia/Seoul")
     public void yearlyGrant() {
         int year = LocalDate.now().getYear();
         log.info("[스케줄러] 신년({}) 연차 부여/이월 시작", year);
