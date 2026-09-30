@@ -92,6 +92,11 @@ public class LeaveRequestService {
         validatePeriod(start, end, type);
 
         Set<LocalDate> holidays = holidaysBetween(start, end);
+        // 시작일은 근무일이어야 한다(반차 포함). 기간 중간·끝의 주말·공휴일은 허용하고 차감에서만 뺀다.
+        if (!workdayCalculator.isWorkday(start, holidays)) {
+            throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
+                    "시작일이 주말 또는 공휴일입니다. 근무일부터 신청해 주세요.");
+        }
         BigDecimal days = workdayCalculator.computeLeaveDays(start, end, type, holidays);
         if (days.signum() <= 0) {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "신청 기간에 근무일이 없습니다.");
