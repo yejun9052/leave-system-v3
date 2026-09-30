@@ -70,8 +70,18 @@ public final class LeaveRequestDtos {
      * @param reason        불가 사유(allowed=false 일 때)
      * @param remainingDays 승인 기준 잔여 연차
      * @param forfeitDays   승인 시 소멸될 남은 연차(0 이면 경고 불필요)
+     * @param workdays      미리보기: 기간 근무일 수(주말·공휴일 제외). 미리보기가 아니거나 불가면 null
+     * @param deduction     미리보기: 이번 신청의 연차 차감 예정액
+     * @param pendingDays   미리보기: 결재 대기 중인 다른 신청의 차감 예정액 합계
+     * @param remainingAfter 미리보기: 신청 후 잔여(잔여 − 결재 대기 − 이번 차감 − 소멸 예정)
      */
-    public record Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays) {
+    public record Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays,
+                              Integer workdays, BigDecimal deduction, BigDecimal pendingDays,
+                              BigDecimal remainingAfter) {
+
+        public Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays) {
+            this(allowed, reason, remainingDays, forfeitDays, null, null, null, null);
+        }
     }
 
     public record Reject(@Size(max = 500) String reason) {
