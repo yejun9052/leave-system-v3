@@ -6,11 +6,27 @@ export interface LeaveRequestCreate {
   startDate: string;
   endDate: string;
   reason?: string;
+  /** 시간차(1~3)일 때만 전송 */
+  hours?: number;
+  /** 소멸분이 있는 병가·공가면 true */
+  forfeitAcknowledged?: boolean;
+}
+
+export interface LeaveEligibility {
+  allowed: boolean;
+  reason: string | null;
+  remainingDays: number | null;
+  forfeitDays: number;
 }
 
 export const leaveApi = {
   activeTypes: () =>
     unwrap<LeaveType[]>(api.get("/leave-types", { params: { includeInactive: false } })),
+
+  eligibility: (leaveTypeId: number, startDate?: string) =>
+    unwrap<LeaveEligibility>(
+      api.get("/leave-requests/eligibility", { params: { leaveTypeId, startDate } }),
+    ),
 
   create: (body: LeaveRequestCreate) =>
     unwrap<LeaveRequest>(api.post("/leave-requests", body)),

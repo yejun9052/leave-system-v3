@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi, type LeaveRequestCreate } from "@/api/leave";
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { extractErrorMessage } from "@/api/client";
+import { formatDays, formatLeaveAmount } from "@/lib/leaveFormat";
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
   PENDING: "warning",
@@ -115,7 +116,14 @@ export default function MyLeavesPage() {
                       {r.startDate}
                       {r.startDate !== r.endDate && ` ~ ${r.endDate}`}
                     </TableCell>
-                    <TableCell>{r.days}</TableCell>
+                    <TableCell>
+                      {formatLeaveAmount(r)}
+                      {r.forfeitedDays > 0 && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          연차 {formatDays(r.forfeitedDays)}일 소멸
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
                     </TableCell>
@@ -177,7 +185,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
     <Card className={accent ? "border-primary/40 bg-primary/5" : undefined}>
       <CardContent className="p-4">
         <p className="text-sm text-muted-foreground">{label}</p>
-        <p className={`mt-1 text-2xl font-bold ${accent ? "text-primary" : ""}`}>{value}<span className="ml-1 text-sm font-normal text-muted-foreground">일</span></p>
+        <p className={`mt-1 text-2xl font-bold ${accent ? "text-primary" : ""}`}>{formatDays(value)}<span className="ml-1 text-sm font-normal text-muted-foreground">일</span></p>
       </CardContent>
     </Card>
   );
@@ -191,20 +199,40 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const [reason, setReason] = useState("");
+  const [hours, setHours] = useState<string>("");
+  const [forfeitAck, setForfeitAck] = useState(false);
 
+  const usableTypes = useMemo(() => types.filter((t) => t.policyEnabled), [types]);
   const selectedType: LeaveType | undefined = useMemo(
-    () => types.find((t) => String(t.id) === typeId),
-    [types, typeId],
+    () => usableTypes.find((t) => String(t.id) === typeId),
+    [usableTypes, typeId],
   );
-  const isHalf = selectedType?.halfDay ?? false;
+  // 종일이 아닌 종류(반차·반반차·시간차)는 하루만 신청할 수 있다
+  const isPartial = !!selectedType && selectedType.portion !== "FULL";
+  const isHourly = selectedType?.portion === "HOURLY";
+
+  const { data: eligibility, isFetching: eligibilityLoading } = useQuery({
+    queryKey: ["eligibility", typeId, start],
+    queryFn: () => leaveApi.eligibility(Number(typeId), start || undefined),
+    enabled: !!selectedType,
+  });
+  const forfeitDays = eligibility?.forfeitDays ?? 0;
+  const notAllowed = !!eligibility && !eligibility.allowed;
+
+  // 종류·날짜가 바뀌면 소멸 안내 확인을 다시 받는다
+  useEffect(() => {
+    setForfeitAck(false);
+  }, [typeId, start]);
 
   const save = useMutation({
     mutationFn: () => {
       const body: LeaveRequestCreate = {
         leaveTypeId: Number(typeId),
         startDate: start,
-        endDate: isHalf ? start : end,
+        endDate: isPartial ? start : end,
         reason: reason || undefined,
+        hours: isHourly ? Number(hours) : undefined,
+        forfeitAcknowledged: forfeitDays > 0 ? true : undefined,
       };
       return leaveApi.create(body);
     },
@@ -214,6 +242,14 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
+
+  const canSubmit =
+    !!selectedType &&
+    !save.isPending &&
+    !eligibilityLoading &&
+    !notAllowed &&
+    (!isHourly || !!hours) &&
+    (forfeitDays <= 0 || forfeitAck);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -229,9 +265,9 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                 <SelectValue placeholder="종류 선택" />
               </SelectTrigger>
               <SelectContent>
-                {types.map((t) => (
+                {usableTypes.map((t) => (
                   <SelectItem key={t.id} value={String(t.id)}>
-                    {t.name} ({t.deductDays}일 차감)
+                    {t.name} ({formatDays(t.deductDays)}일 차감)
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -239,16 +275,53 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>{isHalf ? "날짜" : "시작일"}</Label>
+              <Label>{isPartial ? "날짜" : "시작일"}</Label>
               <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
             </div>
-            {!isHalf && (
-              <div className="space-y-2">
-                <Label>종료일</Label>
-                <Input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>종료일</Label>
+              <Input
+                type="date"
+                value={isPartial ? start : end}
+                min={start}
+                disabled={isPartial}
+                onChange={(e) => setEnd(e.target.value)}
+              />
+            </div>
           </div>
+          {isHourly && (
+            <div className="space-y-2">
+              <Label>시간</Label>
+              <Select value={hours} onValueChange={setHours}>
+                <SelectTrigger>
+                  <SelectValue placeholder="시간 선택 (1~3시간)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3].map((h) => (
+                    <SelectItem key={h} value={String(h)}>
+                      {h}시간
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {notAllowed && eligibility?.reason && (
+            <p className="text-sm text-destructive">{eligibility.reason}</p>
+          )}
+          {forfeitDays > 0 && (
+            <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <p>승인되면 남은 연차 {formatDays(forfeitDays)}일이 소멸됩니다(취소 시 복구).</p>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={forfeitAck}
+                  onChange={(e) => setForfeitAck(e.target.checked)}
+                />
+                안내를 확인했습니다
+              </label>
+            </div>
+          )}
           <div className="space-y-2">
             <Label>사유 (선택)</Label>
             <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 개인 사유" />
@@ -258,7 +331,7 @@ function RequestDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           <Button variant="outline" onClick={onClose}>
             취소
           </Button>
-          <Button onClick={() => save.mutate()} disabled={!typeId || save.isPending}>
+          <Button onClick={() => save.mutate()} disabled={!canSubmit}>
             신청
           </Button>
         </DialogFooter>

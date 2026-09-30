@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { extractErrorMessage } from "@/api/client";
 import type { LeaveRequest } from "@/types";
+import { formatDays, formatLeaveAmount } from "@/lib/leaveFormat";
 
 type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
 
@@ -116,7 +117,12 @@ export default function ApprovalsPage() {
                       {r.startDate !== r.endDate && ` ~ ${r.endDate}`}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{r.days}일</Badge>
+                      <Badge variant="secondary">{formatLeaveAmount(r)}</Badge>
+                      {r.forfeitedDays > 0 && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          연차 {formatDays(r.forfeitedDays)}일 소멸
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[180px] truncate text-muted-foreground">
                       {(r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason) ?? "-"}

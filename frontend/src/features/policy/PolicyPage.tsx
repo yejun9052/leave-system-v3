@@ -11,7 +11,8 @@ import {
   type GrantBasis,
   type LeaveTypeInput,
 } from "@/api/policy";
-import type { LeaveType } from "@/types";
+import type { LeavePortion, LeaveType } from "@/types";
+import { formatDays } from "@/lib/leaveFormat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,13 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { extractErrorMessage } from "@/api/client";
 import HolidayTab from "./HolidayTab";
+
+const PORTION_LABEL: Record<LeavePortion, string> = {
+  FULL: "종일",
+  HALF: "반차",
+  QUARTER: "반반차",
+  HOURLY: "시간차",
+};
 
 export default function PolicyPage() {
   return (
@@ -166,6 +174,18 @@ function PolicyTab() {
             label="반차 사용 허용"
             checked={form.halfDayEnabled}
             onChange={(v) => set("halfDayEnabled", v)}
+          />
+          <ToggleRow
+            label="반반차 사용"
+            desc="0.25일(2시간), 기본 꺼짐"
+            checked={form.quarterDayEnabled}
+            onChange={(v) => set("quarterDayEnabled", v)}
+          />
+          <ToggleRow
+            label="시간차 사용"
+            desc="1시간(0.125일) 단위, 한 건 1~3시간, 기본 꺼짐"
+            checked={form.hourlyEnabled}
+            onChange={(v) => set("hourlyEnabled", v)}
           />
           <ToggleRow
             label="마이너스 연차 허용"
@@ -333,7 +353,7 @@ function LeaveTypeTab() {
                 <TableHead>이름</TableHead>
                 <TableHead>코드</TableHead>
                 <TableHead>차감</TableHead>
-                <TableHead>반차</TableHead>
+                <TableHead>단위</TableHead>
                 <TableHead>연차차감</TableHead>
                 <TableHead>상태</TableHead>
                 <TableHead className="text-right">관리</TableHead>
@@ -352,8 +372,13 @@ function LeaveTypeTab() {
                     </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{t.code}</TableCell>
-                  <TableCell>{t.deductDays}</TableCell>
-                  <TableCell>{t.halfDay ? "예" : "-"}</TableCell>
+                  <TableCell>{formatDays(t.deductDays)}</TableCell>
+                  <TableCell>
+                    {PORTION_LABEL[t.portion] ?? "-"}
+                    {t.requiresAnnualExhausted && (
+                      <span className="ml-1 text-xs text-muted-foreground">(연차 소진 후)</span>
+                    )}
+                  </TableCell>
                   <TableCell>{t.deductFromAnnual ? "예" : "-"}</TableCell>
                   <TableCell>
                     <Badge variant={t.active ? "success" : "outline"}>
@@ -416,7 +441,8 @@ function LeaveTypeDialog({
     name: type?.name ?? "",
     deductDays: type?.deductDays ?? 1,
     paid: type?.paid ?? true,
-    halfDay: type?.halfDay ?? false,
+    portion: type?.portion ?? "FULL",
+    requiresAnnualExhausted: type?.requiresAnnualExhausted ?? false,
     deductFromAnnual: type?.deductFromAnnual ?? true,
     colorHex: type?.colorHex ?? "#4f46e5",
     sortOrder: type?.sortOrder ?? 0,
@@ -458,7 +484,7 @@ function LeaveTypeDialog({
               <Label>차감 일수</Label>
               <Input
                 type="number"
-                step="0.5"
+                step="0.125"
                 value={form.deductDays}
                 onChange={(e) => set("deductDays", Number(e.target.value))}
               />
@@ -469,7 +495,27 @@ function LeaveTypeDialog({
             </div>
           </div>
           <ToggleRow label="유급" checked={form.paid} onChange={(v) => set("paid", v)} />
-          <ToggleRow label="반차 여부" checked={form.halfDay} onChange={(v) => set("halfDay", v)} />
+          <div className="space-y-2">
+            <Label>단위</Label>
+            <Select value={form.portion} onValueChange={(v) => set("portion", v as LeavePortion)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(PORTION_LABEL) as LeavePortion[]).map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {PORTION_LABEL[p]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ToggleRow
+            label="잔여 연차 소진 후 사용(병가·공가)"
+            desc="잔여 연차 1일 미만·결재 대기 연차 없음일 때만 신청 가능, 승인 시 남은 연차 소멸"
+            checked={form.requiresAnnualExhausted}
+            onChange={(v) => set("requiresAnnualExhausted", v)}
+          />
           <ToggleRow
             label="연차 잔액에서 차감"
             checked={form.deductFromAnnual}

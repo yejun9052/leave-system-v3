@@ -1,5 +1,5 @@
 import { api, unwrap } from "./client";
-import type { LeaveType } from "@/types";
+import type { LeavePortion, LeaveType } from "@/types";
 
 export type GrantBasis = "HIRE_DATE" | "FISCAL_YEAR";
 
@@ -16,6 +16,8 @@ export interface Policy {
   monthlyAccrualMax: number;
   allowNegative: boolean;
   halfDayEnabled: boolean;
+  quarterDayEnabled: boolean;
+  hourlyEnabled: boolean;
   maxConcurrentAbsence: number;
   minAdvanceDays: number;
   maxConsecutiveDays: number;
@@ -94,7 +96,8 @@ export interface LeaveTypeInput {
   name: string;
   deductDays: number;
   paid: boolean;
-  halfDay: boolean;
+  portion: LeavePortion;
+  requiresAnnualExhausted: boolean;
   deductFromAnnual: boolean;
   colorHex: string;
   sortOrder?: number;
