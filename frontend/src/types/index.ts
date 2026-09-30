@@ -132,6 +132,8 @@ export interface LeaveRequest {
   specialRuleDays: number | null;
   /** 결재함에서만 채워지는 결재자용 경고(예: 경조사가 팀 동시 부재 한도 초과) */
   approvalWarning?: string | null;
+  /** 신청 응답: 결재할 인사관리자가 없는 경우의 안내 */
+  requestWarning?: string | null;
   /** 2단계 결재: 팀장 1차 승인자·시각, 팀장 부재로 인사 직행한 사유 */
   leadApproverName: string | null;
   leadApprovedAt: string | null;
