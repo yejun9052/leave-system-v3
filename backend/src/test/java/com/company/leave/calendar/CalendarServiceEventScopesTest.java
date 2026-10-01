@@ -9,7 +9,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.company.leave.calendar.domain.CalendarEvent;
 import com.company.leave.calendar.domain.CalendarEventScope;
+import com.company.leave.calendar.domain.CalendarEventSource;
 import com.company.leave.calendar.dto.CalendarDtos;
 import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
@@ -20,9 +22,13 @@ import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.LeaveRequestService;
+import com.company.leave.mail.AnnouncementMailTemplates.Change;
+import com.company.leave.notification.AnnouncementMessenger;
+import com.company.leave.notification.AnnouncementMessenger.EventView;
 import com.company.leave.security.UserPrincipal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +49,7 @@ class CalendarServiceEventScopesTest {
     @Mock private HolidayRepository holidays;
     @Mock private DepartmentRepository departments;
     @Mock private LeaveRequestService leaveRequests;
+    @Mock private AnnouncementMessenger announcements;
 
     private CalendarService service;
 
@@ -54,7 +61,7 @@ class CalendarServiceEventScopesTest {
 
     @BeforeEach
     void setUp() {
-        service = new CalendarService(events, holidays, departments, leaveRequests);
+        service = new CalendarService(events, holidays, departments, leaveRequests, announcements);
         product = department(2L, "제품개발팀", null, 0);
         platform = department(3L, "플랫폼파트", product, 0);
         service2 = department(4L, "서비스파트", product, 0);
@@ -125,6 +132,25 @@ class CalendarServiceEventScopesTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT));
         verify(events, never()).findById(any());
+    }
+
+    @Test
+    void 일정을_추가_변경_삭제하면_변경_전후_내용으로_공지한다() {
+        LocalDate day = LocalDate.of(2026, 10, 14);
+        CalendarEvent saved = CalendarEvent.builder().title("워크숍").startDate(day).endDate(day)
+                .scope(CalendarEventScope.COMPANY).source(CalendarEventSource.ADMIN_EVENT).createdBy(10L).build();
+        when(events.findById(1L)).thenReturn(Optional.of(saved));
+        UserPrincipal hr = user(10L, Role.HR_ADMIN);
+
+        service.create(event(CalendarEventScope.COMPANY, null), hr);
+        service.update(1L, event(CalendarEventScope.DEPARTMENT, 5L), hr);
+        service.delete(1L, hr);
+
+        EventView company = new EventView("워크숍", day, day, CalendarEventScope.COMPANY, null);
+        EventView support = new EventView("워크숍", day, day, CalendarEventScope.DEPARTMENT, 5L);
+        verify(announcements).event(Change.CREATED, company, null, 10L);
+        verify(announcements).event(Change.UPDATED, support, company, 10L);
+        verify(announcements).event(Change.DELETED, support, null, 10L);
     }
 
     private CalendarDtos.CreateEvent event(CalendarEventScope scope, Long departmentId) {

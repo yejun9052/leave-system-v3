@@ -2,6 +2,9 @@ package com.company.leave.policy;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.mail.AnnouncementMailTemplates.Change;
+import com.company.leave.mail.AnnouncementMailTemplates.Schedule;
+import com.company.leave.notification.AnnouncementMessenger;
 import com.company.leave.policy.domain.BlackoutPeriod;
 import com.company.leave.policy.domain.ServiceAwardRule;
 import com.company.leave.policy.domain.SpecialLeaveRule;
@@ -19,13 +22,16 @@ public class PolicyRulesService {
     private final ServiceAwardRuleRepository awardRepository;
     private final SpecialLeaveRuleRepository specialRepository;
     private final BlackoutPeriodRepository blackoutRepository;
+    private final AnnouncementMessenger announcementMessenger;
 
     public PolicyRulesService(ServiceAwardRuleRepository awardRepository,
                               SpecialLeaveRuleRepository specialRepository,
-                              BlackoutPeriodRepository blackoutRepository) {
+                              BlackoutPeriodRepository blackoutRepository,
+                              AnnouncementMessenger announcementMessenger) {
         this.awardRepository = awardRepository;
         this.specialRepository = specialRepository;
         this.blackoutRepository = blackoutRepository;
+        this.announcementMessenger = announcementMessenger;
     }
 
     // --- 장기근속 포상 ---
@@ -92,25 +98,36 @@ public class PolicyRulesService {
                 .map(PolicyRuleDtos.Blackout::from).toList();
     }
 
+    /** 추가·변경·삭제 모두 재직 중인 전 직원에게 알림 + 메일(처리한 본인 제외, {@link AnnouncementMessenger}). */
     @Transactional
-    public PolicyRuleDtos.Blackout createBlackout(PolicyRuleDtos.BlackoutRequest req) {
+    public PolicyRuleDtos.Blackout createBlackout(PolicyRuleDtos.BlackoutRequest req, Long actorId) {
         if (req.endDate().isBefore(req.startDate())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "종료일이 시작일보다 빠릅니다.");
         }
-        return PolicyRuleDtos.Blackout.from(
-                blackoutRepository.save(new BlackoutPeriod(req.startDate(), req.endDate(), req.name())));
+        BlackoutPeriod saved = blackoutRepository.save(new BlackoutPeriod(req.startDate(), req.endDate(), req.name()));
+        announcementMessenger.blackout(Change.CREATED, schedule(saved), null, actorId);
+        return PolicyRuleDtos.Blackout.from(saved);
     }
 
     @Transactional
-    public PolicyRuleDtos.Blackout updateBlackout(Long id, PolicyRuleDtos.BlackoutRequest req) {
+    public PolicyRuleDtos.Blackout updateBlackout(Long id, PolicyRuleDtos.BlackoutRequest req, Long actorId) {
         BlackoutPeriod b = blackoutRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        Schedule before = schedule(b);
         b.update(req.startDate(), req.endDate(), req.name());
+        announcementMessenger.blackout(Change.UPDATED, schedule(b), before, actorId);
         return PolicyRuleDtos.Blackout.from(b);
     }
 
     @Transactional
-    public void deleteBlackout(Long id) {
-        blackoutRepository.deleteById(id);
+    public void deleteBlackout(Long id, Long actorId) {
+        blackoutRepository.findById(id).ifPresent(b -> {
+            blackoutRepository.delete(b);
+            announcementMessenger.blackout(Change.DELETED, schedule(b), null, actorId);
+        });
+    }
+
+    private static Schedule schedule(BlackoutPeriod b) {
+        return new Schedule(b.getName(), b.getStartDate(), b.getEndDate(), null);
     }
 }

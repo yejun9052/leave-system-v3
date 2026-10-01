@@ -150,7 +150,7 @@ public class LeaveMessenger {
      * 처리한 사람: 자격(인사관리자 > 시스템 관리자 > 팀장) + 이름 + 부서.
      * 메일에는 "처리자: 홍길동 (팀장 · 개발팀)", 문장·알림에는 "팀장 홍길동님" 으로 쓴다.
      */
-    static Handler handler(Employee e) {
+    public static Handler handler(Employee e) {
         String role = e.hasRole(Role.HR_ADMIN) ? "인사관리자"
                 : e.hasRole(Role.SYSTEM_ADMIN) ? "시스템 관리자" : "팀장";
         return new Handler(role, e.getName(), e.getDepartment() != null ? e.getDepartment().getName() : null);

@@ -2,6 +2,7 @@ package com.company.leave.policy;
 
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.policy.dto.PolicyRuleDtos;
+import com.company.leave.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -92,20 +93,20 @@ public class PolicyRulesController {
     @PostMapping("/blackouts")
     public ApiResponse<PolicyRuleDtos.Blackout> createBlackout(
             @Valid @RequestBody PolicyRuleDtos.BlackoutRequest req) {
-        return ApiResponse.ok(service.createBlackout(req));
+        return ApiResponse.ok(service.createBlackout(req, SecurityUtils.currentEmployeeId()));
     }
 
     @PreAuthorize(MANAGER)
     @PutMapping("/blackouts/{id}")
     public ApiResponse<PolicyRuleDtos.Blackout> updateBlackout(
             @PathVariable Long id, @Valid @RequestBody PolicyRuleDtos.BlackoutRequest req) {
-        return ApiResponse.ok(service.updateBlackout(id, req));
+        return ApiResponse.ok(service.updateBlackout(id, req, SecurityUtils.currentEmployeeId()));
     }
 
     @PreAuthorize(MANAGER)
     @DeleteMapping("/blackouts/{id}")
     public ApiResponse<Void> deleteBlackout(@PathVariable Long id) {
-        service.deleteBlackout(id);
+        service.deleteBlackout(id, SecurityUtils.currentEmployeeId());
         return ApiResponse.ok();
     }
 }

@@ -12,6 +12,9 @@ import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.department.domain.Department;
 import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.leave.LeaveRequestService;
+import com.company.leave.mail.AnnouncementMailTemplates.Change;
+import com.company.leave.notification.AnnouncementMessenger;
+import com.company.leave.notification.AnnouncementMessenger.EventView;
 import com.company.leave.security.UserPrincipal;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
@@ -32,15 +35,18 @@ public class CalendarService {
     private final HolidayRepository holidayRepository;
     private final DepartmentRepository departmentRepository;
     private final LeaveRequestService leaveRequestService;
+    private final AnnouncementMessenger announcementMessenger;
 
     public CalendarService(CalendarEventRepository eventRepository,
                            HolidayRepository holidayRepository,
                            DepartmentRepository departmentRepository,
-                           LeaveRequestService leaveRequestService) {
+                           LeaveRequestService leaveRequestService,
+                           AnnouncementMessenger announcementMessenger) {
         this.eventRepository = eventRepository;
         this.holidayRepository = holidayRepository;
         this.departmentRepository = departmentRepository;
         this.leaveRequestService = leaveRequestService;
+        this.announcementMessenger = announcementMessenger;
     }
 
     /** 기간 내 사용자가 볼 수 있는 모든 일정(휴가/관리자이벤트/공휴일). */
@@ -104,6 +110,7 @@ public class CalendarService {
                 .createdBy(user.getId())
                 .build();
         eventRepository.save(event);
+        announcementMessenger.event(Change.CREATED, view(event), null, user.getId());
         return CalendarDtos.EventResponse.fromEvent(event, true);
     }
 
@@ -167,10 +174,12 @@ public class CalendarService {
         }
         CalendarEvent event = getEditableAdminEvent(id, user);
         authorizeScope(user, req.scope(), req.departmentId());
+        EventView before = view(event);
         event.update(req.title(), req.startDate(), req.endDate(), req.allDay(),
                 req.scope(),
                 req.colorHex() != null ? req.colorHex() : event.getColorHex(),
                 req.scope() == CalendarEventScope.DEPARTMENT ? req.departmentId() : null);
+        announcementMessenger.event(Change.UPDATED, view(event), before, user.getId());
         return CalendarDtos.EventResponse.fromEvent(event, true);
     }
 
@@ -178,6 +187,7 @@ public class CalendarService {
     public void delete(Long id, UserPrincipal user) {
         CalendarEvent event = getEditableAdminEvent(id, user);
         eventRepository.delete(event);
+        announcementMessenger.event(Change.DELETED, view(event), null, user.getId());
     }
 
     private CalendarEvent getEditableAdminEvent(Long id, UserPrincipal user) {
@@ -192,6 +202,11 @@ public class CalendarService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return event;
+    }
+
+    /** 일정 추가·변경·삭제 알림·메일에 쓰는 내용(받는 사람은 범위로 정해진다). */
+    private static EventView view(CalendarEvent e) {
+        return new EventView(e.getTitle(), e.getStartDate(), e.getEndDate(), e.getScope(), e.getDepartmentId());
     }
 
     private boolean isVisible(CalendarEvent e, UserPrincipal user, boolean admin) {
