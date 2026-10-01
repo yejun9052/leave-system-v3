@@ -6,7 +6,12 @@ import type { DatesSetArg, EventClickArg, EventInput } from "@fullcalendar/core"
 import type { DateClickArg } from "@fullcalendar/interaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { calendarApi, type CalendarEventDto, type CalendarEventInput } from "@/api/calendar";
+import {
+  calendarApi,
+  type CalendarEventDto,
+  type CalendarEventInput,
+  type EventScopeOption,
+} from "@/api/calendar";
 import { policyRulesApi } from "@/api/policy";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -53,6 +58,11 @@ type ViewScope = "ALL" | "COMPANY" | "DEPARTMENT" | "PERSONAL";
 
 /** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
 const HOLIDAY_COLOR = "#ef4444";
+
+/** 일정 범위 선택지의 Select 값: "COMPANY" 또는 "DEPARTMENT:3" */
+function scopeKey(scope: string, departmentId: number | null | undefined): string {
+  return scope === "DEPARTMENT" ? `DEPARTMENT:${departmentId ?? ""}` : scope;
+}
 
 const VIEW_TABS: { key: ViewScope; label: string }[] = [
   { key: "ALL", label: "전체" },
@@ -523,6 +533,24 @@ function EventDialog({
   const set = <K extends keyof CalendarEventInput>(k: K, v: CalendarEventInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  // 범위는 드롭다운 하나로 고른다(관리자: 전체 일정 + 모든 팀, 팀장: 맡은 팀). 기본값은 "선택"(미선택),
+  // 수정이면 그 일정의 범위가 선택된 상태. 선택지에 없는 기존 범위(개인 일정 등)는 다시 고르게 한다.
+  const { data: scopeOptions, isLoading: scopesLoading } = useQuery({
+    queryKey: ["eventScopes"],
+    queryFn: calendarApi.eventScopes,
+  });
+  const [selectedKey, setSelectedKey] = useState(() => (event ? scopeKey(event.scope, event.departmentId) : ""));
+  const selectedScope: EventScopeOption | undefined = scopeOptions?.find(
+    (o) => scopeKey(o.scope, o.departmentId) === selectedKey,
+  );
+  const previousScopeMissing = isEdit && !!scopeOptions && !selectedScope;
+  const onScopeChange = (key: string) => {
+    const option = scopeOptions?.find((o) => scopeKey(o.scope, o.departmentId) === key);
+    if (!option) return;
+    setSelectedKey(key);
+    setForm((f) => ({ ...f, scope: option.scope, departmentId: option.departmentId }));
+  };
+
   const save = useMutation({
     mutationFn: () =>
       isEdit && event
@@ -538,7 +566,7 @@ function EventDialog({
   const onSave = async () => {
     const ok = await confirm({
       title: isEdit ? "일정을 수정할까요?" : "일정을 추가할까요?",
-      description: `${form.title.trim()} (${form.startDate}${form.endDate !== form.startDate ? ` ~ ${form.endDate}` : ""}, ${form.scope === "COMPANY" ? "전사" : "부서"})`,
+      description: `${form.title.trim()} (${form.startDate}${form.endDate !== form.startDate ? ` ~ ${form.endDate}` : ""}, ${selectedScope?.label ?? ""})`,
       confirmText: isEdit ? "수정" : "추가",
     });
     if (ok) save.mutate();
@@ -578,15 +606,31 @@ function EventDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>범위</Label>
-              <Select value={form.scope} onValueChange={(v) => set("scope", v as "COMPANY" | "DEPARTMENT")}>
+              <Select
+                value={selectedScope ? selectedKey : ""}
+                onValueChange={onScopeChange}
+                disabled={scopesLoading || scopeOptions?.length === 0}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="COMPANY">전사</SelectItem>
-                  <SelectItem value="DEPARTMENT">부서</SelectItem>
+                  {scopeOptions?.map((o) => {
+                    const key = scopeKey(o.scope, o.departmentId);
+                    return (
+                      <SelectItem key={key} value={key}>
+                        {o.label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
+              {scopeOptions?.length === 0 && (
+                <p className="text-xs text-destructive">등록할 수 있는 범위가 없습니다.</p>
+              )}
+              {previousScopeMissing && (scopeOptions?.length ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground">기존 범위는 고를 수 없는 범위입니다. 다시 선택해 주세요.</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>색상</Label>
@@ -606,7 +650,7 @@ function EventDialog({
             <Button variant="outline" onClick={onClose}>
               취소
             </Button>
-            <Button onClick={onSave} disabled={!form.title.trim() || save.isPending}>
+            <Button onClick={onSave} disabled={!form.title.trim() || !selectedScope || save.isPending}>
               저장
             </Button>
           </div>

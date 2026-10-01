@@ -58,7 +58,15 @@ export interface DayDetailDto {
   events: DayEventDto[];
 }
 
+/** 일정 등록 범위 선택지: 관리자는 "전체 일정" + 모든 부서, 팀장은 맡은 부서(하위 포함) */
+export interface EventScopeOption {
+  scope: "COMPANY" | "DEPARTMENT";
+  departmentId: number | null;
+  label: string;
+}
+
 export const calendarApi = {
+  eventScopes: () => unwrap<EventScopeOption[]>(api.get("/calendar/event-scopes")),
   events: (start: string, end: string) =>
     unwrap<CalendarEventDto[]>(api.get("/calendar/events", { params: { start, end } })),
   day: (date: string) => unwrap<DayDetailDto>(api.get("/calendar/day", { params: { date } })),
