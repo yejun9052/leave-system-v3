@@ -154,10 +154,6 @@ public class Employee extends BaseTimeEntity {
         return roles.contains(role);
     }
 
-    public boolean isAdmin() {
-        return roles.contains(Role.SUPER_ADMIN) || roles.contains(Role.HR_ADMIN);
-    }
-
     // --- getters ---
 
     public Long getId() {

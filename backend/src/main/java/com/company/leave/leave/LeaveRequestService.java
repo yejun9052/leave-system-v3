@@ -906,6 +906,7 @@ public class LeaveRequestService {
         return !isSystemAdmin(e) && e.hasRole(Role.HR_ADMIN);
     }
 
+    /** 전 직원 휴가·잔액 조회 권한(조회 전용). 결재 권한은 {@link #isHrApprover}로 판단한다. */
     private boolean isAdmin(Employee e) {
         return e.hasRole(Role.SUPER_ADMIN) || e.hasRole(Role.HR_ADMIN);
     }
