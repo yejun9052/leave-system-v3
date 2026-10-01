@@ -179,7 +179,11 @@ Check "request in blackout blocked" ($blocked.status -eq 409 -and $blocked.data.
 Req DELETE "$base/policy/blackouts/$($bo.id)" $admin | Out-Null
 $okAfter = Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate=(D 22);endDate=(D 23)}|ConvertTo-Json)
 Check "request ok after blackout removed" ($okAfter.ok -eq $true)
-if ($okAfter.ok) { Req POST "$base/leave-requests/$($okAfter.data.data.id)/cancel" $empH | Out-Null }
+if ($okAfter.ok) {
+  # 화면과 같이 JSON 본문을 보낸다(본문 없이 보내면 취소되지 않고 PENDING 으로 남았음)
+  $cx = Req POST "$base/leave-requests/$($okAfter.data.data.id)/cancel" $empH (@{reason="qa"}|ConvertTo-Json)
+  Check "cancel pending request -> CANCELLED" ($cx.data.data.status -eq "CANCELLED") "(status=$($cx.status))"
+}
 
 "===== 8. Overlap prevention ====="
 Req POST "$base/leave-requests" $empH (@{leaveTypeId=$annualId;startDate=(D 42);endDate=(D 43)}|ConvertTo-Json) | Out-Null
