@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CalendarPlus, Loader2 } from "lucide-react";
 import { calendarApi, type DayLeaveDto } from "@/api/calendar";
+import { policyRulesApi } from "@/api/policy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,6 +64,9 @@ export default function DayDetailDialog({
     queryKey: ["calendarDay", date],
     queryFn: () => calendarApi.day(date),
   });
+  // 그날 걸린 블랙아웃(연차 사용 제한) 기간: 캘린더와 같은 목록 캐시를 쓴다
+  const { data: blackouts = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
+  const dayBlackouts = blackouts.filter((b) => b.startDate <= date && b.endDate >= date);
 
   const leaves = data?.leaves ?? [];
   const events = data?.events ?? [];
@@ -83,6 +87,11 @@ export default function DayDetailDialog({
             <span>·</span>
             <span>일정 {events.length}건</span>
             {data?.holidayName && <Badge variant="destructive">{data.holidayName}</Badge>}
+            {dayBlackouts.map((b) => (
+              <Badge key={b.id} variant="destructive" title="이 기간에는 연차를 신청할 수 없습니다">
+                연차 제한 · {b.name}
+              </Badge>
+            ))}
           </DialogDescription>
         </DialogHeader>
 
