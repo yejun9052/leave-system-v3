@@ -48,6 +48,15 @@ public class CalendarController {
         return ApiResponse.ok(calendarService.getDay(date, SecurityUtils.currentPrincipal()));
     }
 
+    @Operation(summary = "일정 등록 범위 선택지",
+            description = "관리자는 전체 일정 + 모든 부서, 팀장은 맡은 부서(하위 포함)만. 개인 일정은 제외. "
+                    + "저장 시 권한은 등록·수정 API 가 다시 검사한다.")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
+    @GetMapping("/event-scopes")
+    public ApiResponse<List<CalendarDtos.EventScopeOption>> eventScopes() {
+        return ApiResponse.ok(calendarService.eventScopes(SecurityUtils.currentPrincipal()));
+    }
+
     @Operation(summary = "일정 생성 (관리자/팀장)")
     @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SUPER_ADMIN')")
     @PostMapping("/events")

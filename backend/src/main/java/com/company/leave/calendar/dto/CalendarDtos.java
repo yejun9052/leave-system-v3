@@ -85,6 +85,14 @@ public final class CalendarDtos {
         }
     }
 
+    /**
+     * 일정 등록 화면의 범위 선택지. 전사면 departmentId 가 null.
+     *
+     * @param label 화면 표시용("전체 일정", "{부서명} 일정")
+     */
+    public record EventScopeOption(CalendarEventScope scope, Long departmentId, String label) {
+    }
+
     public record CreateEvent(
             @NotBlank String title,
             @NotNull LocalDate startDate,

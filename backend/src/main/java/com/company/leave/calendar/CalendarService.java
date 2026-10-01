@@ -14,9 +14,13 @@ import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.leave.LeaveRequestService;
 import com.company.leave.security.UserPrincipal;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,8 +107,64 @@ public class CalendarService {
         return CalendarDtos.EventResponse.fromEvent(event, true);
     }
 
+    /**
+     * 일정 등록 화면의 범위 선택지(개인 일정 제외).
+     * 관리자는 "전체 일정" + 모든 부서, 팀장은 맡은 부서(하위 포함)만. 부서는 부서 관리 트리 순서(상위 다음 하위,
+     * 같은 단계는 정렬순서·이름순). 팀장의 부서 범위는 저장 시 검사({@link #authorizeScope})와 같은 기준이다.
+     */
+    @Transactional(readOnly = true)
+    public List<CalendarDtos.EventScopeOption> eventScopes(UserPrincipal user) {
+        boolean admin = isAdmin(user);
+        Set<Long> allowed = admin ? null : ledDeptIds(user.getId());
+        List<CalendarDtos.EventScopeOption> options = new ArrayList<>();
+        if (admin) {
+            options.add(new CalendarDtos.EventScopeOption(CalendarEventScope.COMPANY, null, "전체 일정"));
+        }
+        for (Department d : departmentsInTreeOrder()) {
+            if (allowed == null || allowed.contains(d.getId())) {
+                options.add(new CalendarDtos.EventScopeOption(
+                        CalendarEventScope.DEPARTMENT, d.getId(), d.getName() + " 일정"));
+            }
+        }
+        return options;
+    }
+
+    /** 부서 관리 트리와 같은 순서: 최상위부터 깊이 우선, 같은 부모 아래는 정렬순서·이름순. */
+    private List<Department> departmentsInTreeOrder() {
+        List<Department> sorted = departmentRepository.findAllByOrderBySortOrderAscNameAsc();
+        Map<Long, List<Department>> children = new HashMap<>();
+        List<Department> roots = new ArrayList<>();
+        Set<Long> ids = new HashSet<>();
+        sorted.forEach(d -> ids.add(d.getId()));
+        for (Department d : sorted) {
+            Long parentId = d.getParentId();
+            if (parentId == null || !ids.contains(parentId)) {
+                roots.add(d);
+            } else {
+                children.computeIfAbsent(parentId, k -> new ArrayList<>()).add(d);
+            }
+        }
+        List<Department> ordered = new ArrayList<>(sorted.size());
+        Deque<Department> stack = new ArrayDeque<>();
+        for (int i = roots.size() - 1; i >= 0; i--) {
+            stack.push(roots.get(i));
+        }
+        while (!stack.isEmpty()) {
+            Department d = stack.pop();
+            ordered.add(d);
+            List<Department> kids = children.getOrDefault(d.getId(), List.of());
+            for (int i = kids.size() - 1; i >= 0; i--) {
+                stack.push(kids.get(i));
+            }
+        }
+        return ordered;
+    }
+
     @Transactional
     public CalendarDtos.EventResponse update(Long id, CalendarDtos.CreateEvent req, UserPrincipal user) {
+        if (req.scope() == CalendarEventScope.DEPARTMENT && req.departmentId() == null) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "부서 일정은 부서를 지정해야 합니다.");
+        }
         CalendarEvent event = getEditableAdminEvent(id, user);
         authorizeScope(user, req.scope(), req.departmentId());
         event.update(req.title(), req.startDate(), req.endDate(), req.allDay(),
