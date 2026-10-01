@@ -7,6 +7,7 @@ import type { DateClickArg } from "@fullcalendar/interaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { calendarApi, type CalendarEventDto, type CalendarEventInput } from "@/api/calendar";
+import { policyRulesApi } from "@/api/policy";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,9 @@ interface TouchGesture {
   timer: number;
 }
 
+/** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
+const HOLIDAY_COLOR = "#ef4444";
+
 const VIEW_TABS: { key: ViewScope; label: string }[] = [
   { key: "ALL", label: "전체" },
   { key: "COMPANY", label: "전사" },
@@ -88,6 +92,8 @@ export default function CalendarPage() {
     queryKey: ["calendarEvents", range],
     queryFn: () => calendarApi.events(range.start, range.end),
   });
+
+  const { data: blackouts = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
 
   const filtered = useMemo(
     () => (view === "ALL" ? events : events.filter((e) => e.scope === view || e.source === "HOLIDAY")),
@@ -266,6 +272,19 @@ export default function CalendarPage() {
     borderColor: e.colorHex,
     editable: false,
   }));
+  // 블랙아웃(연차 사용 제한) 기간은 공휴일처럼 빨간 막대로, 보기 탭과 관계없이 항상 표시한다
+  for (const b of blackouts) {
+    calendarEvents.push({
+      id: `B${b.id}`,
+      title: `연차 제한 · ${b.name}`,
+      start: b.startDate,
+      end: addDays(b.endDate, 1),
+      allDay: true,
+      backgroundColor: HOLIDAY_COLOR,
+      borderColor: HOLIDAY_COLOR,
+      editable: false,
+    });
+  }
   if (selection) {
     // 신청할 기간을 배경색으로 강조(배경 이벤트는 날짜 클릭을 막지 않는다)
     calendarEvents.push({
