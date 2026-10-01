@@ -15,7 +15,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  SortableTableHead,
 } from "@/components/ui/table";
+import { useTableSort } from "@/lib/useTableSort";
 import {
   Dialog,
   DialogContent,
@@ -38,6 +40,8 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warnin
   CANCELLED: "secondary",
 };
 
+const STATUS_RANK: LeaveRequestStatus[] = ["PENDING", "APPROVED", "CANCEL_REQUESTED", "REJECTED", "CANCELLED"];
+
 export default function MyLeavesPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -49,6 +53,14 @@ export default function MyLeavesPage() {
 
   const { data: balance } = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
   const { data: requests } = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
+  const { sorted, sort, toggle } = useTableSort(requests?.content ?? [], {
+    type: (r) => r.leaveTypeName,
+    period: (r) => `${r.startDate} ${r.endDate}`,
+    days: (r) => r.days,
+    // 상태는 처리 흐름 순(대기 → 승인 → 취소대기 → 반려 → 취소)
+    status: (r) => STATUS_RANK.indexOf(r.status),
+    approver: (r) => r.approverName,
+  });
 
   const cancel = useMutation({
     mutationFn: ({ id, approved }: { id: number; approved: boolean }) =>
@@ -96,17 +108,17 @@ export default function MyLeavesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>종류</TableHead>
-                <TableHead>기간</TableHead>
-                <TableHead>일수</TableHead>
-                <TableHead>상태</TableHead>
-                <TableHead>결재자</TableHead>
+                <SortableTableHead sortKey="type" sort={sort} onSort={toggle}>종류</SortableTableHead>
+                <SortableTableHead sortKey="period" sort={sort} onSort={toggle}>기간</SortableTableHead>
+                <SortableTableHead sortKey="days" sort={sort} onSort={toggle}>일수</SortableTableHead>
+                <SortableTableHead sortKey="status" sort={sort} onSort={toggle}>상태</SortableTableHead>
+                <SortableTableHead sortKey="approver" sort={sort} onSort={toggle}>결재자</SortableTableHead>
                 <TableHead className="text-right">관리</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {requests && requests.content.length > 0 ? (
-                requests.content.map((r) => (
+                sorted.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>
                       <span className="inline-flex items-center gap-2">

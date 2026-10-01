@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SortableTableHead, Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { useTableSort } from "@/lib/useTableSort";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 
@@ -26,6 +27,7 @@ export default function HolidayTab() {
     queryFn: () => holidayApi.list(year),
     enabled: year >= 2000 && year <= 2100,
   });
+  const { sorted, sort, toggle } = useTableSort(holidays, { date: (h) => h.date, name: (h) => h.name });
 
   const sync = useMutation({
     mutationFn: () => holidayApi.sync(year),
@@ -100,13 +102,13 @@ export default function HolidayTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-40">날짜</TableHead>
-              <TableHead>이름</TableHead>
+              <SortableTableHead sortKey="date" sort={sort} onSort={toggle} className="w-40">날짜</SortableTableHead>
+              <SortableTableHead sortKey="name" sort={sort} onSort={toggle}>이름</SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {holidays.length > 0 ? (
-              holidays.map((h) => (
+            {sorted.length > 0 ? (
+              sorted.map((h) => (
                 <TableRow key={h.date}>
                   <TableCell>
                     {h.date} ({WEEKDAY[new Date(`${h.date}T00:00:00`).getDay()]})
