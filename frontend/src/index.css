@@ -80,3 +80,13 @@
   background: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
 }
+/* 주말 색(요일 머리·날짜 숫자): 토요일 파랑, 일요일 빨강. 공휴일 숫자는 토요일이어도 빨강 */
+.fc .fc-day-sat .fc-col-header-cell-cushion,
+.fc .fc-day-sat .fc-daygrid-day-number {
+  color: #3b82f6;
+}
+.fc .fc-day-sun .fc-col-header-cell-cushion,
+.fc .fc-day-sun .fc-daygrid-day-number,
+.fc .fc-holiday .fc-daygrid-day-number {
+  color: #ef4444;
+}

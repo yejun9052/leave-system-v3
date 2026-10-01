@@ -184,7 +184,7 @@ export default function MobileMonthView({
 
       <div className="grid grid-cols-7 gap-1.5 text-center text-xs">
         {WEEK_HEADER.map((w, i) => (
-          <span key={w} className={i === 0 ? "text-red-500" : "text-muted-foreground"}>
+          <span key={w} className={i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-muted-foreground"}>
             {w}
           </span>
         ))}
@@ -206,6 +206,7 @@ export default function MobileMonthView({
           const dayMarks = marks.get(date) ?? [];
           const holiday = holidayNames.get(date);
           const sunday = weekdayLabel(date) === "일";
+          const saturday = weekdayLabel(date) === "토";
           const isToday = date === today;
           const isFocused = !picking && date === focused;
           const inPick = picking && !!pickRange && date >= pickRange.start && date <= pickRange.end;
@@ -240,7 +241,9 @@ export default function MobileMonthView({
                       ? "inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground"
                       : holiday || sunday
                         ? "text-red-500"
-                        : "text-foreground",
+                        : saturday
+                          ? "text-blue-500"
+                          : "text-foreground",
                 )}
               >
                 {d}

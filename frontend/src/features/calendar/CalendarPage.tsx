@@ -406,6 +406,7 @@ export default function CalendarPage() {
                   datesSet={onDatesSet}
                   eventClick={onEventClick}
                   dateClick={onDateClick}
+                  dayCellClassNames={(arg) => (holidays.has(localDateString(arg.date)) ? ["fc-holiday"] : [])}
                   dayMaxEvents={3}
                 />
               </div>
