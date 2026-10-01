@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { employeeApi, type EmployeeCreate } from "@/api/employees";
 import { departmentApi } from "@/api/departments";
+import { flattenDepartments, type DepartmentOption } from "@/lib/departmentTree";
 import {
   ROLE_LABEL,
   type Employee,
@@ -42,6 +43,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectTreeItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -69,10 +71,12 @@ export default function EmployeePage() {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const { data: departments = [] } = useQuery({
-    queryKey: ["departments", "flat"],
-    queryFn: departmentApi.flat,
+  // 부서 선택은 부서 관리 트리와 같은 순서·들여쓰기로 보여 준다
+  const { data: departmentTree = [] } = useQuery({
+    queryKey: ["departments", "tree"],
+    queryFn: departmentApi.tree,
   });
+  const departments = useMemo(() => flattenDepartments(departmentTree), [departmentTree]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["employees", { search, page }],
@@ -352,7 +356,7 @@ function EmployeeDialog({
   onSaved,
 }: {
   employee: Employee | null;
-  departments: { id: number; name: string }[];
+  departments: DepartmentOption[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -446,14 +450,19 @@ function EmployeeDialog({
               onValueChange={(v) => set("departmentId", v === "none" ? null : Number(v))}
             >
               <SelectTrigger>
-                <SelectValue placeholder="부서 선택" />
+                {/* 선택값은 상위 부서부터 경로로: "개발 › 234" */}
+                <SelectValue placeholder="부서 선택">
+                  {form.departmentId
+                    ? departments.find((d) => d.id === form.departmentId)?.path
+                    : "미배정"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">미배정</SelectItem>
                 {departments.map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>
+                  <SelectTreeItem key={d.id} value={String(d.id)} depth={d.depth}>
                     {d.name}
-                  </SelectItem>
+                  </SelectTreeItem>
                 ))}
               </SelectContent>
             </Select>

@@ -12,6 +12,7 @@ import {
   type CalendarEventInput,
   type EventScopeOption,
 } from "@/api/calendar";
+import { departmentApi } from "@/api/departments";
 import { policyRulesApi } from "@/api/policy";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectItem,
+  SelectTreeItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -36,6 +37,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { cn } from "@/lib/utils";
+import { flattenDepartments } from "@/lib/departmentTree";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import LeaveEntryPanel from "./LeaveEntryPanel";
 import DayContextMenu, { type DayMenuTarget } from "./DayContextMenu";
@@ -544,6 +546,21 @@ function EventDialog({
     (o) => scopeKey(o.scope, o.departmentId) === selectedKey,
   );
   const previousScopeMissing = isEdit && !!scopeOptions && !selectedScope;
+  // 부서 선택지는 서버가 트리 순서로 준다. 부서 트리로 깊이를 붙여 하위 부서를 들여쓴다
+  // (팀장은 맡은 부서부터 보이므로 선택지 중 가장 얕은 부서를 0단계로 맞춘다)
+  const { data: departmentTree = [] } = useQuery({
+    queryKey: ["departments", "tree"],
+    queryFn: departmentApi.tree,
+  });
+  const scopeDepth = useMemo(() => {
+    const depthById = new Map(flattenDepartments(departmentTree).map((d) => [d.id, d.depth]));
+    const depths = (scopeOptions ?? [])
+      .filter((o) => o.departmentId != null)
+      .map((o) => depthById.get(o.departmentId!) ?? 0);
+    const base = depths.length > 0 ? Math.min(...depths) : 0;
+    return (o: EventScopeOption) =>
+      o.departmentId != null ? (depthById.get(o.departmentId) ?? base) - base : 0;
+  }, [departmentTree, scopeOptions]);
   const onScopeChange = (key: string) => {
     const option = scopeOptions?.find((o) => scopeKey(o.scope, o.departmentId) === key);
     if (!option) return;
@@ -618,9 +635,9 @@ function EventDialog({
                   {scopeOptions?.map((o) => {
                     const key = scopeKey(o.scope, o.departmentId);
                     return (
-                      <SelectItem key={key} value={key}>
+                      <SelectTreeItem key={key} value={key} depth={scopeDepth(o)}>
                         {o.label}
-                      </SelectItem>
+                      </SelectTreeItem>
                     );
                   })}
                 </SelectContent>

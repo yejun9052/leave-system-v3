@@ -74,4 +74,36 @@ const SelectItem = React.forwardRef<
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
-export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem };
+/**
+ * 트리 구조 항목(부서 등): 깊이만큼 들여쓰고 하위 항목엔 "↳" 를 붙인다.
+ * "↳" 는 목록에만 보이고, 선택값(SelectValue)에는 children 글자만 들어간다.
+ */
+const SelectTreeItem = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & { depth: number }
+>(({ className, children, depth, style, ...props }, ref) => (
+  <SelectPrimitive.Item
+    ref={ref}
+    className={cn(
+      "relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      className,
+    )}
+    style={{ paddingLeft: `${2 + depth}rem`, ...style }}
+    {...props}
+  >
+    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <SelectPrimitive.ItemIndicator>
+        <Check className="h-4 w-4" />
+      </SelectPrimitive.ItemIndicator>
+    </span>
+    {depth > 0 && (
+      <span aria-hidden className="mr-1 text-muted-foreground">
+        ↳
+      </span>
+    )}
+    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+  </SelectPrimitive.Item>
+));
+SelectTreeItem.displayName = "SelectTreeItem";
+
+export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectTreeItem };

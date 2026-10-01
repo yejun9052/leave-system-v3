@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import { departmentApi } from "@/api/departments";
+import { flattenDepartments } from "@/lib/departmentTree";
 import type { Department } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectTreeItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -50,10 +52,6 @@ export default function DepartmentPage() {
   const { data: tree = [], isLoading } = useQuery({
     queryKey: ["departments", "tree"],
     queryFn: departmentApi.tree,
-  });
-  const { data: flat = [] } = useQuery({
-    queryKey: ["departments", "flat"],
-    queryFn: departmentApi.flat,
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["departments"] });
@@ -115,7 +113,7 @@ export default function DepartmentPage() {
       {dialog && (
         <DepartmentDialog
           mode={dialog}
-          flat={flat}
+          tree={tree}
           onClose={() => setDialog(null)}
           onSaved={() => {
             setDialog(null);
@@ -213,12 +211,12 @@ function DeptNode({
 
 function DepartmentDialog({
   mode,
-  flat,
+  tree,
   onClose,
   onSaved,
 }: {
   mode: NonNullable<DialogMode>;
-  flat: Department[];
+  tree: Department[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -253,8 +251,8 @@ function DepartmentDialog({
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
-  // 이동 시: 자기 자신은 상위 후보에서 제외
-  const parentOptions = flat.filter((d) => mode.type !== "move" || d.id !== mode.dept.id);
+  // 이동 시: 자기 자신과 그 하위 부서는 상위 후보에서 제외(트리 순서·들여쓰기로 표시)
+  const parentOptions = flattenDepartments(tree, mode.type === "move" ? mode.dept.id : undefined);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -275,14 +273,19 @@ function DepartmentDialog({
             <Label>이동할 상위 부서</Label>
             <Select value={newParentId} onValueChange={setNewParentId}>
               <SelectTrigger>
-                <SelectValue />
+                {/* 선택값은 상위 부서부터 경로로: "개발 › 234" */}
+                <SelectValue>
+                  {newParentId === "root"
+                    ? "최상위"
+                    : parentOptions.find((d) => String(d.id) === newParentId)?.path}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="root">최상위</SelectItem>
                 {parentOptions.map((d) => (
-                  <SelectItem key={d.id} value={String(d.id)}>
+                  <SelectTreeItem key={d.id} value={String(d.id)} depth={d.depth}>
                     {d.name}
-                  </SelectItem>
+                  </SelectTreeItem>
                 ))}
               </SelectContent>
             </Select>
