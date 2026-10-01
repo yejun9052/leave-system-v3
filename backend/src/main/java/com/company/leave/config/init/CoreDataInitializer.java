@@ -73,7 +73,7 @@ public class CoreDataInitializer implements ApplicationRunner {
                 .department(root)
                 .position("관리자")
                 .hireDate(LocalDate.now())
-                .roles(EnumSet.of(Role.SUPER_ADMIN))
+                .roles(EnumSet.of(Role.SYSTEM_ADMIN))
                 .systemAccount(true)
                 .build();
         if (!localConfigured) {

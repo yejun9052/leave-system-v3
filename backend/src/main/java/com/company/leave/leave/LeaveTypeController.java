@@ -36,14 +36,14 @@ public class LeaveTypeController {
     }
 
     @Operation(summary = "휴가 종류 생성")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping
     public ApiResponse<LeaveTypeDtos.Response> create(@Valid @RequestBody LeaveTypeDtos.Create req) {
         return ApiResponse.ok(leaveTypeService.create(req));
     }
 
     @Operation(summary = "휴가 종류 수정")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PutMapping("/{id}")
     public ApiResponse<LeaveTypeDtos.Response> update(
             @PathVariable Long id, @Valid @RequestBody LeaveTypeDtos.Update req) {
@@ -51,7 +51,7 @@ public class LeaveTypeController {
     }
 
     @Operation(summary = "휴가 종류 삭제")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         leaveTypeService.delete(id);

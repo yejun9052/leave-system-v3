@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Report", description = "리포트")
 @RestController
 @RequestMapping("/api/reports")
-@PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
 public class ReportController {
 
     private final LeaveReportService reportService;

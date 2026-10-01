@@ -105,8 +105,8 @@ public class EmployeeExcelService {
                 }
                 String roles = cell(row, roleColumn);
                 if (StringUtils.hasText(roles) && Arrays.stream(roles.split(","))
-                        .map(String::trim).anyMatch(Role.SUPER_ADMIN.name()::equals)) {
-                    throw new BusinessException(ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+                        .map(String::trim).anyMatch(Role.SYSTEM_ADMIN.name()::equals)) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
                 }
             }
             for (Row row : sheet) {

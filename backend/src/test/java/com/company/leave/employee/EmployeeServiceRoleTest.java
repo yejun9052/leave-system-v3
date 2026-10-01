@@ -70,8 +70,8 @@ class EmployeeServiceRoleTest {
     @Test
     void 다른_권한과_함께여도_시스템_관리자_권한으로는_직원을_만들_수_없다() {
         EmployeeRequests.Create req = new EmployeeRequests.Create("new@company.com", "신입", null, null, null,
-                LocalDate.of(2024, 1, 1), Set.of(Role.HR_ADMIN, Role.SUPER_ADMIN));
-        expectError(() -> service.create(req), ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+                LocalDate.of(2024, 1, 1), Set.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN));
+        expectError(() -> service.create(req), ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         verify(employees, never()).save(any());
         verify(employees, never()).lockForUserCreation();
         verify(events, never()).publishEvent(any(Object.class));
@@ -81,8 +81,8 @@ class EmployeeServiceRoleTest {
     void 다른_직원에게_시스템_관리자_권한을_줄_수_없고_정보도_바뀌지_않는다() {
         Employee target = employee(20L, false, Set.of(Role.EMPLOYEE));
         when(employees.findById(20L)).thenReturn(Optional.of(target));
-        expectError(() -> service.update(20L, update(Set.of(Role.SUPER_ADMIN))),
-                ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+        expectError(() -> service.update(20L, update(Set.of(Role.SYSTEM_ADMIN))),
+                ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         assertThat(target.getEmail()).isEqualTo("user20@company.com");
         assertThat(target.getRoles()).containsExactly(Role.EMPLOYEE);
     }
@@ -90,31 +90,31 @@ class EmployeeServiceRoleTest {
     @Test
     void 인사관리자는_자신에게_시스템_관리자_권한을_줄_수_없다() {
         when(employees.findById(hr.getId())).thenReturn(Optional.of(hr));
-        expectError(() -> service.update(hr.getId(), update(Set.of(Role.HR_ADMIN, Role.SUPER_ADMIN))),
-                ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+        expectError(() -> service.update(hr.getId(), update(Set.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN))),
+                ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         assertThat(hr.getRoles()).containsExactly(Role.HR_ADMIN);
     }
 
     @Test
     void 관리_전용_계정은_직원_수정으로_권한을_바꿀_수_없다() {
-        Employee admin = employee(1L, true, Set.of(Role.SUPER_ADMIN));
+        Employee admin = employee(1L, true, Set.of(Role.SYSTEM_ADMIN));
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
-        for (Set<Role> roles : java.util.List.of(Set.of(Role.HR_ADMIN), Set.of(Role.SUPER_ADMIN),
-                Set.of(Role.SUPER_ADMIN, Role.EMPLOYEE), Set.<Role>of())) {
+        for (Set<Role> roles : java.util.List.of(Set.of(Role.HR_ADMIN), Set.of(Role.SYSTEM_ADMIN),
+                Set.of(Role.SYSTEM_ADMIN, Role.EMPLOYEE), Set.<Role>of())) {
             expectError(() -> service.update(1L, update(roles)), ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
         }
-        assertThat(admin.getRoles()).containsExactly(Role.SUPER_ADMIN);
+        assertThat(admin.getRoles()).containsExactly(Role.SYSTEM_ADMIN);
     }
 
     @Test
     void 관리_전용_계정도_자기_비밀번호는_바꿀_수_있다() {
-        Employee admin = employee(1L, true, Set.of(Role.SUPER_ADMIN));
+        Employee admin = employee(1L, true, Set.of(Role.SYSTEM_ADMIN));
         admin.setTemporaryPassword(encoder.encode("old-password"));
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
         service.changeMyPassword(1L, "old-password", "new-password");
         assertThat(encoder.matches("new-password", admin.getPasswordHash())).isTrue();
         assertThat(admin.isPasswordChangeRequired()).isFalse();
-        assertThat(admin.getRoles()).containsExactly(Role.SUPER_ADMIN);
+        assertThat(admin.getRoles()).containsExactly(Role.SYSTEM_ADMIN);
     }
 
     @Test

@@ -206,7 +206,7 @@ public class CalendarService {
 
     private boolean isAdmin(UserPrincipal user) {
         return user.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN")
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SYSTEM_ADMIN")
                         || a.getAuthority().equals("ROLE_HR_ADMIN"));
     }
 

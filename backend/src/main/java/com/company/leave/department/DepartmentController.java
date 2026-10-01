@@ -40,14 +40,14 @@ public class DepartmentController {
     }
 
     @Operation(summary = "부서 생성")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping
     public ApiResponse<DepartmentResponse> create(@Valid @RequestBody DepartmentRequests.Create req) {
         return ApiResponse.ok(departmentService.create(req));
     }
 
     @Operation(summary = "부서 수정")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PutMapping("/{id}")
     public ApiResponse<DepartmentResponse> update(
             @PathVariable Long id, @Valid @RequestBody DepartmentRequests.Update req) {
@@ -55,7 +55,7 @@ public class DepartmentController {
     }
 
     @Operation(summary = "부서 상·하위 이동")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PatchMapping("/{id}/move")
     public ApiResponse<DepartmentResponse> move(
             @PathVariable Long id, @Valid @RequestBody DepartmentRequests.Move req) {
@@ -63,7 +63,7 @@ public class DepartmentController {
     }
 
     @Operation(summary = "부서 삭제")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         departmentService.delete(id);

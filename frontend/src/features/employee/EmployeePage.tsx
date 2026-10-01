@@ -366,7 +366,7 @@ function EmployeeDialog({
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
     hireDate: employee?.hireDate ?? new Date().toISOString().slice(0, 10),
-    roles: employee?.roles.filter((role) => role !== "SUPER_ADMIN") ?? ["EMPLOYEE"],
+    roles: employee?.roles.filter((role) => role !== "SYSTEM_ADMIN") ?? ["EMPLOYEE"],
   });
 
   const set = <K extends keyof EmployeeCreate>(k: K, v: EmployeeCreate[K]) =>

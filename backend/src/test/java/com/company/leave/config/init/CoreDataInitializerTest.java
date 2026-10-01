@@ -75,7 +75,7 @@ class CoreDataInitializerTest {
 
         Employee admin = 저장된_계정();
         assertThat(admin.isSystemAccount()).isTrue();
-        assertThat(admin.getRoles()).containsExactly(Role.SUPER_ADMIN);
+        assertThat(admin.getRoles()).containsExactly(Role.SYSTEM_ADMIN);
     }
 
     @Test
@@ -103,7 +103,7 @@ class CoreDataInitializerTest {
     void 로컬에서는_기존_관리_계정의_비밀번호_변경_요구를_해제한다() {
         environment.setProperty("app.admin.initial-password", "admin1234!");
         Employee existing = Employee.builder().email("admin").passwordHash("h").name("시스템관리자")
-                .roles(Set.of(Role.SUPER_ADMIN)).systemAccount(true).build();
+                .roles(Set.of(Role.SYSTEM_ADMIN)).systemAccount(true).build();
         existing.requirePasswordChange();
         when(employeeRepository.countAll()).thenReturn(5L);
         when(employeeRepository.findByEmail("admin")).thenReturn(Optional.of(existing));

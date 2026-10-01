@@ -901,7 +901,7 @@ public class LeaveRequestService {
     }
 
     private boolean isSystemAdmin(Employee e) {
-        return e.isSystemAccount() || e.hasRole(Role.SUPER_ADMIN);
+        return e.isSystemAccount() || e.hasRole(Role.SYSTEM_ADMIN);
     }
 
     /**
@@ -914,7 +914,7 @@ public class LeaveRequestService {
 
     /** 전 직원 휴가·잔액 조회 권한(조회 전용). 결재 권한은 {@link #isHrApprover}로 판단한다. */
     private boolean isAdmin(Employee e) {
-        return e.hasRole(Role.SUPER_ADMIN) || e.hasRole(Role.HR_ADMIN);
+        return e.hasRole(Role.SYSTEM_ADMIN) || e.hasRole(Role.HR_ADMIN);
     }
 
     /** 팀장: TEAM_LEAD 역할이 있거나 부서장으로 지정된 직원. */

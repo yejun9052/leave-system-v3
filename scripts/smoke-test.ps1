@@ -84,7 +84,7 @@ if (-not $found) { "[ERROR] no free week"; exit 1 }
 $bad = Req POST "$base/auth/login" $null (@{email="admin";password="nope"}|ConvertTo-Json)
 Check "wrong password -> 401" ($bad.status -eq 401) "(status=$($bad.status))"
 $me = Req GET "$base/auth/me" $admin
-Check "me = SUPER_ADMIN" ($me.data.data.roles -contains "SUPER_ADMIN")
+Check "me = SYSTEM_ADMIN" ($me.data.data.roles -contains "SYSTEM_ADMIN")
 
 "===== 2. Department create / move / cycle ====="
 $rootId = (Req GET "$base/departments" $admin).data.data[0].id
@@ -105,9 +105,9 @@ Check "create staff" ($emp.id -ne $null)
 $hrBody = @{email="qa.hr@test.local";name="QA_HR";departmentId=$rootId;position="hr";hireDate="2022-01-03";roles=@("HR_ADMIN","EMPLOYEE")}|ConvertTo-Json
 $hr = (Req POST "$base/employees" $admin $hrBody).data.data
 Check "create HR admin" ($hr.id -ne $null)
-$superBody = @{email="qa.super@test.local";name="QA_Super";departmentId=$qa.id;position="x";hireDate="2022-01-03";roles=@("SUPER_ADMIN")}|ConvertTo-Json
+$superBody = @{email="qa.super@test.local";name="QA_Super";departmentId=$qa.id;position="x";hireDate="2022-01-03";roles=@("SYSTEM_ADMIN")}|ConvertTo-Json
 $superRes = Req POST "$base/employees" $admin $superBody
-Check "SUPER_ADMIN cannot be granted to employee -> 400" ($superRes.status -eq 400 -and $superRes.data.error.code -eq "SUPER_ADMIN_ROLE_RESTRICTED") "(status=$($superRes.status))"
+Check "SYSTEM_ADMIN cannot be granted to employee -> 400" ($superRes.status -eq 400 -and $superRes.data.error.code -eq "SYSTEM_ADMIN_ROLE_RESTRICTED") "(status=$($superRes.status))"
 SetQaPassword "qa.lead@test.local"
 SetQaPassword "qa.emp@test.local"
 SetQaPassword "qa.hr@test.local"

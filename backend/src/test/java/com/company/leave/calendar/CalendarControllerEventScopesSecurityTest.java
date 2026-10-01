@@ -89,7 +89,7 @@ class CalendarControllerEventScopesSecurityTest {
     @Test
     void 인사관리자와_시스템_관리자도_호출할_수_있다() throws Exception {
         when(service.eventScopes(any())).thenReturn(List.of());
-        for (Role role : List.of(Role.HR_ADMIN, Role.SUPER_ADMIN)) {
+        for (Role role : List.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN)) {
             authenticate(role);
             mvc.perform(get("/api/calendar/event-scopes")).andExpect(status().isOk());
         }
@@ -97,7 +97,7 @@ class CalendarControllerEventScopesSecurityTest {
 
     private void authenticate(Role role) {
         Employee employee = Employee.builder().email("user").name("직원").roles(Set.of(role))
-                .systemAccount(role == Role.SUPER_ADMIN).build();
+                .systemAccount(role == Role.SYSTEM_ADMIN).build();
         ReflectionTestUtils.setField(employee, "id", 1L);
         UserPrincipal principal = UserPrincipal.from(employee);
         SecurityContextHolder.getContext().setAuthentication(

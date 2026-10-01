@@ -79,6 +79,6 @@ class HolidayControllerTest {
         PreAuthorize rule = HolidayController.class.getAnnotation(PreAuthorize.class);
 
         assertThat(rule).isNotNull();
-        assertThat(rule.value()).isEqualTo("hasAnyRole('HR_ADMIN','SUPER_ADMIN')");
+        assertThat(rule.value()).isEqualTo("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')");
     }
 }

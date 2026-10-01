@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "LeaveAdmin", description = "연차 운영(관리자)")
 @RestController
 @RequestMapping("/api/leave/admin")
-@PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
 public class LeaveAdminController {
 
     private final LeaveGrantService leaveGrantService;

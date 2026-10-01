@@ -69,14 +69,14 @@ class LeaveRequestControllerSecurityTest {
 
     @Test
     void 시스템_관리자는_모든_결재_API에서_서비스_호출_전에_403을_받는다() throws Exception {
-        authenticate(Set.of(Role.SUPER_ADMIN));
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
         assertApprovalForbidden();
         verifyNoInteractions(service, balances);
     }
 
     @Test
     void 시스템_관리자_권한에_다른_권한이_섞여도_결재_API를_우회할_수_없다() throws Exception {
-        authenticate(Set.of(Role.SUPER_ADMIN, Role.HR_ADMIN, Role.TEAM_LEAD));
+        authenticate(Set.of(Role.SYSTEM_ADMIN, Role.HR_ADMIN, Role.TEAM_LEAD));
         assertApprovalForbidden();
         verifyNoInteractions(service, balances);
     }
@@ -112,7 +112,7 @@ class LeaveRequestControllerSecurityTest {
 
     @Test
     void 서비스가_대리_취소를_거부하면_403으로_응답한다() throws Exception {
-        authenticate(Set.of(Role.SUPER_ADMIN));
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
         when(service.cancel(anyLong(), anyLong(), any()))
                 .thenThrow(new BusinessException(ErrorCode.FORBIDDEN));
         mvc.perform(post("/api/leave-requests/10/cancel")).andExpect(status().isForbidden());
@@ -121,7 +121,7 @@ class LeaveRequestControllerSecurityTest {
 
     @Test
     void 시스템_관리자는_다른_직원의_잔액을_조회할_수_있다() throws Exception {
-        authenticate(Set.of(Role.SUPER_ADMIN));
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
         mvc.perform(get("/api/leave-requests/balances/20").param("year", "2027"))
                 .andExpect(status().isOk());
         verify(service).assertCanViewEmployeeData(1L, 20L);
@@ -138,7 +138,7 @@ class LeaveRequestControllerSecurityTest {
 
     private void authenticate(Set<Role> roles) {
         Employee employee = Employee.builder().email("admin").name("관리자").roles(roles)
-                .systemAccount(roles.contains(Role.SUPER_ADMIN)).build();
+                .systemAccount(roles.contains(Role.SYSTEM_ADMIN)).build();
         ReflectionTestUtils.setField(employee, "id", 1L);
         UserPrincipal principal = UserPrincipal.from(employee);
         SecurityContextHolder.getContext().setAuthentication(

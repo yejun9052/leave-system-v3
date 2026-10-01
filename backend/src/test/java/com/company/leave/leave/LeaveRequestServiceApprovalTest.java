@@ -128,7 +128,7 @@ class LeaveRequestServiceApprovalTest {
         Department 플랫폼파트 = 부서(3L, "플랫폼파트", 제품개발팀);
         Department 경영지원팀 = 부서(5L, "경영지원팀", 본사);
 
-        최고관리자 = 직원(1L, 본사, Role.SUPER_ADMIN);
+        최고관리자 = 직원(1L, 본사, Role.SYSTEM_ADMIN);
         ReflectionTestUtils.setField(최고관리자, "systemAccount", true);
         인사관리자 = 직원(11L, 경영지원팀, Role.EMPLOYEE, Role.TEAM_LEAD, Role.HR_ADMIN);
         개발팀장 = 직원(2L, 제품개발팀, Role.EMPLOYEE, Role.TEAM_LEAD);
@@ -510,7 +510,7 @@ class LeaveRequestServiceApprovalTest {
 
     @Test
     void 시스템_관리자에게_인사와_팀장_역할과_부서장이_섞여도_결재할_수_없다() {
-        최고관리자.replaceRoles(Set.of(Role.SUPER_ADMIN, Role.HR_ADMIN, Role.TEAM_LEAD));
+        최고관리자.replaceRoles(Set.of(Role.SYSTEM_ADMIN, Role.HR_ADMIN, Role.TEAM_LEAD));
         lenient().when(departmentRepository.findByLeadId(1L)).thenReturn(List.of(개발팀원.getDepartment()));
         LeaveRequest request = 대기_신청(개발팀원);
         승인_권한_없음(() -> service.approve(request.getId(), 최고관리자.getId()));

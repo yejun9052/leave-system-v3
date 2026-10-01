@@ -49,14 +49,14 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={user?.systemAccount || user?.roles.includes("SUPER_ADMIN")
+      <Route element={<ProtectedRoute roles={user?.systemAccount || user?.roles.includes("SYSTEM_ADMIN")
         ? [] : ["TEAM_LEAD", "HR_ADMIN"]} />}>
         <Route element={<AppLayout />}>
           <Route path="approvals" element={<ApprovalsPage />} />
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={["HR_ADMIN", "SUPER_ADMIN"]} />}>
+      <Route element={<ProtectedRoute roles={["HR_ADMIN", "SYSTEM_ADMIN"]} />}>
         <Route element={<AppLayout />}>
           <Route path="admin/employees" element={<EmployeePage />} />
           <Route path="admin/departments" element={<DepartmentPage />} />

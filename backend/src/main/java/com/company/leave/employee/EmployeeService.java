@@ -86,7 +86,7 @@ public class EmployeeService {
     private Set<Long> currentScopeDeptIds() {
         UserPrincipal p = SecurityUtils.currentPrincipal();
         boolean admin = p.getAuthorities().stream().anyMatch(a ->
-                a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("ROLE_HR_ADMIN"));
+                a.getAuthority().equals("ROLE_SYSTEM_ADMIN") || a.getAuthority().equals("ROLE_HR_ADMIN"));
         if (admin) {
             return null;
         }
@@ -229,8 +229,8 @@ public class EmployeeService {
     }
 
     private Set<Role> resolveRoles(Set<Role> roles) {
-        if (roles != null && roles.contains(Role.SUPER_ADMIN)) {
-            throw new BusinessException(ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+        if (roles != null && roles.contains(Role.SYSTEM_ADMIN)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         }
         return (roles == null || roles.isEmpty()) ? EnumSet.of(Role.EMPLOYEE) : roles;
     }

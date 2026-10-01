@@ -37,11 +37,11 @@ const NAV: NavItem[] = [
   { to: "/my-leaves", label: "내 휴가", icon: CalendarCheck2 },
   { to: "/me", label: "내 정보", icon: UserRound },
   { to: "/approvals", label: "결재함", icon: Inbox, roles: ["TEAM_LEAD", "HR_ADMIN"] },
-  { to: "/admin/employees", label: "사용자 관리", icon: Users, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/departments", label: "부서 관리", icon: Building2, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/policy", label: "정책 · 휴가종류", icon: Settings, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/reports", label: "리포트", icon: BarChart3, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/audit", label: "이벤트 로그", icon: ShieldCheck, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
+  { to: "/admin/employees", label: "사용자 관리", icon: Users, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/departments", label: "부서 관리", icon: Building2, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/policy", label: "정책 · 휴가종류", icon: Settings, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/reports", label: "리포트", icon: BarChart3, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/audit", label: "이벤트 로그", icon: ShieldCheck, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
 ];
 
 export default function AppLayout() {
@@ -52,7 +52,7 @@ export default function AppLayout() {
   // 관리 전용 계정은 직원이 아니므로 "내 휴가" 메뉴를 숨긴다
   const visibleNav = NAV.filter(
     (n) => (!n.roles || hasAnyRole(...n.roles)) && !(user?.systemAccount && n.to === "/my-leaves")
-      && !(n.to === "/approvals" && (user?.systemAccount || hasAnyRole("SUPER_ADMIN"))),
+      && !(n.to === "/approvals" && (user?.systemAccount || hasAnyRole("SYSTEM_ADMIN"))),
   );
 
   const onLogout = async () => {
@@ -163,7 +163,7 @@ export default function AppLayout() {
 
 function primaryRoleLabel(roles?: Role[]): string {
   if (!roles || roles.length === 0) return "";
-  const order: Role[] = ["SUPER_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
+  const order: Role[] = ["SYSTEM_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
   const top = order.find((r) => roles.includes(r)) ?? roles[0];
   return ROLE_LABEL[top];
 }

@@ -89,7 +89,7 @@ class SystemAdminManagementAccessTest {
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         Employee admin = Employee.builder().email("admin").name("시스템 관리자").systemAccount(true)
-                .roles(Set.of(Role.SUPER_ADMIN)).build();
+                .roles(Set.of(Role.SYSTEM_ADMIN)).build();
         ReflectionTestUtils.setField(admin, "id", 1L);
         UserPrincipal principal = UserPrincipal.from(admin);
         SecurityContextHolder.getContext().setAuthentication(

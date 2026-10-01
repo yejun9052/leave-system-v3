@@ -49,7 +49,7 @@ public class EmployeeController {
     }
 
     @Operation(summary = "사용자 목록/검색 (페이지)")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN','TEAM_LEAD')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN','TEAM_LEAD')")
     @GetMapping
     public ApiResponse<PageResponse<EmployeeResponse>> search(
             @RequestParam(required = false) String keyword,
@@ -62,21 +62,21 @@ public class EmployeeController {
     }
 
     @Operation(summary = "사용자 단건 조회")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN','TEAM_LEAD')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN','TEAM_LEAD')")
     @GetMapping("/{id}")
     public ApiResponse<EmployeeResponse> get(@PathVariable Long id) {
         return ApiResponse.ok(employeeService.get(id));
     }
 
     @Operation(summary = "사용자 생성")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping
     public ApiResponse<EmployeeResponse> create(@Valid @RequestBody EmployeeRequests.Create req) {
         return ApiResponse.ok(employeeService.create(req));
     }
 
     @Operation(summary = "사용자 수정")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PutMapping("/{id}")
     public ApiResponse<EmployeeResponse> update(
             @PathVariable Long id, @Valid @RequestBody EmployeeRequests.Update req) {
@@ -84,7 +84,7 @@ public class EmployeeController {
     }
 
     @Operation(summary = "사용자 퇴사 처리")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @DeleteMapping("/{id}")
     public ApiResponse<Void> resign(
             @PathVariable Long id,
@@ -94,7 +94,7 @@ public class EmployeeController {
     }
 
     @Operation(summary = "사용자 재직 복원")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PatchMapping("/{id}/reactivate")
     public ApiResponse<Void> reactivate(@PathVariable Long id) {
         employeeService.reactivate(id);
@@ -103,7 +103,7 @@ public class EmployeeController {
 
     @Operation(summary = "비밀번호 재설정 메일 발송(관리자)",
             description = "비밀번호는 바꾸지 않고, 본인에게 1회용 재설정 링크(30분 유효)를 메일로 보낸다.")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PatchMapping("/{id}/password")
     public ApiResponse<Void> resetPassword(@PathVariable Long id) {
         employeeService.sendPasswordResetMail(id);
@@ -133,7 +133,7 @@ public class EmployeeController {
     // --- 엑셀 ---
 
     @Operation(summary = "사용자 엑셀 내보내기")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @GetMapping("/export")
     public ResponseEntity<ByteArrayResource> export() {
         byte[] bytes = excelService.export();
@@ -147,7 +147,7 @@ public class EmployeeController {
     }
 
     @Operation(summary = "사용자 엑셀 일괄 등록")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<EmployeeExcelService.ImportResult> importExcel(
             @RequestParam("file") MultipartFile file) throws IOException {

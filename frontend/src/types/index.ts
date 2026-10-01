@@ -1,7 +1,7 @@
-export type Role = "SUPER_ADMIN" | "HR_ADMIN" | "TEAM_LEAD" | "EMPLOYEE";
+export type Role = "SYSTEM_ADMIN" | "HR_ADMIN" | "TEAM_LEAD" | "EMPLOYEE";
 
 export const ROLE_LABEL: Record<Role, string> = {
-  SUPER_ADMIN: "시스템관리자",
+  SYSTEM_ADMIN: "시스템관리자",
   HR_ADMIN: "인사관리자",
   TEAM_LEAD: "팀장",
   EMPLOYEE: "사원",

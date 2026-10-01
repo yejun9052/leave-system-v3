@@ -26,7 +26,7 @@ public class PolicyRulesController {
         this.service = service;
     }
 
-    private static final String MANAGER = "hasAnyRole('HR_ADMIN','SUPER_ADMIN')";
+    private static final String MANAGER = "hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')";
 
     // 장기근속 포상
     @GetMapping("/award-rules")

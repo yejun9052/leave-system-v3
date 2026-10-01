@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api/holidays")
-@PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
 public class HolidayController {
 
     private final HolidayRepository holidayRepository;

@@ -55,6 +55,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isManager: () => {
     const user = get().user;
     if (!user) return false;
-    return user.roles.some((r) => r === "SUPER_ADMIN" || r === "HR_ADMIN");
+    return user.roles.some((r) => r === "SYSTEM_ADMIN" || r === "HR_ADMIN");
   },
 }));

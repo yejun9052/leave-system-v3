@@ -82,7 +82,7 @@ class CalendarServiceEventScopesTest {
 
     @Test
     void 시스템_관리자도_관리자와_같은_목록을_받는다() {
-        List<CalendarDtos.EventScopeOption> options = service.eventScopes(user(1L, Role.SUPER_ADMIN));
+        List<CalendarDtos.EventScopeOption> options = service.eventScopes(user(1L, Role.SYSTEM_ADMIN));
 
         assertThat(options).hasSize(5);
         assertThat(options.get(0).scope()).isEqualTo(CalendarEventScope.COMPANY);
@@ -141,7 +141,7 @@ class CalendarServiceEventScopesTest {
     private UserPrincipal user(Long id, Role role) {
         Employee e = Employee.builder().email("user" + id + "@company.com").name("직원")
                 .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1))
-                .systemAccount(role == Role.SUPER_ADMIN).roles(Set.of(role)).build();
+                .systemAccount(role == Role.SYSTEM_ADMIN).roles(Set.of(role)).build();
         ReflectionTestUtils.setField(e, "id", id);
         return UserPrincipal.from(e);
     }

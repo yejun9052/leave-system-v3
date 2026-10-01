@@ -32,7 +32,7 @@ public enum ErrorCode {
     // 사용자
     EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     EMAIL_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
-    SUPER_ADMIN_ROLE_RESTRICTED(HttpStatus.BAD_REQUEST,
+    SYSTEM_ADMIN_ROLE_RESTRICTED(HttpStatus.BAD_REQUEST,
             "시스템 관리자 권한은 관리 전용 계정에만 부여할 수 있습니다."),
     SYSTEM_ACCOUNT_ROLE_IMMUTABLE(HttpStatus.BAD_REQUEST,
             "관리 전용 계정의 권한은 변경할 수 없습니다."),

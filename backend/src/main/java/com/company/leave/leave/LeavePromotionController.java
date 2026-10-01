@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "LeavePromotion", description = "연차 촉진 / 미사용 현황")
 @RestController
 @RequestMapping("/api/leave/promotion")
-@PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
 public class LeavePromotionController {
 
     private final LeavePromotionService promotionService;

@@ -136,7 +136,7 @@ class EmployeeExcelServiceTest {
     void 시스템_관리자_권한이_뒤쪽_행에_있어도_아무_직원도_등록하지_않고_400으로_거부한다() throws IOException {
         byte[] file = 엑셀(NEW_HEADERS,
                 new String[] {"ok@company.com", "정상", "", "", "", "2024-01-02", "EMPLOYEE"},
-                new String[] {"bad@company.com", "권한상승", "", "", "", "2024-01-02", " HR_ADMIN, SUPER_ADMIN "});
+                new String[] {"bad@company.com", "권한상승", "", "", "", "2024-01-02", " HR_ADMIN, SYSTEM_ADMIN "});
 
         assertForbiddenRoles(file);
     }
@@ -144,7 +144,7 @@ class EmployeeExcelServiceTest {
     @Test
     void 예전_양식의_시스템_관리자_권한도_거부한다() throws IOException {
         byte[] file = 엑셀(LEGACY_HEADERS,
-                new String[] {"bad@company.com", "권한상승", "E001", "", "", "", "2024-01-02", "SUPER_ADMIN"});
+                new String[] {"bad@company.com", "권한상승", "E001", "", "", "", "2024-01-02", "SYSTEM_ADMIN"});
 
         assertForbiddenRoles(file);
     }
@@ -152,7 +152,7 @@ class EmployeeExcelServiceTest {
     private void assertForbiddenRoles(byte[] file) {
         assertThatThrownBy(() -> excelService.importFrom(new ByteArrayInputStream(file)))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> {
-                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.SUPER_ADMIN_ROLE_RESTRICTED);
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
                     assertThat(ex.getErrorCode().status().value()).isEqualTo(400);
                 });
         verify(employeeService, never()).create(any());

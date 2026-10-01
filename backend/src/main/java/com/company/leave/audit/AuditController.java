@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Audit", description = "이벤트(감사) 로그")
 @RestController
 @RequestMapping("/api/audit-logs")
-@PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
 public class AuditController {
 
     private final AuditService auditService;

@@ -30,7 +30,7 @@ public class PolicyController {
     }
 
     @Operation(summary = "정책 수정")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @PutMapping
     public ApiResponse<PolicyDtos.Response> update(@Valid @RequestBody PolicyDtos.UpdateRequest req) {
         return ApiResponse.ok(policyService.update(req));
