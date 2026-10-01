@@ -45,6 +45,27 @@ export function todayString(): string {
   return localDateString(new Date());
 }
 
+/** "YYYY-MM" 달을 delta 만큼 옮긴다("2026-12", 1 → "2027-01"). */
+export function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return d.toISOString().slice(0, 7);
+}
+
+/**
+ * 월 격자에 그릴 날짜들: 그 달 1일이 있는 주의 일요일부터 말일이 있는 주의 토요일까지(필요한 주 수만큼).
+ * 앞뒤 달 날짜도 칸을 채우려고 포함한다.
+ */
+export function monthGridDates(month: string): string[] {
+  const first = `${month}-01`;
+  const start = addDays(first, -toUtc(first).getUTCDay());
+  const last = addDays(`${shiftMonth(month, 1)}-01`, -1);
+  const end = addDays(last, 6 - toUtc(last).getUTCDay());
+  const dates: string[] = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
+  return dates;
+}
+
 /** 캘린더 신청 선택. end 가 null 이면 시작일만 고른 상태(그대로 신청하면 그 하루). */
 export interface DateSelection {
   start: string;
