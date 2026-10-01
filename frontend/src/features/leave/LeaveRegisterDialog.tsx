@@ -90,6 +90,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
       qc.invalidateQueries({ queryKey: ["calendarEvents"] });
       qc.invalidateQueries({ queryKey: ["calendarDay"] });
       qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
+      qc.invalidateQueries({ queryKey: ["leaveList"] });
       onClose();
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),

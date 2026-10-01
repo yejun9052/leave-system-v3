@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -31,6 +32,7 @@ import { extractErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import type { LeaveRequest } from "@/types";
 import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
+import LeaveListTab from "./LeaveListTab";
 import LeaveRegisterDialog from "./LeaveRegisterDialog";
 
 type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
@@ -92,6 +94,7 @@ export default function ApprovalsPage() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
     qc.invalidateQueries({ queryKey: ["calendarEvents"] });
+    qc.invalidateQueries({ queryKey: ["leaveList"] });
   };
   const onError = (e: unknown) => {
     toast({ title: extractErrorMessage(e), variant: "destructive" });
@@ -132,130 +135,141 @@ export default function ApprovalsPage() {
         )}
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortableTableHead sortKey="kind" sort={sort} onSort={toggle}>구분</SortableTableHead>
-                <SortableTableHead sortKey="employee" sort={sort} onSort={toggle}>신청자</SortableTableHead>
-                <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
-                <SortableTableHead sortKey="type" sort={sort} onSort={toggle}>종류</SortableTableHead>
-                <SortableTableHead sortKey="period" sort={sort} onSort={toggle}>기간</SortableTableHead>
-                <SortableTableHead sortKey="days" sort={sort} onSort={toggle}>일수</SortableTableHead>
-                <SortableTableHead sortKey="reason" sort={sort} onSort={toggle}>사유</SortableTableHead>
-                <TableHead className="text-right">결재</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                    불러오는 중…
-                  </TableCell>
-                </TableRow>
-              ) : pending.length > 0 ? (
-                sorted.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {r.status === "CANCEL_REQUESTED" ? (
-                          <Badge variant="destructive">취소요청</Badge>
-                        ) : (
-                          <Badge variant="secondary">신규</Badge>
-                        )}
-                        {r.ownRequest && (
-                          <Badge variant="warning" title="결재자 본인의 신청입니다(자가 승인)">
-                            본인 신청
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{r.employeeName}</TableCell>
-                    <TableCell>{r.departmentName ?? "-"}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-2">
-                        <span
-                          className="inline-block h-3 w-3 rounded-full"
-                          style={{ backgroundColor: r.leaveTypeColor }}
-                        />
-                        {r.leaveTypeName}
-                        {r.specialRuleName && (
-                          <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
-                        )}
-                      </span>
-                      {r.approvalWarning && (
-                        <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {r.startDate}
-                      {r.startDate !== r.endDate && ` ~ ${r.endDate}`}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{formatLeaveAmount(r)}</Badge>
-                      {r.forfeitedDays > 0 && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          연차 {formatDays(r.forfeitedDays)}일 소멸
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-[180px] truncate text-muted-foreground">
-                      {(r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason) ?? "-"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        {r.status === "CANCEL_REQUESTED" ? (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => onApproveCancel(r)}
-                              disabled={approveCancel.isPending}
-                            >
-                              <Check className="h-4 w-4" /> 취소 승인
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setRejecting({ req: r, mode: "cancelReject" })}
-                            >
-                              <X className="h-4 w-4" /> 취소 반려
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => onApprove(r)}
-                              disabled={approve.isPending}
-                            >
-                              <Check className="h-4 w-4" /> 승인
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setRejecting({ req: r, mode: "reject" })}
-                            >
-                              <X className="h-4 w-4" /> 반려
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
+      <Tabs defaultValue="pending">
+        <TabsList>
+          <TabsTrigger value="pending">결재 대기{pending.length > 0 && ` (${pending.length})`}</TabsTrigger>
+          <TabsTrigger value="list">휴가 목록</TabsTrigger>
+        </TabsList>
+        <TabsContent value="pending">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <SortableTableHead sortKey="kind" sort={sort} onSort={toggle}>구분</SortableTableHead>
+                    <SortableTableHead sortKey="employee" sort={sort} onSort={toggle}>신청자</SortableTableHead>
+                    <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
+                    <SortableTableHead sortKey="type" sort={sort} onSort={toggle}>종류</SortableTableHead>
+                    <SortableTableHead sortKey="period" sort={sort} onSort={toggle}>기간</SortableTableHead>
+                    <SortableTableHead sortKey="days" sort={sort} onSort={toggle}>일수</SortableTableHead>
+                    <SortableTableHead sortKey="reason" sort={sort} onSort={toggle}>사유</SortableTableHead>
+                    <TableHead className="text-right">결재</TableHead>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                    <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                    대기 중인 결재가 없습니다.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        불러오는 중…
+                      </TableCell>
+                    </TableRow>
+                  ) : pending.length > 0 ? (
+                    sorted.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {r.status === "CANCEL_REQUESTED" ? (
+                              <Badge variant="destructive">취소요청</Badge>
+                            ) : (
+                              <Badge variant="secondary">신규</Badge>
+                            )}
+                            {r.ownRequest && (
+                              <Badge variant="warning" title="결재자 본인의 신청입니다(자가 승인)">
+                                본인 신청
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">{r.employeeName}</TableCell>
+                        <TableCell>{r.departmentName ?? "-"}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center gap-2">
+                            <span
+                              className="inline-block h-3 w-3 rounded-full"
+                              style={{ backgroundColor: r.leaveTypeColor }}
+                            />
+                            {r.leaveTypeName}
+                            {r.specialRuleName && (
+                              <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
+                            )}
+                          </span>
+                          {r.approvalWarning && (
+                            <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {r.startDate}
+                          {r.startDate !== r.endDate && ` ~ ${r.endDate}`}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{formatLeaveAmount(r)}</Badge>
+                          {r.forfeitedDays > 0 && (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              연차 {formatDays(r.forfeitedDays)}일 소멸
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-[180px] truncate text-muted-foreground">
+                          {(r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason) ?? "-"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            {r.status === "CANCEL_REQUESTED" ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => onApproveCancel(r)}
+                                  disabled={approveCancel.isPending}
+                                >
+                                  <Check className="h-4 w-4" /> 취소 승인
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setRejecting({ req: r, mode: "cancelReject" })}
+                                >
+                                  <X className="h-4 w-4" /> 취소 반려
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => onApprove(r)}
+                                  disabled={approve.isPending}
+                                >
+                                  <Check className="h-4 w-4" /> 승인
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setRejecting({ req: r, mode: "reject" })}
+                                >
+                                  <X className="h-4 w-4" /> 반려
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                        <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                        대기 중인 결재가 없습니다.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="list">
+          <LeaveListTab />
+        </TabsContent>
+      </Tabs>
 
       {rejecting && (
         <RejectDialog

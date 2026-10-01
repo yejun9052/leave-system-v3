@@ -1,5 +1,5 @@
 import { api, unwrap } from "./client";
-import type { LeaveBalance, LeaveRequest, LeaveType, Page } from "@/types";
+import type { LeaveBalance, LeaveRequest, LeaveRequestStatus, LeaveType, Page } from "@/types";
 
 export interface LeaveRequestCreate {
   leaveTypeId: number;
@@ -59,6 +59,17 @@ export interface ApprovalRoute {
   leadName: string | null;
 }
 
+export interface LeaveSearchParams {
+  keyword?: string;
+  /** 비면 전체 상태 */
+  statuses?: LeaveRequestStatus[];
+  /** 휴가 기간이 from~to 와 겹치는 것 */
+  from?: string;
+  to?: string;
+  page?: number;
+  size?: number;
+}
+
 export const leaveApi = {
   activeTypes: () =>
     unwrap<LeaveType[]>(api.get("/leave-types", { params: { includeInactive: false } })),
@@ -84,6 +95,14 @@ export const leaveApi = {
     unwrap<Page<LeaveRequest>>(api.get("/leave-requests/me", { params: { page, size } })),
 
   pending: () => unwrap<LeaveRequest[]>(api.get("/leave-requests/pending")),
+
+  /** 결재함 휴가 목록: 팀장은 맡은 부서(하위 포함)만, 인사관리자·시스템 관리자는 전체. 휴가 시작일 최신순 */
+  search: (params: LeaveSearchParams) =>
+    unwrap<Page<LeaveRequest>>(
+      api.get("/leave-requests", {
+        params: { ...params, statuses: params.statuses?.join(",") || undefined },
+      }),
+    ),
 
   approve: (id: number) => unwrap<LeaveRequest>(api.post(`/leave-requests/${id}/approve`)),
   reject: (id: number, reason: string) =>
