@@ -111,7 +111,9 @@ Check "SYSTEM_ADMIN cannot be granted to employee -> 400" ($superRes.status -eq 
 SetQaPassword "qa.lead@test.local"
 SetQaPassword "qa.emp@test.local"
 SetQaPassword "qa.hr@test.local"
-Req PUT "$base/departments/$($qa.id)" $admin (@{name="QA_Team";leadId=$lead.id;sortOrder=0}|ConvertTo-Json) | Out-Null
+# 팀장 권한이 있으면 자기 부서의 부서장으로 자동 지정된다(직접 지정하지 않음)
+$qaDept = (Req GET "$base/departments" $admin).data.data | % { $_; $_.children } | % { $_; $_.children } | ? { $_.id -eq $qa.id } | Select-Object -First 1
+Check "TEAM_LEAD auto-assigned as department lead" ($qaDept.leadId -eq $lead.id) "(leadId=$($qaDept.leadId))"
 $leadBal = (Req GET "$base/leave-requests/balances/$($lead.id)" $admin).data.data
 $empBal = (Req GET "$base/leave-requests/balances/$($emp.id)" $admin).data.data
 Check "lead seniority (2019 -> 18)" ($leadBal.granted -eq 18) "(granted=$($leadBal.granted))"

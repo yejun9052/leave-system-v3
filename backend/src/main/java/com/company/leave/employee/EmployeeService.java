@@ -40,6 +40,7 @@ public class EmployeeService {
     private final SessionTerminator sessionTerminator;
     private final TemporaryPasswordGenerator temporaryPasswordGenerator;
     private final PasswordResetService passwordResetService;
+    private final DepartmentLeadSync leadSync;
 
     public EmployeeService(EmployeeRepository employeeRepository,
                            DepartmentRepository departmentRepository,
@@ -48,7 +49,8 @@ public class EmployeeService {
                            LicenseService licenseService,
                            SessionTerminator sessionTerminator,
                            TemporaryPasswordGenerator temporaryPasswordGenerator,
-                           PasswordResetService passwordResetService) {
+                           PasswordResetService passwordResetService,
+                           DepartmentLeadSync leadSync) {
         this.employeeRepository = employeeRepository;
         this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
@@ -57,6 +59,7 @@ public class EmployeeService {
         this.sessionTerminator = sessionTerminator;
         this.temporaryPasswordGenerator = temporaryPasswordGenerator;
         this.passwordResetService = passwordResetService;
+        this.leadSync = leadSync;
     }
 
     @Transactional(readOnly = true)
@@ -120,6 +123,7 @@ public class EmployeeService {
                 .build();
         employee.requirePasswordChange();
         Employee saved = employeeRepository.save(employee);
+        leadSync.afterSave(saved, null, false); // 팀장이면 부서장이 빈 소속 부서의 부서장으로
 
         // 연차 엔진에 신규 입사자 알림 → 초기 연차 부여 (Phase 3)
         eventPublisher.publishEvent(new EmployeeCreatedEvent(saved.getId()));
@@ -137,26 +141,33 @@ public class EmployeeService {
         }
         Set<Role> roles = resolveRoles(req.roles());
         validateEmailUnique(req.email(), id);
+        Long previousDepartmentId = employee.getDepartmentId();
+        boolean wasTeamLead = DepartmentLeadSync.isActiveTeamLead(employee);
 
         employee.changeEmail(req.email());
         employee.updateProfile(req.name(), req.position(), req.phone());
         employee.changeHireDate(req.hireDate());
         employee.assignDepartment(resolveDepartment(req.departmentId()));
         employee.replaceRoles(roles);
+        leadSync.afterSave(employee, previousDepartmentId, wasTeamLead);
         return EmployeeResponse.from(employee);
     }
 
     @Transactional
     public void resign(Long id, LocalDate resignedDate) {
         Employee employee = getManageable(id);
+        boolean wasTeamLead = DepartmentLeadSync.isActiveTeamLead(employee);
         employee.resign(resignedDate != null ? resignedDate : LocalDate.now());
+        leadSync.afterSave(employee, employee.getDepartmentId(), wasTeamLead); // 맡던 부서는 다른 팀장으로
         // 퇴사자의 로그인 세션 즉시 폐기 (이후 요청은 AccountStateFilter 에서도 차단됨)
         sessionTerminator.terminateAll(employee.getId());
     }
 
     @Transactional
     public void reactivate(Long id) {
-        getManageable(id).reactivate();
+        Employee employee = getManageable(id);
+        employee.reactivate();
+        leadSync.afterSave(employee, employee.getDepartmentId(), false);
     }
 
     /** 관리자 초기화: 비밀번호를 바꾸지 않고 본인에게 재설정 링크 메일만 보낸다. */

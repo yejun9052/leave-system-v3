@@ -66,7 +66,8 @@ class EmployeeServicePasswordTest {
     @BeforeEach
     void setUp() {
         service = new EmployeeService(employeeRepository, departmentRepository, passwordEncoder, eventPublisher,
-                licenseService, sessionTerminator, generator, passwordResetService);
+                licenseService, sessionTerminator, generator, passwordResetService,
+                new DepartmentLeadSync(departmentRepository, employeeRepository));
     }
 
     @Test

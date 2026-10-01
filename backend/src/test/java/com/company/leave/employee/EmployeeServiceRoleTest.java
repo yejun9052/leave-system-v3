@@ -55,7 +55,7 @@ class EmployeeServiceRoleTest {
     @BeforeEach
     void setUp() {
         service = new EmployeeService(employees, departments, encoder, events, license, sessions,
-                new TemporaryPasswordGenerator(), resets);
+                new TemporaryPasswordGenerator(), resets, new DepartmentLeadSync(departments, employees));
         hr = employee(11L, false, Set.of(Role.HR_ADMIN));
         UserPrincipal principal = UserPrincipal.from(hr);
         SecurityContextHolder.getContext().setAuthentication(
