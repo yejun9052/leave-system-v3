@@ -71,19 +71,25 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
     }
 
     /**
-     * 목록 표의 모든 칸으로 검색: 이름·이메일·부서·직급·연락처(부분 일치), 권한·상태(코드 또는 한글 이름, 예: "팀장", "퇴사").
-     * 공백으로 나눈 단어는 모두 맞아야 한다(예: "QA 팀장").
+     * 목록 표의 모든 칸으로 검색: 이름·이메일·직급·연락처(부분 일치), 부서(이름이 맞는 부서와 그 하위 부서 전부,
+     * 예: "연구소" → 연구소·QA·개발팀 소속), 권한·상태(코드 또는 한글 이름, 예: "팀장", "퇴사").
+     * 공백으로 나눈 단어는 모두 맞아야 한다(예: "연구소 팀장").
      */
     private BooleanBuilder keyword(QEmployee e, QDepartment d, String keyword) {
         BooleanBuilder all = new BooleanBuilder();
-        for (String token : SearchKeywords.tokens(keyword)) {
+        List<String> tokens = SearchKeywords.tokens(keyword);
+        List<DeptRow> departments = tokens.isEmpty() ? List.of() : loadDepartments();
+        for (String token : tokens) {
             String like = SearchKeywords.likePattern(token);
             BooleanBuilder any = new BooleanBuilder()
                     .or(e.name.lower().like(like, '\\'))
                     .or(e.email.lower().like(like, '\\'))
                     .or(e.position.lower().like(like, '\\'))
-                    .or(e.phone.lower().like(like, '\\'))
-                    .or(d.name.lower().like(like, '\\'));
+                    .or(e.phone.lower().like(like, '\\'));
+            Set<Long> deptIds = subtreesMatching(departments, token);
+            if (!deptIds.isEmpty()) {
+                any.or(d.id.in(deptIds));
+            }
             Set<Role> roles = new java.util.HashSet<>(SearchKeywords.codesMatching(ROLE_LABELS, token));
             Arrays.stream(Role.values()).filter(r -> r.name().toLowerCase().contains(token)).forEach(roles::add);
             if (!roles.isEmpty()) {
@@ -96,5 +102,42 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
             all.and(any);
         }
         return all;
+    }
+
+    /** 부서 id·상위 id·이름. 부서 수가 많지 않아 검색 때 한 번 읽어 메모리에서 하위 부서를 펼친다. */
+    record DeptRow(Long id, Long parentId, String name) {
+    }
+
+    private List<DeptRow> loadDepartments() {
+        QDepartment dept = new QDepartment("searchDept");
+        QDepartment parent = new QDepartment("searchParent");
+        return queryFactory.select(dept.id, parent.id, dept.name)
+                .from(dept)
+                .leftJoin(dept.parent, parent)
+                .fetch().stream()
+                .map(t -> new DeptRow(t.get(dept.id), t.get(parent.id), t.get(dept.name)))
+                .toList();
+    }
+
+    /** 이름에 단어가 들어 있는 부서와 그 하위 부서 전부의 id. */
+    static Set<Long> subtreesMatching(List<DeptRow> departments, String token) {
+        Map<Long, List<Long>> children = new java.util.HashMap<>();
+        for (DeptRow row : departments) {
+            if (row.parentId() != null) {
+                children.computeIfAbsent(row.parentId(), k -> new java.util.ArrayList<>()).add(row.id());
+            }
+        }
+        Set<Long> result = new java.util.HashSet<>();
+        java.util.Deque<Long> stack = new java.util.ArrayDeque<>();
+        departments.stream()
+                .filter(row -> row.name() != null && row.name().toLowerCase(java.util.Locale.ROOT).contains(token))
+                .forEach(row -> stack.push(row.id()));
+        while (!stack.isEmpty()) {
+            Long id = stack.pop();
+            if (result.add(id)) {
+                children.getOrDefault(id, List.of()).forEach(stack::push);
+            }
+        }
+        return result;
     }
 }
