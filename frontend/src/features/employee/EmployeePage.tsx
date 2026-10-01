@@ -178,7 +178,7 @@ export default function EmployeePage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="이름, 이메일 검색"
+            placeholder="이름·이메일·부서·직급·권한·상태 검색"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
