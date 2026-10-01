@@ -2,6 +2,7 @@ package com.company.leave.employee;
 
 import com.company.leave.auth.SessionTerminator;
 import com.company.leave.common.dto.ApiResponse;
+import com.company.leave.common.dto.PageResponse;
 import com.company.leave.employee.domain.EmployeeStatus;
 import com.company.leave.employee.dto.EmployeeRequests;
 import com.company.leave.employee.dto.EmployeeResponse;
@@ -14,7 +15,6 @@ import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.LocalDate;
 import org.springframework.core.io.ByteArrayResource;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -51,14 +51,14 @@ public class EmployeeController {
     @Operation(summary = "사용자 목록/검색 (페이지)")
     @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN','TEAM_LEAD')")
     @GetMapping
-    public ApiResponse<Page<EmployeeResponse>> search(
+    public ApiResponse<PageResponse<EmployeeResponse>> search(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long departmentId,
             @RequestParam(required = false) EmployeeStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         var condition = new EmployeeSearchCondition(keyword, departmentId, status);
-        return ApiResponse.ok(employeeService.search(condition, PageRequest.of(page, size)));
+        return ApiResponse.ok(PageResponse.from(employeeService.search(condition, PageRequest.of(page, size))));
     }
 
     @Operation(summary = "사용자 단건 조회")

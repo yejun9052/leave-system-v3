@@ -1,6 +1,7 @@
 package com.company.leave.leave;
 
 import com.company.leave.common.dto.ApiResponse;
+import com.company.leave.common.dto.PageResponse;
 import com.company.leave.leave.dto.LeaveBalanceResponse;
 import com.company.leave.leave.dto.LeaveRequestDtos;
 import com.company.leave.security.SecurityUtils;
@@ -9,7 +10,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,11 +67,11 @@ public class LeaveRequestController {
 
     @Operation(summary = "내 휴가 신청 목록")
     @GetMapping("/me")
-    public ApiResponse<Page<LeaveRequestDtos.Response>> myRequests(
+    public ApiResponse<PageResponse<LeaveRequestDtos.Response>> myRequests(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.ok(leaveRequestService.myRequests(
-                SecurityUtils.currentEmployeeId(), PageRequest.of(page, size)));
+        return ApiResponse.ok(PageResponse.from(leaveRequestService.myRequests(
+                SecurityUtils.currentEmployeeId(), PageRequest.of(page, size))));
     }
 
     @Operation(summary = "결재 대기 목록")
