@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
@@ -64,7 +65,10 @@ export default function DepartmentPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const confirm = useConfirm();
+  const navigate = useNavigate();
   const [dialog, setDialog] = useState<DialogMode>(null);
+  // 끌기를 끝낸 직후 같은 행에 생기는 클릭은 명단 열기로 보지 않는다
+  const dragEndedAt = useRef(0);
 
   const { data: tree = [], isLoading } = useQuery({
     queryKey: ["departments", "tree"],
@@ -93,6 +97,17 @@ export default function DepartmentPage() {
       confirmText: "옮기기",
     });
     if (ok) moveMutation.mutate({ id: dept.id, parentId: target === "root" ? null : target });
+  };
+
+  /** 부서를 누르면 그 부서 이름으로 검색한 사용자 관리 화면으로 넘어간다(확인 후) */
+  const onOpenMembers = async (dept: Department) => {
+    if (Date.now() - dragEndedAt.current < 300) return;
+    const ok = await confirm({
+      title: `'${dept.name}' 부서 명단을 확인하시겠습니까?`,
+      description: `사용자 관리로 이동해 '${dept.name}' 검색 결과를 보여 줍니다.`,
+      confirmText: "확인",
+    });
+    if (ok) navigate(`/admin/employees?${new URLSearchParams({ keyword: dept.name })}`);
   };
 
   /**
@@ -130,6 +145,7 @@ export default function DepartmentPage() {
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("keydown", onKey);
       setDrag(null);
+      if (started) dragEndedAt.current = Date.now();
       if (drop && started && target != null) void onDrop(dept, target);
     };
     const onUp = () => finish(true);
@@ -167,7 +183,7 @@ export default function DepartmentPage() {
         <div>
           <h1 className="text-2xl font-bold">부서 관리</h1>
           <p className="text-sm text-muted-foreground">
-            부서 계층 구조를 관리합니다. 왼쪽 손잡이를 끌어 다른 부서 위에 놓으면 그 하위로 옮겨집니다.
+            부서 계층 구조를 관리합니다. 부서를 누르면 명단을, 왼쪽 손잡이를 끌어 다른 부서 위에 놓으면 그 하위로 옮깁니다.
           </p>
         </div>
         <Button onClick={() => setDialog({ type: "create", parentId: null })}>
@@ -190,6 +206,7 @@ export default function DepartmentPage() {
                   depth={0}
                   drag={drag}
                   onDragStart={startDrag}
+                  onOpen={onOpenMembers}
                   onAddChild={(parentId) => setDialog({ type: "create", parentId })}
                   onEdit={(dept) => setDialog({ type: "edit", dept })}
                   onMove={(dept) => setDialog({ type: "move", dept })}
@@ -251,6 +268,7 @@ function DeptNode({
   depth,
   drag,
   onDragStart,
+  onOpen,
   onAddChild,
   onEdit,
   onMove,
@@ -260,6 +278,7 @@ function DeptNode({
   depth: number;
   drag: DragState | null;
   onDragStart: (d: Department, e: React.PointerEvent) => void;
+  onOpen: (d: Department) => void;
   onAddChild: (parentId: number) => void;
   onEdit: (d: Department) => void;
   onMove: (d: Department) => void;
@@ -278,8 +297,15 @@ function DeptNode({
           "group flex items-center gap-2 rounded-lg px-2 py-2",
           !drag && "hover:bg-accent",
           isTarget && "bg-primary/10 ring-2 ring-primary",
+          !drag && "cursor-pointer",
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
+        title="눌러서 부서 명단 보기"
+        onClick={(e) => {
+          // 펼치기·손잡이·관리 버튼을 누른 경우는 제외
+          if ((e.target as HTMLElement).closest("button, [role=button]")) return;
+          onOpen(dept);
+        }}
       >
         <span
           role="button"
@@ -340,6 +366,7 @@ function DeptNode({
               depth={depth + 1}
               drag={drag}
               onDragStart={onDragStart}
+              onOpen={onOpen}
               onAddChild={onAddChild}
               onEdit={onEdit}
               onMove={onMove}

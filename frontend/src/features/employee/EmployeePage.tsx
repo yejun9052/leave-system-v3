@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -65,9 +66,15 @@ export default function EmployeePage() {
   const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [keyword, setKeyword] = useState("");
-  const [search, setSearch] = useState("");
+  // 검색어는 주소(?keyword=)에 둔다: 부서 관리에서 부서를 눌러 넘어오면 그 부서 이름으로 검색된 상태로 열린다
+  const [searchParams, setSearchParams] = useSearchParams();
+  const search = searchParams.get("keyword") ?? "";
+  const [keyword, setKeyword] = useState(search);
   const [page, setPage] = useState(0);
+  useEffect(() => {
+    setKeyword(search);
+    setPage(0);
+  }, [search]);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -139,7 +146,8 @@ export default function EmployeePage() {
   const onSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(0);
-    setSearch(keyword);
+    const trimmed = keyword.trim();
+    setSearchParams(trimmed ? { keyword: trimmed } : {}, { replace: true });
   };
 
   return (
