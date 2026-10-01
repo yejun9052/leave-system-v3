@@ -114,8 +114,54 @@ public class LeaveRequestService {
 
         LocalDate start = req.startDate();
         LocalDate end = req.endDate();
+        Plan plan = plan(employee, type, policy, start, end, req.hours(), req.specialRuleId(), false);
+
+        if (plan.forfeit().signum() > 0 && !Boolean.TRUE.equals(req.forfeitAcknowledged())) {
+            throw new BusinessException(ErrorCode.LEAVE_FORFEIT_NOT_ACKNOWLEDGED,
+                    type.getName() + "가 승인되면 남은 연차 " + plain(plan.forfeit())
+                            + "일이 소멸됩니다. 안내를 확인한 뒤 신청해 주세요.");
+        }
+
+        String hrDirectReason = resolveHrDirect(employee, req.hrDirectReason(), policy);
+
+        LeaveRequest request = new LeaveRequest(
+                employee, type, start, end, plan.days(), plan.deduction(), plan.appliedYear(), req.reason());
+        SpecialLeaveRule specialRule = plan.specialRule();
+        if (specialRule != null) {
+            request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
+        }
+        if (hrDirectReason != null) {
+            request.routeDirectToHr(hrDirectReason);
+        }
+        requestRepository.save(request);
+
+        String warning = notifyApprovers(request, policy);
+        return LeaveRequestDtos.Response.from(request).withRequestWarning(warning);
+    }
+
+    /**
+     * 신청 검증·계산 결과. 신청 생성과 미리보기가 같은 계산({@link #plan})을 써서 화면 안내와 실제 처리가 어긋나지 않게 한다.
+     *
+     * @param days        기록 일수(종일=근무일 수, 반차 0.5 …)
+     * @param workdays    기간 내 근무일 수(주말·공휴일 제외)
+     * @param deduction   연차 차감액(비차감 종류는 0)
+     * @param specialRule 고른 경조사 규정(없으면 null)
+     * @param forfeit     승인 시 소멸될 남은 연차(병가·공가, 그 외 0)
+     */
+    private record Plan(BigDecimal days, int workdays, BigDecimal deduction, int appliedYear,
+                        SpecialLeaveRule specialRule, BigDecimal forfeit) {
+    }
+
+    /**
+     * 신청 기간·종류에 대한 검증과 일수·차감 계산(저장하지 않음). 규칙 위반은 BusinessException.
+     *
+     * @param preview 미리보기면 true: 경조사 규정을 아직 고르지 않았으면 규정 검사를 건너뛴다
+     */
+    private Plan plan(Employee employee, LeaveType type, LeavePolicy policy, LocalDate start, LocalDate end,
+                      Integer requestedHours, Long specialRuleId, boolean preview) {
+        Long employeeId = employee.getId();
         validatePeriod(start, end, type);
-        Integer hours = hoursFor(type, req.hours());
+        Integer hours = hoursFor(type, requestedHours);
 
         Set<LocalDate> holidays = holidaysBetween(start, end);
         // 시작일은 근무일이어야 한다(반차 포함). 기간 중간·끝의 주말·공휴일은 허용하고 차감에서만 뺀다.
@@ -128,21 +174,18 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "신청 기간에 근무일이 없습니다.");
         }
 
-        SpecialLeaveRule specialRule = resolveSpecialRule(type, req.specialRuleId(), days);
+        SpecialLeaveRule specialRule = preview && specialRuleId == null
+                ? null
+                : resolveSpecialRule(type, specialRuleId, days);
 
         validateNoOverlap(employeeId, start, end, type, days);
 
         validateUsagePolicy(employee, type, start, end, days, policy);
         int appliedYear = appliedYear(start, policy);
 
-        if (type.isRequiresAnnualExhausted()) {
-            BigDecimal forfeit = requireAnnualExhausted(employeeId, appliedYear, type, false);
-            if (forfeit.signum() > 0 && !Boolean.TRUE.equals(req.forfeitAcknowledged())) {
-                throw new BusinessException(ErrorCode.LEAVE_FORFEIT_NOT_ACKNOWLEDGED,
-                        type.getName() + "가 승인되면 남은 연차 " + plain(forfeit)
-                                + "일이 소멸됩니다. 안내를 확인한 뒤 신청해 주세요.");
-            }
-        }
+        BigDecimal forfeit = type.isRequiresAnnualExhausted()
+                ? requireAnnualExhausted(employeeId, appliedYear, type, false)
+                : BigDecimal.ZERO;
 
         // 실제 차감액 = 근무일수 × 휴가유형 deductDays (반차는 deductDays, 비차감 유형은 0)
         BigDecimal deduction = workdayCalculator.deductionFor(type, days);
@@ -156,21 +199,8 @@ public class LeaveRequestService {
                         "잔여 연차가 부족합니다. (차감 " + deduction + "일 / 사용가능 " + available + "일)");
             }
         }
-
-        String hrDirectReason = resolveHrDirect(employee, req.hrDirectReason(), policy);
-
-        LeaveRequest request = new LeaveRequest(
-                employee, type, start, end, days, deduction, appliedYear, req.reason());
-        if (specialRule != null) {
-            request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
-        }
-        if (hrDirectReason != null) {
-            request.routeDirectToHr(hrDirectReason);
-        }
-        requestRepository.save(request);
-
-        String warning = notifyApprovers(request, policy);
-        return LeaveRequestDtos.Response.from(request).withRequestWarning(warning);
+        int workdays = workdayCalculator.countWorkdays(start, end, holidays);
+        return new Plan(days, workdays, deduction, appliedYear, specialRule, forfeit);
     }
 
     /**
@@ -198,6 +228,20 @@ public class LeaveRequestService {
      */
     @Transactional
     public LeaveRequestDtos.Eligibility eligibility(Long employeeId, Long leaveTypeId, LocalDate startDate) {
+        return eligibility(employeeId, leaveTypeId, startDate, null, null, null);
+    }
+
+    /**
+     * 신청 가능 여부. 시작일과 종료일을 모두 주면 신청 미리보기: 신청과 같은 계산({@link #plan})으로
+     * 기간 근무일·연차 차감·신청 후 잔여를 알려 주고, 규칙 위반이면 allowed=false 와 사유를 준다. 저장하지 않는다.
+     * 종료일이 없으면 종류 단위 조건(정책·병가·공가)만 본다.
+     *
+     * @param hours         시간차의 시간 수(시간차 미리보기에 필요)
+     * @param specialRuleId 경조사 규정(아직 안 골랐으면 null, 규정 일수 검사를 건너뛴다)
+     */
+    @Transactional
+    public LeaveRequestDtos.Eligibility eligibility(Long employeeId, Long leaveTypeId, LocalDate startDate,
+                                                   LocalDate endDate, Integer hours, Long specialRuleId) {
         LeaveType type = leaveTypeService.getEntity(leaveTypeId);
         LeavePolicy policy = policyService.getActivePolicy();
         if (!type.isActive() || !policy.allows(type.getPortion())) {
@@ -206,6 +250,9 @@ public class LeaveRequestService {
         }
         int year = appliedYear(startDate != null ? startDate : LocalDate.now(), policy);
         BigDecimal remaining = balanceService.getOrCreate(employeeId, year).remaining();
+        if (startDate != null && endDate != null) {
+            return preview(employeeId, type, policy, startDate, endDate, hours, specialRuleId, remaining);
+        }
         if (!type.isRequiresAnnualExhausted()) {
             return new LeaveRequestDtos.Eligibility(true, null, remaining, BigDecimal.ZERO);
         }
@@ -215,6 +262,27 @@ public class LeaveRequestService {
         } catch (BusinessException ex) {
             return new LeaveRequestDtos.Eligibility(false, ex.getMessage(), remaining, BigDecimal.ZERO);
         }
+    }
+
+    /** 신청 미리보기. 신청 후 잔여 = 잔여 − 결재 대기 차감 − 이번 차감 − 소멸 예정. */
+    private LeaveRequestDtos.Eligibility preview(Long employeeId, LeaveType type, LeavePolicy policy,
+                                                 LocalDate start, LocalDate end, Integer hours,
+                                                 Long specialRuleId, BigDecimal remaining) {
+        Employee employee = employeeService.getEntity(employeeId);
+        if (employee.isSystemAccount()) {
+            return new LeaveRequestDtos.Eligibility(false, "관리 전용 계정은 휴가를 신청할 수 없습니다.",
+                    remaining, BigDecimal.ZERO);
+        }
+        Plan plan;
+        try {
+            plan = plan(employee, type, policy, start, end, hours, specialRuleId, true);
+        } catch (BusinessException ex) {
+            return new LeaveRequestDtos.Eligibility(false, ex.getMessage(), remaining, BigDecimal.ZERO);
+        }
+        BigDecimal pending = requestRepository.sumPendingDeductedDays(employeeId, plan.appliedYear());
+        BigDecimal remainingAfter = remaining.subtract(pending).subtract(plan.deduction()).subtract(plan.forfeit());
+        return new LeaveRequestDtos.Eligibility(true, null, remaining, plan.forfeit(),
+                plan.workdays(), plan.deduction(), pending, remainingAfter);
     }
 
     @Transactional(readOnly = true)
@@ -258,6 +326,31 @@ public class LeaveRequestService {
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
                 .map(r -> LeaveRequestDtos.Response.from(r)
                         .withInbox(stageOf(r, policy), teamLimitWarning(r, policy)))
+                .toList();
+    }
+
+    /**
+     * 캘린더 날짜 상세용: 그날에 걸친 휴가 목록(부서·이름 순).
+     * <ul>
+     *   <li>승인(취소 요청 중 포함): 캘린더처럼 모두에게 보인다</li>
+     *   <li>결재 대기(대기·1차 승인): 본인, 인사관리자·최고관리자, 그 신청을 팀장 단계로 결재할 수 있는 팀장에게만</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public List<LeaveRequestDtos.DayLeave> leavesOnDay(Long callerId, LocalDate date) {
+        Employee caller = employeeService.getEntity(callerId);
+        boolean admin = isAdmin(caller);
+        return requestRepository.findByStatusInOverlapping(EnumSet.of(LeaveRequestStatus.PENDING,
+                        LeaveRequestStatus.LEAD_APPROVED, LeaveRequestStatus.APPROVED,
+                        LeaveRequestStatus.CANCEL_REQUESTED), date, date).stream()
+                .filter(r -> !r.isAwaitingApproval() || r.getEmployee().getId().equals(callerId)
+                        || admin || canLeadApprove(caller, r.getEmployee()))
+                .sorted(java.util.Comparator
+                        .comparing((LeaveRequest r) -> r.getEmployee().getDepartment() != null
+                                        ? r.getEmployee().getDepartment().getName() : null,
+                                java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                        .thenComparing(r -> r.getEmployee().getName()))
+                .map(r -> LeaveRequestDtos.DayLeave.from(r, r.getEmployee().getId().equals(callerId)))
                 .toList();
     }
 

@@ -3,6 +3,7 @@ package com.company.leave.calendar;
 import com.company.leave.calendar.domain.CalendarEvent;
 import com.company.leave.calendar.domain.CalendarEventScope;
 import com.company.leave.calendar.domain.CalendarEventSource;
+import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.dto.CalendarDtos;
 import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
@@ -10,6 +11,7 @@ import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.department.domain.Department;
 import com.company.leave.department.repository.DepartmentRepository;
+import com.company.leave.leave.LeaveRequestService;
 import com.company.leave.security.UserPrincipal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -25,13 +27,16 @@ public class CalendarService {
     private final CalendarEventRepository eventRepository;
     private final HolidayRepository holidayRepository;
     private final DepartmentRepository departmentRepository;
+    private final LeaveRequestService leaveRequestService;
 
     public CalendarService(CalendarEventRepository eventRepository,
                            HolidayRepository holidayRepository,
-                           DepartmentRepository departmentRepository) {
+                           DepartmentRepository departmentRepository,
+                           LeaveRequestService leaveRequestService) {
         this.eventRepository = eventRepository;
         this.holidayRepository = holidayRepository;
         this.departmentRepository = departmentRepository;
+        this.leaveRequestService = leaveRequestService;
     }
 
     /** 기간 내 사용자가 볼 수 있는 모든 일정(휴가/관리자이벤트/공휴일). */
@@ -53,6 +58,25 @@ public class CalendarService {
                 result.add(CalendarDtos.EventResponse.holiday(h.getId(), h.getName(), h.getDate())));
 
         return result;
+    }
+
+    /**
+     * 날짜 상세: 그날의 휴가(보이는 범위는 {@link LeaveRequestService#leavesOnDay}), 볼 수 있는 등록 일정, 공휴일 이름.
+     */
+    @Transactional(readOnly = true)
+    public CalendarDtos.DayDetail getDay(LocalDate date, UserPrincipal user) {
+        boolean admin = isAdmin(user);
+        List<CalendarDtos.DayEvent> events = eventRepository.findBetween(date, date).stream()
+                .filter(e -> e.getSource() == CalendarEventSource.ADMIN_EVENT && isVisible(e, user, admin))
+                .map(CalendarDtos.DayEvent::from)
+                .toList();
+        List<String> holidayNames = holidayRepository.findByDateBetweenOrderByDateAsc(date, date).stream()
+                .map(Holiday::getName)
+                .toList();
+        return new CalendarDtos.DayDetail(date,
+                holidayNames.isEmpty() ? null : String.join(", ", holidayNames),
+                leaveRequestService.leavesOnDay(user.getId(), date),
+                events);
     }
 
     @Transactional

@@ -70,8 +70,58 @@ public final class LeaveRequestDtos {
      * @param reason        불가 사유(allowed=false 일 때)
      * @param remainingDays 승인 기준 잔여 연차
      * @param forfeitDays   승인 시 소멸될 남은 연차(0 이면 경고 불필요)
+     * @param workdays      미리보기: 기간 근무일 수(주말·공휴일 제외). 미리보기가 아니거나 불가면 null
+     * @param deduction     미리보기: 이번 신청의 연차 차감 예정액
+     * @param pendingDays   미리보기: 결재 대기 중인 다른 신청의 차감 예정액 합계
+     * @param remainingAfter 미리보기: 신청 후 잔여(잔여 − 결재 대기 − 이번 차감 − 소멸 예정)
      */
-    public record Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays) {
+    public record Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays,
+                              Integer workdays, BigDecimal deduction, BigDecimal pendingDays,
+                              BigDecimal remainingAfter) {
+
+        public Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays) {
+            this(allowed, reason, remainingDays, forfeitDays, null, null, null, null);
+        }
+    }
+
+    /**
+     * 캘린더 날짜 상세의 휴가 한 건. 사유는 넣지 않는다(본인·결재자는 기존 화면에서 확인).
+     *
+     * @param hours 시간차만 시간 수, 그 외 null
+     * @param mine  조회한 본인의 휴가인지
+     */
+    public record DayLeave(
+            Long id,
+            Long employeeId,
+            String employeeName,
+            Long departmentId,
+            String departmentName,
+            String leaveTypeName,
+            String leaveTypeColor,
+            DayPortion portion,
+            Integer hours,
+            LocalDate startDate,
+            LocalDate endDate,
+            LeaveRequestStatus status,
+            boolean mine) {
+
+        public static DayLeave from(LeaveRequest r, boolean mine) {
+            DayPortion portion = r.getLeaveType().getPortion();
+            return new DayLeave(
+                    r.getId(),
+                    r.getEmployee().getId(),
+                    r.getEmployee().getName(),
+                    r.getEmployee().getDepartmentId(),
+                    r.getEmployee().getDepartment() != null ? r.getEmployee().getDepartment().getName() : null,
+                    r.getLeaveType().getName(),
+                    r.getLeaveType().getColorHex(),
+                    portion,
+                    portion == DayPortion.HOURLY ? WorkdayCalculator.hoursOf(r.getDays()) : null,
+                    r.getStartDate(),
+                    r.getEndDate(),
+                    r.getStatus(),
+                    mine);
+        }
     }
 
     public record Reject(@Size(max = 500) String reason) {

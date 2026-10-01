@@ -41,15 +41,20 @@ public class LeaveRequestController {
         return ApiResponse.ok(leaveRequestService.create(SecurityUtils.currentEmployeeId(), req));
     }
 
-    @Operation(summary = "휴가 종류별 신청 가능 여부",
+    @Operation(summary = "휴가 종류별 신청 가능 여부 · 신청 미리보기",
             description = "정책 사용 여부와 병가·공가 조건(잔여 연차 1일 미만, 대기 중 연차 신청 없음)을 확인하고, "
-                    + "승인 시 소멸될 남은 연차를 알려 준다(신청 화면 경고용).")
+                    + "승인 시 소멸될 남은 연차를 알려 준다(신청 화면 경고용). "
+                    + "startDate·endDate 를 모두 주면 신청과 같은 계산으로 기간 근무일·연차 차감·신청 후 잔여를 "
+                    + "미리 보여 주고, 시작일·겹침·잔액 등 규칙 위반이면 allowed=false 와 사유를 준다(저장 안 함).")
     @GetMapping("/eligibility")
     public ApiResponse<LeaveRequestDtos.Eligibility> eligibility(
             @RequestParam Long leaveTypeId,
-            @RequestParam(required = false) LocalDate startDate) {
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(required = false) Integer hours,
+            @RequestParam(required = false) Long specialRuleId) {
         return ApiResponse.ok(leaveRequestService.eligibility(
-                SecurityUtils.currentEmployeeId(), leaveTypeId, startDate));
+                SecurityUtils.currentEmployeeId(), leaveTypeId, startDate, endDate, hours, specialRuleId));
     }
 
     @Operation(summary = "내 결재 경로",

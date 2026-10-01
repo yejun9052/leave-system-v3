@@ -21,6 +21,22 @@ export interface LeaveEligibility {
   reason: string | null;
   remainingDays: number | null;
   forfeitDays: number;
+  /** 미리보기(종료일까지 준 경우)에서만 채워짐: 기간 근무일 수 */
+  workdays: number | null;
+  /** 미리보기: 이번 신청의 연차 차감 예정 */
+  deduction: number | null;
+  /** 미리보기: 결재 대기 중인 다른 신청의 차감 예정 합계 */
+  pendingDays: number | null;
+  /** 미리보기: 신청 후 잔여(잔여 − 대기 − 이번 차감 − 소멸 예정) */
+  remainingAfter: number | null;
+}
+
+export interface LeavePreviewParams {
+  leaveTypeId: number;
+  startDate: string;
+  endDate: string;
+  hours?: number;
+  specialRuleId?: number;
 }
 
 export interface ApprovalRoute {
@@ -42,6 +58,10 @@ export const leaveApi = {
     unwrap<LeaveEligibility>(
       api.get("/leave-requests/eligibility", { params: { leaveTypeId, startDate } }),
     ),
+
+  /** 신청 미리보기: 신청과 같은 계산으로 근무일·차감·신청 후 잔여와 불가 사유(저장 안 함) */
+  preview: (params: LeavePreviewParams) =>
+    unwrap<LeaveEligibility>(api.get("/leave-requests/eligibility", { params })),
 
   create: (body: LeaveRequestCreate) =>
     unwrap<LeaveRequest>(api.post("/leave-requests", body)),
