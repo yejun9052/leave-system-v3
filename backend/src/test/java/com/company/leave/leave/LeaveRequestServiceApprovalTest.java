@@ -397,6 +397,19 @@ class LeaveRequestServiceApprovalTest {
     }
 
     @Test
+    void 담당_팀장이_직접_취소_요청을_승인하면_자기에게_팀원_취소_안내를_보내지_않는다() {
+        LeaveRequest request = 승인된_휴가(파트원, LocalDate.now().plusDays(30));
+        request.requestCancel("일정 변경");
+
+        service.approveCancellation(request.getId(), 파트장.getId());
+
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCELLED);
+        verify(notificationService).notify(eq(13L), eq("LEAVE_CANCEL_APPROVED"), anyString(), anyString(), anyString());
+        verify(notificationService, never())
+                .notify(eq(7L), eq("LEAVE_CANCELLED_INFO"), anyString(), anyString(), anyString());
+    }
+
+    @Test
     void 결재_대기_중_본인이_취소하면_결재_팀장에게_알린다() {
         LeaveRequest request = 대기_신청(파트원);
 
@@ -658,6 +671,55 @@ class LeaveRequestServiceApprovalTest {
                 assertThat(m.to()).containsExactly("e14@company.com");
                 assertThat(m.body()).contains("시스템 관리자 직원1님이 휴가를 승인했습니다");
             });
+        }
+
+        @Test
+        void 승인_반려_강제_취소_메일에는_처리자의_이름_자격_부서가_들어간다() {
+            service.approve(대기_신청(파트원).getId(), 파트장.getId());
+            service.reject(대기_신청(파트원).getId(), 인사관리자.getId(), "마감");
+            service.cancel(승인된_휴가(파트원, LocalDate.now().minusDays(2)).getId(), 인사관리자.getId(), "근태 정정");
+
+            assertThat(보낸_메일()).filteredOn(m -> m.to().contains(파트원_메일)).extracting(LeaveMail::body)
+                    .satisfiesExactly(
+                            approved -> assertThat(approved).contains("처리자: 직원7 (팀장 · 플랫폼파트)"),
+                            rejected -> assertThat(rejected).contains("처리자: 직원11 (인사관리자 · 경영지원팀)"),
+                            forced -> assertThat(forced).contains("처리자: 직원11 (인사관리자 · 경영지원팀)"));
+        }
+
+        @Test
+        void 취소_요청을_승인하거나_반려하면_처리자가_메일에_들어간다() {
+            LeaveRequest 승인건 = 승인된_휴가(파트원, LocalDate.now().plusDays(30));
+            승인건.requestCancel("일정 변경");
+            LeaveRequest 반려건 = 승인된_휴가(파트원, LocalDate.now().plusDays(40));
+            반려건.requestCancel("일정 변경");
+
+            service.approveCancellation(승인건.getId(), 파트장.getId());
+            service.rejectCancellation(반려건.getId(), 인사관리자.getId(), "인력 부족");
+
+            assertThat(보낸_메일()).extracting(LeaveMail::body).satisfiesExactly(
+                    approved -> assertThat(approved)
+                            .contains("팀장 직원7님이 휴가 취소 요청을 승인해 휴가가 취소되었습니다")
+                            .contains("처리자: 직원7 (팀장 · 플랫폼파트)"),
+                    rejected -> assertThat(rejected)
+                            .contains("인사관리자 직원11님이 휴가 취소 요청을 반려했습니다")
+                            .contains("처리자: 직원11 (인사관리자 · 경영지원팀)"));
+        }
+
+        @Test
+        void 인사관리자가_취소_요청을_승인하면_팀장_안내_메일에도_처리자가_들어간다() {
+            LeaveRequest request = 승인된_휴가(파트원, LocalDate.now().plusDays(30));
+            request.requestCancel("일정 변경");
+
+            service.approveCancellation(request.getId(), 인사관리자.getId());
+
+            assertThat(받은(보낸_메일(), 파트장_메일).body()).contains("처리자: 직원11 (인사관리자 · 경영지원팀)");
+        }
+
+        @Test
+        void 신청자가_대기_중인_신청을_철회하면_처리자는_신청자_본인이다() {
+            service.cancel(대기_신청(파트원).getId(), 파트원.getId(), null);
+
+            assertThat(받은(보낸_메일(), 파트장_메일).body()).contains("처리자: 직원13 (신청자 · 플랫폼파트)");
         }
 
         private List<LeaveMail> 보낸_메일() {

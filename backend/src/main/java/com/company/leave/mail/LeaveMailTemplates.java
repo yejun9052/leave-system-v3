@@ -38,6 +38,23 @@ public final class LeaveMailTemplates {
     public record Mail(String subject, String body, String messageId, String inReplyTo) {
     }
 
+    /**
+     * 처리한 사람. 결과 메일마다 "처리자: 홍길동 (팀장 · 개발팀)" 줄로 들어간다.
+     *
+     * @param role 처리한 자격(예: "팀장", "인사관리자", "시스템 관리자", "신청자")
+     */
+    public record Handler(String role, String name, String departmentName) {
+
+        /** 문장에 쓰는 이름: "팀장 홍길동님" */
+        public String title() {
+            return role + " " + name + "님";
+        }
+
+        String line() {
+            return "처리자: " + name + " (" + role + (departmentName != null ? " · " + departmentName : "") + ")\n";
+        }
+    }
+
     // --- 신청자 대화 ---
 
     /** @param route 결재 경로 안내(예: "팀장 홍길동님 승인(인사관리자도 승인 가능)") */
@@ -50,47 +67,49 @@ public final class LeaveMailTemplates {
     }
 
     /** 인사관리자가 대신 등록(바로 승인됨). 신청 접수 대신 이 메일이 대화의 첫 메일이 된다. */
-    public static Mail registered(Info info, String domain, String baseUrl, String by) {
-        String body = info.applicantName() + "님, " + by + "이 휴가를 등록했습니다. 승인 완료 상태입니다.\n\n"
+    public static Mail registered(Info info, String domain, String baseUrl, Handler by) {
+        String body = info.applicantName() + "님, " + by.title() + "이 휴가를 등록했습니다. 승인 완료 상태입니다.\n\n"
+                + by.line()
                 + details(info)
                 + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n";
         return root(info, Thread.APPLICANT, domain, body);
     }
 
-    /** @param approvedBy 승인한 사람(예: "팀장 홍길동님"). 자가 승인이면 null */
-    public static Mail approved(Info info, String domain, String baseUrl, String approvedBy) {
-        String headline = approvedBy != null
-                ? approvedBy + "이 휴가를 승인했습니다."
-                : "자가 승인으로 휴가가 확정되었습니다.";
-        return applicantReply(info, domain, baseUrl, headline, null);
+    /** @param self 신청자 본인의 자가 승인이면 true */
+    public static Mail approved(Info info, String domain, String baseUrl, Handler by, boolean self) {
+        String headline = self
+                ? "자가 승인으로 휴가가 확정되었습니다."
+                : by.title() + "이 휴가를 승인했습니다.";
+        return applicantReply(info, domain, baseUrl, headline, by, null);
     }
 
-    /** @param rejectedBy 반려한 사람(예: "팀장 홍길동님") */
-    public static Mail rejected(Info info, String domain, String baseUrl, String rejectedBy, String reason) {
-        return applicantReply(info, domain, baseUrl, rejectedBy + "이 휴가 신청을 반려했습니다.",
+    public static Mail rejected(Info info, String domain, String baseUrl, Handler by, String reason) {
+        return applicantReply(info, domain, baseUrl, by.title() + "이 휴가 신청을 반려했습니다.", by,
                 "반려 사유: " + orNone(reason));
     }
 
-    public static Mail cancelApproved(Info info, String domain, String baseUrl) {
+    /** 취소 요청 승인(또는 인사관리자의 취소 요청 건 확정). */
+    public static Mail cancelApproved(Info info, String domain, String baseUrl, Handler by) {
         return applicantReply(info, domain, baseUrl,
-                "휴가 취소 요청이 승인되어 휴가가 취소되었습니다. 차감된 연차는 돌아갑니다.", null);
+                by.title() + "이 휴가 취소 요청을 승인해 휴가가 취소되었습니다. 차감된 연차는 돌아갑니다.", by, null);
     }
 
-    public static Mail cancelRejected(Info info, String domain, String baseUrl, String reason) {
-        return applicantReply(info, domain, baseUrl, "휴가 취소 요청이 반려되었습니다. 휴가는 승인 상태로 유지됩니다.",
+    public static Mail cancelRejected(Info info, String domain, String baseUrl, Handler by, String reason) {
+        return applicantReply(info, domain, baseUrl,
+                by.title() + "이 휴가 취소 요청을 반려했습니다. 휴가는 승인 상태로 유지됩니다.", by,
                 "반려 사유: " + orNone(reason));
     }
 
     /** 결재 대기 중인 신청을 인사관리자가 취소. */
-    public static Mail cancelledByHr(Info info, String domain, String baseUrl, String by, String reason) {
-        return applicantReply(info, domain, baseUrl, by + "이 휴가 신청을 취소했습니다.",
+    public static Mail cancelledByHr(Info info, String domain, String baseUrl, Handler by, String reason) {
+        return applicantReply(info, domain, baseUrl, by.title() + "이 휴가 신청을 취소했습니다.", by,
                 reason != null && !reason.isBlank() ? "사유: " + reason : null);
     }
 
     /** 승인된 휴가를 인사관리자가 강제 취소(시작 후 포함). */
-    public static Mail forceCancelled(Info info, String domain, String baseUrl, String by, String reason) {
+    public static Mail forceCancelled(Info info, String domain, String baseUrl, Handler by, String reason) {
         return applicantReply(info, domain, baseUrl,
-                by + "이 승인된 휴가를 취소했습니다. 차감된 연차는 돌아갑니다.",
+                by.title() + "이 승인된 휴가를 취소했습니다. 차감된 연차는 돌아갑니다.", by,
                 "취소 사유: " + orNone(reason));
     }
 
@@ -105,6 +124,7 @@ public final class LeaveMailTemplates {
 
     public static Mail withdrawn(Info info, String domain, String baseUrl) {
         String body = info.applicantName() + "님이 결재 대기 중이던 휴가 신청을 취소했습니다. 더 결재하지 않아도 됩니다.\n\n"
+                + new Handler("신청자", info.applicantName(), info.departmentName()).line()
                 + details(info)
                 + "결재함: " + url(baseUrl, "/approvals") + "\n";
         return reply(info, Thread.APPROVER, domain, body);
@@ -120,25 +140,26 @@ public final class LeaveMailTemplates {
 
     // --- 담당 팀장 대화 ---
 
-    /** @param approvedBy 승인한 사람(예: "인사관리자 김인사님") */
-    public static Mail leadApprovedInfo(Info info, String domain, String baseUrl, String approvedBy) {
-        return leadRoot(info, domain, baseUrl, approvedBy + "이 " + info.applicantName() + "님의 휴가를 승인했습니다.");
+    public static Mail leadApprovedInfo(Info info, String domain, String baseUrl, Handler by) {
+        return leadRoot(info, domain, baseUrl, by.title() + "이 " + info.applicantName() + "님의 휴가를 승인했습니다.", by);
     }
 
-    public static Mail leadRegisteredInfo(Info info, String domain, String baseUrl, String by) {
+    public static Mail leadRegisteredInfo(Info info, String domain, String baseUrl, Handler by) {
         return leadRoot(info, domain, baseUrl,
-                by + "이 " + info.applicantName() + "님의 휴가를 등록했습니다(승인 완료).");
+                by.title() + "이 " + info.applicantName() + "님의 휴가를 등록했습니다(승인 완료).", by);
     }
 
-    public static Mail leadCancelledInfo(Info info, String domain, String baseUrl) {
+    public static Mail leadCancelledInfo(Info info, String domain, String baseUrl, Handler by) {
         String body = info.applicantName() + "님의 승인된 휴가가 취소되었습니다.\n\n"
+                + by.line()
                 + details(info)
                 + "캘린더: " + url(baseUrl, "/calendar") + "\n";
         return reply(info, Thread.LEAD, domain, body);
     }
 
-    public static Mail leadForceCancelledInfo(Info info, String domain, String baseUrl, String by, String reason) {
-        String body = by + "이 " + info.applicantName() + "님의 승인된 휴가를 취소했습니다.\n\n"
+    public static Mail leadForceCancelledInfo(Info info, String domain, String baseUrl, Handler by, String reason) {
+        String body = by.title() + "이 " + info.applicantName() + "님의 승인된 휴가를 취소했습니다.\n\n"
+                + by.line()
                 + details(info)
                 + "취소 사유: " + orNone(reason) + "\n\n"
                 + "캘린더: " + url(baseUrl, "/calendar") + "\n";
@@ -174,15 +195,18 @@ public final class LeaveMailTemplates {
         return domain.isEmpty() ? "annual-leave.local" : domain;
     }
 
-    private static Mail leadRoot(Info info, String domain, String baseUrl, String headline) {
+    private static Mail leadRoot(Info info, String domain, String baseUrl, String headline, Handler by) {
         String body = headline + "\n\n"
+                + by.line()
                 + details(info)
                 + "캘린더: " + url(baseUrl, "/calendar") + "\n";
         return root(info, Thread.LEAD, domain, body);
     }
 
-    private static Mail applicantReply(Info info, String domain, String baseUrl, String headline, String extra) {
+    private static Mail applicantReply(Info info, String domain, String baseUrl, String headline, Handler by,
+                                       String extra) {
         String body = info.applicantName() + "님, " + headline + "\n\n"
+                + by.line()
                 + details(info)
                 + (extra != null ? extra + "\n\n" : "")
                 + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n";

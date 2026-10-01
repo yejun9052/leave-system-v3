@@ -8,6 +8,7 @@ import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.mail.AccountMailProperties;
 import com.company.leave.mail.LeaveMail;
 import com.company.leave.mail.LeaveMailTemplates;
+import com.company.leave.mail.LeaveMailTemplates.Handler;
 import com.company.leave.mail.LeaveMailTemplates.Info;
 import com.company.leave.notification.NotificationService;
 import java.util.Collection;
@@ -50,22 +51,24 @@ public class LeaveMessenger {
     /** 승인: 신청자 + 담당 팀장(결재한 사람이 아니면). */
     public void approved(LeaveRequest r, Employee approver, Employee lead) {
         Info info = info(r);
+        Handler by = handler(approver);
         boolean self = approver.getId().equals(r.getEmployee().getId());
         deliver(List.of(r.getEmployee()), "LEAVE_APPROVED", "휴가가 승인되었습니다.",
-                summary(r) + (self ? " · 자가 승인" : " · " + label(approver)), "/my-leaves",
-                LeaveMailTemplates.approved(info, domain(), baseUrl(), self ? null : label(approver)));
+                summary(r) + " · " + (self ? "자가 승인" : by.title()), "/my-leaves",
+                LeaveMailTemplates.approved(info, domain(), baseUrl(), by, self));
         if (lead != null) {
             deliver(List.of(lead), "LEAVE_APPROVED_INFO", "팀원 휴가 승인",
-                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + label(approver) + " 승인", "/calendar",
-                    LeaveMailTemplates.leadApprovedInfo(info, domain(), baseUrl(), label(approver)));
+                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + by.title() + " 승인", "/calendar",
+                    LeaveMailTemplates.leadApprovedInfo(info, domain(), baseUrl(), by));
         }
     }
 
     /** 반려: 신청자. */
     public void rejected(LeaveRequest r, Employee rejector, String reason) {
+        Handler by = handler(rejector);
         deliver(List.of(r.getEmployee()), "LEAVE_REJECTED", "휴가가 반려되었습니다.",
-                summary(r) + " · " + orNone(reason), "/my-leaves",
-                LeaveMailTemplates.rejected(info(r), domain(), baseUrl(), label(rejector), reason));
+                summary(r) + " · " + by.title() + " · " + orNone(reason), "/my-leaves",
+                LeaveMailTemplates.rejected(info(r), domain(), baseUrl(), by, reason));
     }
 
     /** 결재 대기 중 신청자가 철회: 결재 요청을 받았던 사람. */
@@ -76,9 +79,10 @@ public class LeaveMessenger {
 
     /** 결재 대기 중인 신청을 인사관리자가 취소: 신청자. */
     public void cancelledByHr(LeaveRequest r, Employee hr, String reason) {
+        Handler by = handler(hr);
         deliver(List.of(r.getEmployee()), "LEAVE_CANCELLED_BY_HR", "인사관리자가 휴가 신청을 취소했습니다.",
-                summary(r), "/my-leaves",
-                LeaveMailTemplates.cancelledByHr(info(r), domain(), baseUrl(), label(hr), reason));
+                summary(r) + " · " + by.title(), "/my-leaves",
+                LeaveMailTemplates.cancelledByHr(info(r), domain(), baseUrl(), by, reason));
     }
 
     /** 승인된 휴가의 취소 요청: 결재자. */
@@ -88,58 +92,68 @@ public class LeaveMessenger {
     }
 
     /** 취소 요청 승인(또는 인사관리자의 취소 요청 건 확정): 신청자. */
-    public void cancelApproved(LeaveRequest r) {
-        deliver(List.of(r.getEmployee()), "LEAVE_CANCEL_APPROVED", "휴가 취소가 승인되었습니다.", summary(r),
-                "/my-leaves", LeaveMailTemplates.cancelApproved(info(r), domain(), baseUrl()));
+    public void cancelApproved(LeaveRequest r, Employee approver) {
+        Handler by = handler(approver);
+        deliver(List.of(r.getEmployee()), "LEAVE_CANCEL_APPROVED", "휴가 취소가 승인되었습니다.",
+                summary(r) + " · " + by.title(), "/my-leaves",
+                LeaveMailTemplates.cancelApproved(info(r), domain(), baseUrl(), by));
     }
 
     /** 취소 요청 반려: 신청자. */
-    public void cancelRejected(LeaveRequest r, String reason) {
+    public void cancelRejected(LeaveRequest r, Employee rejector, String reason) {
+        Handler by = handler(rejector);
         deliver(List.of(r.getEmployee()), "LEAVE_CANCEL_REJECTED", "휴가 취소 요청이 반려되었습니다.",
-                orNone(reason), "/my-leaves",
-                LeaveMailTemplates.cancelRejected(info(r), domain(), baseUrl(), reason));
+                by.title() + " · " + orNone(reason), "/my-leaves",
+                LeaveMailTemplates.cancelRejected(info(r), domain(), baseUrl(), by, reason));
     }
 
     /** 승인됐던 휴가가 취소 확정: 담당 팀장에게 안내. */
-    public void leadCancelledInfo(LeaveRequest r, Employee lead) {
+    public void leadCancelledInfo(LeaveRequest r, Employee lead, Employee actor) {
+        Handler by = handler(actor);
         deliver(List.of(lead), "LEAVE_CANCELLED_INFO", "팀원 휴가 취소",
-                r.getEmployee().getName() + "님의 " + r.getLeaveType().getName() + "(" + period(r) + ") 사용이 취소되었습니다.",
-                "/calendar", LeaveMailTemplates.leadCancelledInfo(info(r), domain(), baseUrl()));
+                r.getEmployee().getName() + "님의 " + r.getLeaveType().getName() + "(" + period(r) + ") 사용이 취소되었습니다. · "
+                        + by.title(),
+                "/calendar", LeaveMailTemplates.leadCancelledInfo(info(r), domain(), baseUrl(), by));
     }
 
     /** 인사관리자 강제 취소: 신청자 + 담당 팀장. */
     public void forceCancelled(LeaveRequest r, Employee hr, String reason, Employee lead) {
         Info info = info(r);
+        Handler by = handler(hr);
         deliver(List.of(r.getEmployee()), "LEAVE_FORCE_CANCELLED", "휴가가 취소되었습니다.",
-                summary(r) + " · " + label(hr) + " · 사유: " + reason, "/my-leaves",
-                LeaveMailTemplates.forceCancelled(info, domain(), baseUrl(), label(hr), reason));
+                summary(r) + " · " + by.title() + " · 사유: " + reason, "/my-leaves",
+                LeaveMailTemplates.forceCancelled(info, domain(), baseUrl(), by, reason));
         if (lead != null) {
             deliver(List.of(lead), "LEAVE_CANCELLED_INFO", "팀원 휴가 취소",
-                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + label(hr) + " 취소", "/calendar",
-                    LeaveMailTemplates.leadForceCancelledInfo(info, domain(), baseUrl(), label(hr), reason));
+                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + by.title() + " 취소", "/calendar",
+                    LeaveMailTemplates.leadForceCancelledInfo(info, domain(), baseUrl(), by, reason));
         }
     }
 
     /** 인사관리자 강제 등록(바로 승인): 신청자 + 담당 팀장. */
     public void registered(LeaveRequest r, Employee hr, Employee lead) {
         Info info = info(r);
+        Handler by = handler(hr);
         deliver(List.of(r.getEmployee()), "LEAVE_REGISTERED", "휴가가 등록되었습니다.",
-                summary(r) + " · " + label(hr) + " 등록", "/my-leaves",
-                LeaveMailTemplates.registered(info, domain(), baseUrl(), label(hr)));
+                summary(r) + " · " + by.title() + " 등록", "/my-leaves",
+                LeaveMailTemplates.registered(info, domain(), baseUrl(), by));
         if (lead != null) {
             deliver(List.of(lead), "LEAVE_APPROVED_INFO", "팀원 휴가 등록",
-                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + label(hr) + " 등록", "/calendar",
-                    LeaveMailTemplates.leadRegisteredInfo(info, domain(), baseUrl(), label(hr)));
+                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + by.title() + " 등록", "/calendar",
+                    LeaveMailTemplates.leadRegisteredInfo(info, domain(), baseUrl(), by));
         }
     }
 
     // --- 공통 ---
 
-    /** 처리한 사람 표시: "인사관리자 김인사님", "시스템 관리자 시스템관리자님", "팀장 홍길동님". */
-    static String label(Employee e) {
-        String role = e.hasRole(Role.HR_ADMIN) ? "인사관리자 "
-                : e.hasRole(Role.SYSTEM_ADMIN) ? "시스템 관리자 " : "팀장 ";
-        return role + e.getName() + "님";
+    /**
+     * 처리한 사람: 자격(인사관리자 > 시스템 관리자 > 팀장) + 이름 + 부서.
+     * 메일에는 "처리자: 홍길동 (팀장 · 개발팀)", 문장·알림에는 "팀장 홍길동님" 으로 쓴다.
+     */
+    static Handler handler(Employee e) {
+        String role = e.hasRole(Role.HR_ADMIN) ? "인사관리자"
+                : e.hasRole(Role.SYSTEM_ADMIN) ? "시스템 관리자" : "팀장";
+        return new Handler(role, e.getName(), e.getDepartment() != null ? e.getDepartment().getName() : null);
     }
 
     private void deliver(Collection<Employee> recipients, String type, String title, String message, String link,

@@ -508,7 +508,7 @@ public class LeaveRequestService {
                 if (admin && (!owner || started)) {
                     forceCancel(request, requester, reason);
                 } else if (admin) {
-                    finalizeCancel(request);
+                    finalizeCancel(request, requester);
                 } else if (started) {
                     throw new BusinessException(ErrorCode.LEAVE_ALREADY_STARTED);
                 } else {
@@ -518,9 +518,9 @@ public class LeaveRequestService {
             }
             case CANCEL_REQUESTED -> {
                 if (admin) {
-                    finalizeCancel(request);
+                    finalizeCancel(request, requester);
                     if (!owner) {
-                        messenger.cancelApproved(request);
+                        messenger.cancelApproved(request, requester);
                     }
                 } else {
                     throw new BusinessException(ErrorCode.CONFLICT, "이미 취소 요청 상태입니다.");
@@ -556,8 +556,8 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.CONFLICT, "취소 요청 상태가 아닙니다.");
         }
         requireApprover(approver, request);
-        finalizeCancel(request);
-        messenger.cancelApproved(request);
+        finalizeCancel(request, approver);
+        messenger.cancelApproved(request, approver);
         return LeaveRequestDtos.Response.from(request);
     }
 
@@ -571,18 +571,18 @@ public class LeaveRequestService {
         }
         requireApprover(approver, request);
         request.rejectCancel();
-        messenger.cancelRejected(request, reason);
+        messenger.cancelRejected(request, approver, reason);
         return LeaveRequestDtos.Response.from(request);
     }
 
-    /** 확정 취소 공통 처리: 잔액 환원 + 캘린더 일정 삭제 + 상태 CANCELLED + 팀장 안내. */
-    private void finalizeCancel(LeaveRequest request) {
+    /** 확정 취소 공통 처리: 잔액 환원 + 캘린더 일정 삭제 + 상태 CANCELLED + 팀장 안내(처리자 actor 포함). */
+    private void finalizeCancel(LeaveRequest request, Employee actor) {
         restoreAndClearCalendar(request);
         request.cancel();
-        // 승인됐던 휴가가 취소되면 담당 팀장에게 안내
-        Employee lead = leadApproverOf(request.getEmployee());
+        // 승인됐던 휴가가 취소되면 담당 팀장에게 안내(취소를 처리한 사람이 그 팀장이면 생략)
+        Employee lead = informedLead(request, actor);
         if (lead != null) {
-            messenger.leadCancelledInfo(request, lead);
+            messenger.leadCancelledInfo(request, lead, actor);
         }
     }
 
