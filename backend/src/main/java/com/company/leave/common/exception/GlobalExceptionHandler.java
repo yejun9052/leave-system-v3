@@ -1,10 +1,12 @@
 package com.company.leave.common.exception;
 
 import com.company.leave.common.dto.ApiResponse;
+import com.company.leave.leave.domain.LeaveRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -49,7 +51,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(OptimisticLockingFailureException ex) {
-        // 동시 승인/차감 충돌 → 사용자에게 재시도 유도(409)
+        // 같은 휴가 신청을 두 결재자가 동시에 처리하면 늦게 온 쪽(@Version 충돌) → 이미 처리됨(409)
+        if (ex instanceof ObjectOptimisticLockingFailureException o
+                && LeaveRequest.class.getName().equals(o.getPersistentClassName())) {
+            return ResponseEntity.status(ErrorCode.CONFLICT.status())
+                    .body(ApiResponse.error(ErrorCode.CONFLICT.name(), "이미 처리된 신청입니다. 목록을 새로고침해 주세요."));
+        }
+        // 그 밖의 동시 차감 충돌(잔액 등) → 사용자에게 재시도 유도(409)
         return ResponseEntity.status(ErrorCode.CONFLICT.status())
                 .body(ApiResponse.error(ErrorCode.CONFLICT.name(),
                         "다른 요청과 동시에 처리되어 충돌했습니다. 잠시 후 다시 시도하세요."));

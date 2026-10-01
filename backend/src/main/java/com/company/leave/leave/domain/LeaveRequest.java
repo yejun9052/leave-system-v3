@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -86,6 +87,11 @@ public class LeaveRequest extends BaseTimeEntity {
 
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
+
+    /** 낙관적 락: 두 결재자가 같은 신청을 동시에 처리하면 한쪽만 반영된다(V22). */
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     @Column(name = "cancel_reason", length = 500)
     private String cancelReason;
