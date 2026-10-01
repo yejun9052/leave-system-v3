@@ -14,6 +14,7 @@ import {
   TableRow,
   SortableTableHead,
 } from "@/components/ui/table";
+import { formatDateTime } from "@/lib/dateFormat";
 import { useTableSort } from "@/lib/useTableSort";
 
 // 삭제·반려성 동작은 붉은 배지로 강조
@@ -94,7 +95,7 @@ export default function AuditLogPage() {
                 sorted.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {new Date(a.createdAt).toLocaleString("ko-KR")}
+                      {formatDateTime(a.createdAt)}
                     </TableCell>
                     <TableCell className="font-medium">{a.actorName}</TableCell>
                     <TableCell>
