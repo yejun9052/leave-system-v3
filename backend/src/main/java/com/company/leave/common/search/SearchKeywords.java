@@ -1,6 +1,11 @@
 package com.company.leave.common.search;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,6 +39,35 @@ public final class SearchKeywords {
                 .filter(e -> e.getValue().toLowerCase(Locale.ROOT).replace(" ", "").contains(token.replace(" ", "")))
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
+    }
+
+    /** 부서 검색용 부서 정보(id·상위 id·이름). */
+    public record DepartmentNode(Long id, Long parentId, String name) {
+    }
+
+    /**
+     * 이름에 단어가 들어 있는 부서와 그 하위 부서 전부의 id.
+     * 상위 부서 이름으로 찾으면 하위 부서도 함께 나오게 한다(예: "연구소" → 연구소·QA·개발팀).
+     */
+    public static Set<Long> departmentSubtrees(List<DepartmentNode> departments, String token) {
+        Map<Long, List<Long>> children = new HashMap<>();
+        for (DepartmentNode node : departments) {
+            if (node.parentId() != null) {
+                children.computeIfAbsent(node.parentId(), k -> new ArrayList<>()).add(node.id());
+            }
+        }
+        Set<Long> result = new HashSet<>();
+        Deque<Long> stack = new ArrayDeque<>();
+        departments.stream()
+                .filter(node -> node.name() != null && node.name().toLowerCase(Locale.ROOT).contains(token))
+                .forEach(node -> stack.push(node.id()));
+        while (!stack.isEmpty()) {
+            Long id = stack.pop();
+            if (result.add(id)) {
+                children.getOrDefault(id, List.of()).forEach(stack::push);
+            }
+        }
+        return result;
     }
 
     /** SQL LIKE 패턴: %단어% (와일드카드 문자는 그대로 검색되도록 이스케이프). */

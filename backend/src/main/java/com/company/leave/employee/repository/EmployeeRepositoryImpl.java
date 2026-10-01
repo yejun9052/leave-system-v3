@@ -1,6 +1,7 @@
 package com.company.leave.employee.repository;
 
 import com.company.leave.common.search.SearchKeywords;
+import com.company.leave.common.search.SearchKeywords.DepartmentNode;
 import com.company.leave.department.domain.QDepartment;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.EmployeeStatus;
@@ -78,7 +79,7 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
     private BooleanBuilder keyword(QEmployee e, QDepartment d, String keyword) {
         BooleanBuilder all = new BooleanBuilder();
         List<String> tokens = SearchKeywords.tokens(keyword);
-        List<DeptRow> departments = tokens.isEmpty() ? List.of() : loadDepartments();
+        List<DepartmentNode> departments = tokens.isEmpty() ? List.of() : loadDepartments();
         for (String token : tokens) {
             String like = SearchKeywords.likePattern(token);
             BooleanBuilder any = new BooleanBuilder()
@@ -86,7 +87,7 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
                     .or(e.email.lower().like(like, '\\'))
                     .or(e.position.lower().like(like, '\\'))
                     .or(e.phone.lower().like(like, '\\'));
-            Set<Long> deptIds = subtreesMatching(departments, token);
+            Set<Long> deptIds = SearchKeywords.departmentSubtrees(departments, token);
             if (!deptIds.isEmpty()) {
                 any.or(d.id.in(deptIds));
             }
@@ -104,40 +105,15 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
         return all;
     }
 
-    /** 부서 id·상위 id·이름. 부서 수가 많지 않아 검색 때 한 번 읽어 메모리에서 하위 부서를 펼친다. */
-    record DeptRow(Long id, Long parentId, String name) {
-    }
-
-    private List<DeptRow> loadDepartments() {
+    /** 부서 수가 많지 않아 검색 때 한 번 읽어 메모리에서 하위 부서를 펼친다. */
+    private List<DepartmentNode> loadDepartments() {
         QDepartment dept = new QDepartment("searchDept");
         QDepartment parent = new QDepartment("searchParent");
         return queryFactory.select(dept.id, parent.id, dept.name)
                 .from(dept)
                 .leftJoin(dept.parent, parent)
                 .fetch().stream()
-                .map(t -> new DeptRow(t.get(dept.id), t.get(parent.id), t.get(dept.name)))
+                .map(t -> new DepartmentNode(t.get(dept.id), t.get(parent.id), t.get(dept.name)))
                 .toList();
-    }
-
-    /** 이름에 단어가 들어 있는 부서와 그 하위 부서 전부의 id. */
-    static Set<Long> subtreesMatching(List<DeptRow> departments, String token) {
-        Map<Long, List<Long>> children = new java.util.HashMap<>();
-        for (DeptRow row : departments) {
-            if (row.parentId() != null) {
-                children.computeIfAbsent(row.parentId(), k -> new java.util.ArrayList<>()).add(row.id());
-            }
-        }
-        Set<Long> result = new java.util.HashSet<>();
-        java.util.Deque<Long> stack = new java.util.ArrayDeque<>();
-        departments.stream()
-                .filter(row -> row.name() != null && row.name().toLowerCase(java.util.Locale.ROOT).contains(token))
-                .forEach(row -> stack.push(row.id()));
-        while (!stack.isEmpty()) {
-            Long id = stack.pop();
-            if (result.add(id)) {
-                children.getOrDefault(id, List.of()).forEach(stack::push);
-            }
-        }
-        return result;
     }
 }

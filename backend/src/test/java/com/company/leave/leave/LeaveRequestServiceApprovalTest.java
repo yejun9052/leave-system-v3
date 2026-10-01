@@ -59,6 +59,10 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -567,6 +571,30 @@ class LeaveRequestServiceApprovalTest {
                 .doesNotThrowAnyException();
         assertThatThrownBy(() -> service.assertCanViewEmployeeData(영업팀장.getId(), 파트원.getId()))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    // --- 휴가 목록 ---
+
+    @Test
+    void 휴가_목록은_휴가_시작일_최신순으로_찾고_검색어가_없으면_부서를_읽지_않는다() {
+        when(requestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
+
+        service.search(인사관리자.getId(), null, Set.of(LeaveRequestStatus.APPROVED), null, null, 0, 20);
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(requestRepository).findAll(any(Specification.class), pageable.capture());
+        assertThat(pageable.getValue().getSort())
+                .containsExactly(Sort.Order.desc("startDate"), Sort.Order.desc("id"));
+        verify(departmentRepository, never()).findAll();
+    }
+
+    @Test
+    void 맡은_부서가_없는_팀장은_휴가_목록이_비어_있다() {
+        Page<LeaveRequestDtos.Response> page =
+                service.search(부파트장.getId(), "연구소", Set.of(), null, null, 0, 20);
+
+        assertThat(page.getContent()).isEmpty();
+        verify(requestRepository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     // --- 결재 메일 ---

@@ -9,6 +9,8 @@ import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.common.search.SearchKeywords;
+import com.company.leave.common.search.SearchKeywords.DepartmentNode;
 import com.company.leave.department.domain.Department;
 import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.EmployeeService;
@@ -40,7 +42,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -341,6 +345,31 @@ public class LeaveRequestService {
     @Transactional(readOnly = true)
     public Page<LeaveRequestDtos.Response> myRequests(Long employeeId, Pageable pageable) {
         return requestRepository.findByEmployeeIdOrderByStartDateDesc(employeeId, pageable)
+                .map(LeaveRequestDtos.Response::from);
+    }
+
+    /**
+     * 결재함 "휴가 목록": 캘린더에서만 보이던 휴가를 목록으로 찾는다(휴가 시작일 최신순).
+     * 인사관리자·시스템 관리자는 전 직원, 팀장은 맡은 부서(하위 포함) 소속 직원만. 맡은 부서가 없으면 빈 목록.
+     * 검색 조건은 {@link LeaveRequestSearch}.
+     */
+    @Transactional(readOnly = true)
+    public Page<LeaveRequestDtos.Response> search(Long callerId, String keyword, Set<LeaveRequestStatus> statuses,
+                                                  LocalDate from, LocalDate to, int page, int size) {
+        Employee caller = employeeService.getEntity(callerId);
+        Set<Long> scope = isHrApprover(caller) ? null : subordinateDeptIds(caller);
+        PageRequest pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Order.desc("startDate"), Sort.Order.desc("id")));
+        if (scope != null && scope.isEmpty()) {
+            return Page.empty(pageable);
+        }
+        List<DepartmentNode> departments = SearchKeywords.tokens(keyword).isEmpty() ? List.of()
+                : departmentRepository.findAll().stream()
+                        .map(d -> new DepartmentNode(d.getId(),
+                                d.getParent() != null ? d.getParent().getId() : null, d.getName()))
+                        .toList();
+        return requestRepository.findAll(
+                        LeaveRequestSearch.of(keyword, statuses, from, to, scope, departments), pageable)
                 .map(LeaveRequestDtos.Response::from);
     }
 

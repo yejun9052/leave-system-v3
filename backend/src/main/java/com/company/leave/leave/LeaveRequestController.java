@@ -2,6 +2,7 @@ package com.company.leave.leave;
 
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.common.dto.PageResponse;
+import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.dto.LeaveBalanceResponse;
 import com.company.leave.leave.dto.LeaveRequestDtos;
 import com.company.leave.security.SecurityUtils;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -81,6 +83,20 @@ public class LeaveRequestController {
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(PageResponse.from(leaveRequestService.myRequests(
                 SecurityUtils.currentEmployeeId(), PageRequest.of(page, size))));
+    }
+
+    @Operation(summary = "휴가 목록 (결재함): 상태·기간·검색어로 찾기. 팀장은 맡은 부서(하위 포함)만")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
+    @GetMapping
+    public ApiResponse<PageResponse<LeaveRequestDtos.Response>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Set<LeaveRequestStatus> statuses,
+            @RequestParam(required = false) LocalDate from,
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.ok(PageResponse.from(leaveRequestService.search(SecurityUtils.currentEmployeeId(),
+                keyword, statuses, from, to, Math.max(page, 0), Math.min(Math.max(size, 1), 100))));
     }
 
     @Operation(summary = "결재 대기 목록")

@@ -1,6 +1,7 @@
 package com.company.leave.leave;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -16,7 +17,9 @@ import com.company.leave.common.exception.GlobalExceptionHandler;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
+import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.security.UserPrincipal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -27,6 +30,7 @@ import org.junit.jupiter.api.DisplayNameGenerator;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.domain.Page;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -107,6 +111,24 @@ class LeaveRequestControllerSecurityTest {
                     .andExpect(status().isOk());
         }
         verify(service, org.mockito.Mockito.times(2)).register(eq(1L), any());
+    }
+
+    @Test
+    void 휴가_목록은_결재자만_보고_상태와_기간을_받아_넘기며_한_쪽은_최대_100건이다() throws Exception {
+        when(service.search(anyLong(), any(), any(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(Page.empty());
+        authenticate(Set.of(Role.EMPLOYEE));
+        mvc.perform(get("/api/leave-requests")).andExpect(status().isForbidden());
+        verifyNoInteractions(service);
+
+        authenticate(Set.of(Role.TEAM_LEAD));
+        mvc.perform(get("/api/leave-requests").param("keyword", "연구소")
+                        .param("statuses", "APPROVED,CANCEL_REQUESTED")
+                        .param("from", "2026-01-01").param("to", "2026-12-31").param("size", "500"))
+                .andExpect(status().isOk());
+        verify(service).search(1L, "연구소",
+                Set.of(LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED),
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), 0, 100);
     }
 
     @Test
