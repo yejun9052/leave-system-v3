@@ -128,14 +128,21 @@ tasks.register<Exec>("frontendBuild") {
     else commandLine("npm", "run", "build")
 }
 
+// 프론트 정적파일은 processResources 출력(build/resources/main)과 섞지 않고 별도 폴더에 둔다.
+// Gradle 9 는 여러 태스크가 같은 출력 폴더를 순서 선언 없이 쓰면 빌드를 막는다(resolveMainClassName·compileTestJava 등).
+// jar 를 만들 때만 이 폴더를 클래스패스에 넣어 BOOT-INF/classes/static 으로 들어가게 한다.
+val frontendStaticDir = layout.buildDirectory.dir("frontend-static")
 tasks.register<Copy>("copyFrontend") {
-    dependsOn("frontendBuild", "processResources")
+    dependsOn("frontendBuild")
     from(file("../frontend/dist"))
-    into(layout.buildDirectory.dir("resources/main/static"))
+    into(frontendStaticDir.map { it.dir("static") })
 }
 
 // 일반 jar 도 프론트 정적파일 포함 (난독화 태스크는 자체 정의에서 copyFrontend 의존)
-tasks.named("bootJar") { dependsOn("copyFrontend") }
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
+    dependsOn("copyFrontend")
+    classpath(frontendStaticDir)
+}
 
 // 1) 우리 클래스만 난독화 → jar 로 출력 (deps 는 라이브러리 참조)
 val obfClassesJar = layout.buildDirectory.file("obf/obf-classes.jar")
@@ -180,6 +187,7 @@ tasks.register<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJarO
     classpath(
         obfClassesDir,
         tasks.named("processResources").get().outputs.files,
+        frontendStaticDir,
         runtimeNoDevtools
     )
 }
