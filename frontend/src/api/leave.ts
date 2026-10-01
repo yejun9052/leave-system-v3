@@ -12,8 +12,19 @@ export interface LeaveRequestCreate {
   forfeitAcknowledged?: boolean;
   /** 종류에 경조사 규정이 있으면 필수 */
   specialRuleId?: number;
-  /** 팀장 부재로 인사관리자에게 바로 신청할 때만(최대 500자) */
-  hrDirectReason?: string;
+}
+
+/** 인사관리자·시스템 관리자의 강제 등록: 바로 승인 상태로 등록(지난 날짜 가능, 시작일은 근무일만) */
+export interface LeaveRegister {
+  employeeId: number;
+  leaveTypeId: number;
+  startDate: string;
+  endDate: string;
+  reason?: string;
+  /** 시간차(1~3)일 때만 전송 */
+  hours?: number;
+  /** 종류에 경조사 규정이 있으면 필수 */
+  specialRuleId?: number;
 }
 
 export interface LeaveEligibility {
@@ -39,13 +50,13 @@ export interface LeavePreviewParams {
   specialRuleId?: number;
 }
 
+/**
+ * 신청자의 결재 경로. 한 명이 승인하면 확정되고, 어느 경우든 인사관리자도 결재할 수 있다.
+ * LEAD = 결재 팀장(leadName), HR = 결재 팀장이 없어 인사관리자, SELF = 본인 자가 승인 가능
+ */
 export interface ApprovalRoute {
-  leadApprovalRequired: boolean;
-  firstStage: "LEAD" | "HR";
+  approverKind: "LEAD" | "HR" | "SELF";
   leadName: string | null;
-  leadAbsent: boolean;
-  leadAbsenceType: string | null;
-  hrDirectAvailable: boolean;
 }
 
 export const leaveApi = {
@@ -65,6 +76,9 @@ export const leaveApi = {
 
   create: (body: LeaveRequestCreate) =>
     unwrap<LeaveRequest>(api.post("/leave-requests", body)),
+
+  register: (body: LeaveRegister) =>
+    unwrap<LeaveRequest>(api.post("/leave-requests/register", body)),
 
   myRequests: (page = 0, size = 20) =>
     unwrap<Page<LeaveRequest>>(api.get("/leave-requests/me", { params: { page, size } })),

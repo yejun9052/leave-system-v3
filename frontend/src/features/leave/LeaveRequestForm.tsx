@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { leaveApi, type LeaveRequestCreate } from "@/api/leave";
+import { leaveApi, type ApprovalRoute, type LeaveRequestCreate } from "@/api/leave";
 import type { LeaveType } from "@/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,13 +40,20 @@ function hasFinalConsonant(word: string): boolean {
   const code = word.charCodeAt(word.length - 1) - 0xac00;
   return code >= 0 && code <= 11171 && code % 28 !== 0;
 }
-/** "로/으로" 조사(받침이 있고 ㄹ 받침이 아니면 "으로"). */
-const roParticle = (word: string) => {
-  const code = word.charCodeAt(word.length - 1) - 0xac00;
-  return hasFinalConsonant(word) && code % 28 !== 8 ? "으로" : "로";
-};
 const topicParticle = (word: string) => (hasFinalConsonant(word) ? "은" : "는");
 const objectParticle = (word: string) => (hasFinalConsonant(word) ? "을" : "를");
+
+/** 신청 화면의 결재 안내. 어느 경우든 인사관리자도 결재할 수 있다. */
+function approvalRouteText(route: ApprovalRoute): string {
+  switch (route.approverKind) {
+    case "LEAD":
+      return `결재: 팀장 ${route.leadName ?? "-"}님 (인사관리자도 결재 가능)`;
+    case "HR":
+      return "결재: 인사관리자";
+    case "SELF":
+      return "결재: 본인 승인 가능(자가 승인)";
+  }
+}
 
 export interface LeaveRequestFormOptions {
   start: string;
@@ -72,8 +79,6 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
   const [hours, setHours] = useState<string>("");
   const [forfeitAck, setForfeitAck] = useState(false);
   const [specialRuleId, setSpecialRuleId] = useState<string>("");
-  const [hrDirect, setHrDirect] = useState(false);
-  const [hrReasonEdited, setHrReasonEdited] = useState<string | null>(null);
 
   const setTypeId = (id: string) => {
     setTypeIdState(id);
@@ -94,12 +99,6 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
   // 경조사 규정이 연결된 종류는 규정 하나를 반드시 선택해야 한다
   const specialRules = selectedType?.specialRules ?? [];
   const needsRule = specialRules.length > 0;
-  // 팀장이 오늘 부재면 인사관리자에게 바로 신청할 수 있다(사유 필수, 기본 문구는 수정 가능)
-  const hrDirectOn = hrDirect && !!route?.hrDirectAvailable;
-  const hrReasonDefault = selectedType
-    ? `팀장 ${route?.leadName ?? ""}님의 ${route?.leadAbsenceType ?? ""} 부재로 인사관리자에게 이 ${selectedType.name}${objectParticle(selectedType.name)} 신청합니다.`
-    : "";
-  const hrReason = hrReasonEdited ?? hrReasonDefault;
 
   // 기억해 둔 종류가 더 이상 쓸 수 없는 종류면(정책 변경 등) 선택하지 않은 상태로 둔다
   useEffect(() => {
@@ -181,7 +180,6 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
         hours: isHourly ? Number(hours) : undefined,
         forfeitAcknowledged: forfeitDays > 0 ? true : undefined,
         specialRuleId: needsRule ? Number(specialRuleId) : undefined,
-        hrDirectReason: hrDirectOn ? hrReason.trim() : undefined,
       };
       return leaveApi.create(body);
     },
@@ -203,7 +201,6 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     !notAllowed &&
     (!isHourly || !!hours) &&
     (!needsRule || !!specialRuleId) &&
-    (!hrDirectOn || !!hrReason.trim()) &&
     (forfeitDays <= 0 || forfeitAck);
 
   return {
@@ -229,10 +226,6 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     forfeitAck,
     setForfeitAck,
     route,
-    hrDirect,
-    setHrDirect,
-    hrReason,
-    setHrReasonEdited,
     canSubmit,
     isSaving: save.isPending,
     submit: () => save.mutate(),
@@ -264,10 +257,6 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
     reason,
     setReason,
     route,
-    hrDirect,
-    setHrDirect,
-    hrReason,
-    setHrReasonEdited,
   } = form;
 
   return (
@@ -350,35 +339,7 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
         <Label>사유 (선택)</Label>
         <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 개인 사유" />
       </div>
-      {route && (
-        <p className="text-sm text-muted-foreground">
-          {route.firstStage === "LEAD"
-            ? `팀장(${route.leadName ?? "-"}) 1차 승인 → 인사관리자 최종 승인`
-            : "인사관리자가 결재합니다"}
-        </p>
-      )}
-      {route?.hrDirectAvailable && (
-        <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          <p>
-            팀장({route.leadName ?? "-"})님이 오늘 {route.leadAbsenceType ?? "휴가"}
-            {roParticle(route.leadAbsenceType ?? "휴가")} 부재 중입니다.
-          </p>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={hrDirect} onChange={(e) => setHrDirect(e.target.checked)} />
-            인사관리자에게 바로 신청
-          </label>
-          {hrDirect && (
-            <div className="space-y-1">
-              <Label className="text-xs">사유(필수)</Label>
-              <Input
-                value={hrReason}
-                maxLength={500}
-                onChange={(e) => setHrReasonEdited(e.target.value)}
-              />
-            </div>
-          )}
-        </div>
-      )}
+      {route && <p className="text-sm text-muted-foreground">{approvalRouteText(route)}</p>}
     </div>
   );
 }

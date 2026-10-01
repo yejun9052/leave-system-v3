@@ -32,7 +32,6 @@ import { LeaveRequestFields, useLeaveRequestForm } from "./LeaveRequestForm";
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
   PENDING: "warning",
-  LEAD_APPROVED: "default",
   APPROVED: "success",
   REJECTED: "destructive",
   CANCEL_REQUESTED: "warning",
@@ -56,7 +55,7 @@ export default function MyLeavesPage() {
       leaveApi.cancel(id).then((r) => ({ r, approved })),
     onSuccess: ({ approved }) => {
       toast({
-        title: approved ? "취소 요청되었습니다. 인사관리자 승인 후 확정됩니다." : "신청이 취소되었습니다.",
+        title: approved ? "취소 요청되었습니다. 결재자가 승인하면 확정됩니다." : "신청이 취소되었습니다.",
         variant: "success",
       });
       qc.invalidateQueries({ queryKey: ["myRequests"] });
@@ -135,15 +134,10 @@ export default function MyLeavesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
-                      {r.status === "LEAD_APPROVED" && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {r.leadApproverName ? `팀장 ${r.leadApproverName} 승인 · 인사 결재 대기` : "인사 결재 대기"}
-                        </p>
-                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{r.approverName ?? "-"}</TableCell>
                     <TableCell className="text-right">
-                      {canCancelOwn && r.employeeId === user?.id && (r.status === "PENDING" || r.status === "LEAD_APPROVED") && (
+                      {canCancelOwn && r.employeeId === user?.id && r.status === "PENDING" && (
                         <Button
                           size="sm"
                           variant="ghost"

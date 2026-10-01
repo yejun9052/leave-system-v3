@@ -55,7 +55,7 @@ export default function MobileDaySummary({
   );
   for (const l of data?.leaves ?? []) {
     if (q && !l.employeeName.includes(q)) continue;
-    const pending = l.status === "PENDING" || l.status === "LEAD_APPROVED";
+    const pending = l.status === "PENDING";
     items.push({
       key: `L${l.id}`,
       dot: "bg-primary",
