@@ -17,7 +17,6 @@ export interface Policy {
   allowNegative: boolean;
   halfDayEnabled: boolean;
   leadApprovalRequired: boolean;
-  quarterDayEnabled: boolean;
   hourlyEnabled: boolean;
   maxConcurrentAbsence: number;
   minAdvanceDays: number;

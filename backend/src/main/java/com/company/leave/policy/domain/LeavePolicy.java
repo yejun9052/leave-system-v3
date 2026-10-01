@@ -64,10 +64,6 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "lead_approval_required", nullable = false)
     private boolean leadApprovalRequired = true;
 
-    /** 반반차(0.25일) 사용 여부. */
-    @Column(name = "quarter_day_enabled", nullable = false)
-    private boolean quarterDayEnabled = false;
-
     /** 시간차(1시간 = 0.125일) 사용 여부. */
     @Column(name = "hourly_enabled", nullable = false)
     private boolean hourlyEnabled = false;
@@ -118,7 +114,6 @@ public class LeavePolicy extends BaseTimeEntity {
         this.allowNegative = s.allowNegative();
         this.halfDayEnabled = s.halfDayEnabled();
         this.leadApprovalRequired = s.leadApprovalRequired();
-        this.quarterDayEnabled = s.quarterDayEnabled();
         this.hourlyEnabled = s.hourlyEnabled();
         this.maxConcurrentAbsence = s.maxConcurrentAbsence();
         this.minAdvanceDays = s.minAdvanceDays();
@@ -141,7 +136,6 @@ public class LeavePolicy extends BaseTimeEntity {
             int monthlyAccrualMax,
             boolean allowNegative,
             boolean halfDayEnabled,
-            boolean quarterDayEnabled,
             boolean hourlyEnabled,
             boolean leadApprovalRequired,
             int maxConcurrentAbsence,
@@ -204,20 +198,16 @@ public class LeavePolicy extends BaseTimeEntity {
         return leadApprovalRequired;
     }
 
-    public boolean isQuarterDayEnabled() {
-        return quarterDayEnabled;
-    }
-
     public boolean isHourlyEnabled() {
         return hourlyEnabled;
     }
 
-    /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능. */
+    /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능, 반반차는 시간차로 대체되어 항상 불가(V19). */
     public boolean allows(DayPortion portion) {
         return switch (portion) {
             case FULL -> true;
             case HALF -> halfDayEnabled;
-            case QUARTER -> quarterDayEnabled;
+            case QUARTER -> false;
             case HOURLY -> hourlyEnabled;
         };
     }

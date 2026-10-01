@@ -77,7 +77,7 @@ export type SelectResult =
   | { ok: false; message: string };
 
 export const NOT_WORKDAY_MESSAGE = "시작일은 근무일이어야 합니다.";
-export const PARTIAL_ONE_DAY_MESSAGE = "반차·반반차·시간차는 하루만 신청할 수 있습니다.";
+export const PARTIAL_ONE_DAY_MESSAGE = "반차·시간차는 하루만 신청할 수 있습니다.";
 
 /**
  * 날짜 클릭 규칙.
@@ -85,7 +85,7 @@ export const PARTIAL_ONE_DAY_MESSAGE = "반차·반반차·시간차는 하루�
  *   <li>첫 클릭: 시작일(그대로 신청하면 그 하루)</li>
  *   <li>두 번째 클릭: 종료일. 시작일보다 이르면 두 날짜를 바꿔 이른 쪽이 시작일</li>
  *   <li>세 번째 클릭: 그 날짜로 새로 시작</li>
- *   <li>부분 휴가(반차·반반차·시간차): 누를 때마다 그 하루만</li>
+ *   <li>부분 휴가(반차·시간차): 누를 때마다 그 하루만</li>
  *   <li>시작일이 될 날짜가 주말·공휴일이면 선택하지 않는다(서버 규칙과 같음)</li>
  * </ul>
  */

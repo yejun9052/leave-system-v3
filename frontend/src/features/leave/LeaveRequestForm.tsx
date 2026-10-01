@@ -61,7 +61,7 @@ export type LeaveRequestFormState = ReturnType<typeof useLeaveRequestForm>;
 
 /**
  * 휴가 신청 입력·검증 상태. "내 휴가" 신청 다이얼로그와 캘린더 신청 패널이 함께 쓴다.
- * 날짜(start/end)는 호출하는 쪽이 관리하고, 부분 휴가(반차·반반차·시간차)면 종료일을 시작일로 본다.
+ * 날짜(start/end)는 호출하는 쪽이 관리하고, 부분 휴가(반차·시간차)면 종료일을 시작일로 본다.
  */
 export function useLeaveRequestForm({ start, end, rememberType, onSaved }: LeaveRequestFormOptions) {
   const { toast } = useToast();
@@ -87,7 +87,7 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     () => usableTypes.find((t) => String(t.id) === typeId),
     [usableTypes, typeId],
   );
-  // 종일이 아닌 종류(반차·반반차·시간차)는 하루만 신청할 수 있다
+  // 종일이 아닌 종류(반차·시간차)는 하루만 신청할 수 있다
   const isPartial = !!selectedType && selectedType.portion !== "FULL";
   const isHourly = selectedType?.portion === "HOURLY";
   const endDate = isPartial ? start : end;

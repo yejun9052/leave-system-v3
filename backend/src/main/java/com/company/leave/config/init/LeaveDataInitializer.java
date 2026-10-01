@@ -58,17 +58,17 @@ public class LeaveDataInitializer implements ApplicationRunner {
         policyService.getActivePolicy(); // 기본 정책 보장
 
         if (leaveTypeRepository.count() == 0) {
-            // 반반차·시간차는 정책에서 켜야 신청 가능(기본 꺼짐). 병가·공가는 잔여 연차 소진 후 사용
+            // 시간차는 정책에서 켜야 신청 가능(기본 꺼짐). 반반차는 시간차(2시간)로 대체되어 만들지 않는다.
+            // 병가·공가는 잔여 연차 소진 후 사용
             leaveTypeRepository.saveAll(List.of(
                     type("ANNUAL", "연차", "1.0", true, DayPortion.FULL, true, false, "#4f46e5", 1),
                     type("HALF_AM", "오전 반차", "0.5", true, DayPortion.HALF, true, false, "#22c55e", 2),
                     type("HALF_PM", "오후 반차", "0.5", true, DayPortion.HALF, true, false, "#06b6d4", 3),
-                    type("QUARTER", "반반차", "0.25", true, DayPortion.QUARTER, true, false, "#14b8a6", 3),
                     type("HOURLY", "시간차", "0.125", true, DayPortion.HOURLY, true, false, "#0ea5e9", 3),
                     type("CONDOLENCE", "경조사 휴가", "0.0", true, DayPortion.FULL, false, false, "#f59e0b", 4),
                     type("SICK", "병가", "0.0", false, DayPortion.FULL, false, true, "#ef4444", 5),
                     type("OFFICIAL", "공가", "0.0", true, DayPortion.FULL, false, true, "#8b5cf6", 6)));
-            log.info("기본 휴가 종류 8종 생성");
+            log.info("기본 휴가 종류 7종 생성");
         }
 
         // 공휴일 API 키가 있으면 HolidayStartupSync 가 API 로 채운다. 하드코딩 2026년 시드는 키가 없을 때(로컬 개발)만 쓰는 대체 수단

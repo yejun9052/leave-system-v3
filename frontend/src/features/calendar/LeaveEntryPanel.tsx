@@ -44,7 +44,7 @@ export default function LeaveEntryPanel({
   onChangeDates?: () => void;
   onClose: () => void;
   onSaved: () => void;
-  /** 반차·반반차·시간차를 고르거나 해제할 때(달력이 하루 선택으로 바꾸도록) */
+  /** 반차·시간차를 고르거나 해제할 때(달력이 하루 선택으로 바꾸도록) */
   onPartialChange: (partial: boolean) => void;
 }) {
   const sheet = variant === "sheet";
@@ -106,8 +106,8 @@ export default function LeaveEntryPanel({
   const { start, end } = selection;
   const hint = form.isPartial
     ? sheet
-      ? "반차·반반차·시간차는 하루만 신청합니다."
-      : "반차·반반차·시간차는 하루만 신청합니다. 다른 날짜를 누르면 그 날로 바뀝니다."
+      ? "반차·시간차는 하루만 신청합니다."
+      : "반차·시간차는 하루만 신청합니다. 다른 날짜를 누르면 그 날로 바뀝니다."
     : sheet
       ? end === null
         ? "이대로 신청하면 이 하루만 신청합니다."

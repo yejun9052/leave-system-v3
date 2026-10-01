@@ -24,7 +24,7 @@ class LeaveAccrualCalculatorTest {
                 GrantBasis.FISCAL_YEAR, 1, 1,
                 BigDecimal.valueOf(15), 2, BigDecimal.ONE, BigDecimal.valueOf(25),
                 true, 11,
-                false, true, false, false, true, 0, 0, 0,
+                false, true, false, true, 0, 0, 0,
                 true, false, BigDecimal.ZERO));
         return p;
     }

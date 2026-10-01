@@ -109,7 +109,7 @@ export default function CalendarPage() {
   const selector = useDateSelection(isWorkday, notify);
   const { selection } = selector;
   const [panelOpen, setPanelOpen] = useState(false);
-  // 패널에서 반차·반반차·시간차를 고른 상태면 누를 때마다 그 하루만 선택한다
+  // 패널에서 반차·시간차를 고른 상태면 누를 때마다 그 하루만 선택한다
   const [partial, setPartial] = useState(false);
 
   // 모바일(폭 640px 미만): FullCalendar 대신 전용 월 격자. 탭은 날짜 선택 + 아래 요약,
@@ -472,7 +472,7 @@ export default function CalendarPage() {
           </p>
           <p className="text-xs text-muted-foreground">
             {partial
-              ? "반차·반반차·시간차는 날짜 하나를 누르세요."
+              ? "반차·시간차는 날짜 하나를 누르세요."
               : "첫 탭은 시작일, 두 번째 탭은 종료일입니다. 한 번 더 누르면 새로 고릅니다."}
           </p>
           <div className="flex justify-end gap-2">

@@ -348,11 +348,22 @@ class LeaveRequestServiceSickAndPartialTest {
     class 부분_휴가 {
 
         @Test
-        void 반반차는_0_25일을_차감한다() {
-            LeaveRequest request = 신청(반반차, null, null);
+        void 반반차를_대체하는_시간차_2시간은_0_25일을_차감한다() {
+            LeaveRequest request = 신청(시간차, 2, null);
 
             assertThat(request.getDays()).isEqualByComparingTo("0.25");
             assertThat(request.getDeductedDays()).isEqualByComparingTo("0.25");
+        }
+
+        @Test
+        void 반반차는_시간차로_대체되어_정책과_무관하게_신청할_수_없다() {
+            LeavePolicy real = LeavePolicy.createDefault();
+            when(policy.allows(DayPortion.QUARTER)).thenAnswer(inv -> real.allows(DayPortion.QUARTER));
+
+            assertThat(real.allows(DayPortion.QUARTER)).isFalse();
+            assertThatThrownBy(() -> 신청(반반차, null, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_TYPE_DISABLED));
         }
 
         @Test
@@ -372,12 +383,8 @@ class LeaveRequestServiceSickAndPartialTest {
 
         @Test
         void 정책에서_끈_단위는_신청할_수_없다() {
-            when(policy.allows(DayPortion.QUARTER)).thenReturn(false);
             when(policy.allows(DayPortion.HALF)).thenReturn(false);
 
-            assertThatThrownBy(() -> 신청(반반차, null, null))
-                    .isInstanceOfSatisfying(BusinessException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_TYPE_DISABLED));
             assertThatThrownBy(() -> 신청(반차, null, null))
                     .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_TYPE_DISABLED));
@@ -386,7 +393,7 @@ class LeaveRequestServiceSickAndPartialTest {
         @Test
         void 부분_휴가는_하루만_신청할_수_있다() {
             assertThatThrownBy(() -> service.create(EMP,
-                    new LeaveRequestDtos.Create(반반차.getId(), TUE, TUE.plusDays(1), "사유")))
+                    new LeaveRequestDtos.Create(반차.getId(), TUE, TUE.plusDays(1), "사유")))
                     .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_INVALID_PERIOD));
         }
@@ -394,7 +401,7 @@ class LeaveRequestServiceSickAndPartialTest {
         @Test
         void 같은_날_부분_휴가는_합계_1일까지_함께_신청할_수_있다() {
             기존_신청(반차, "0.5");
-            기존_신청(반반차, "0.25");
+            기존_신청(반반차, "0.25"); // V19 이전에 승인된 반반차 기록도 합계에 들어간다
 
             LeaveRequest request = 신청(시간차, 2, null); // 0.5 + 0.25 + 0.25 = 1.0
 
