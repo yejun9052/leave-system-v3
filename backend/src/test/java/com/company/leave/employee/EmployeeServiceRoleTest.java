@@ -126,11 +126,11 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void 결재_알림_수신자는_재직_중인_인사관리자뿐이다() {
-        when(employees.findIdsByAnyRoleAndStatus(Set.of(Role.HR_ADMIN),
-                com.company.leave.employee.domain.EmployeeStatus.ACTIVE)).thenReturn(java.util.List.of(11L));
-        assertThat(service.activeAdminIds()).containsExactly(11L);
-        verify(employees).findIdsByAnyRoleAndStatus(Set.of(Role.HR_ADMIN),
+    void 전사_결재자는_재직_중인_인사관리자와_시스템_관리자다() {
+        when(employees.findIdsByAnyRoleAndStatus(Set.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN),
+                com.company.leave.employee.domain.EmployeeStatus.ACTIVE)).thenReturn(java.util.List.of(1L, 11L));
+        assertThat(service.activeAdminIds()).containsExactly(1L, 11L);
+        verify(employees).findIdsByAnyRoleAndStatus(Set.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN),
                 com.company.leave.employee.domain.EmployeeStatus.ACTIVE);
     }
 

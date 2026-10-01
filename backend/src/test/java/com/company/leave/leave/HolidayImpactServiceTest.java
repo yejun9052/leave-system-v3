@@ -269,7 +269,7 @@ class HolidayImpactServiceTest {
         service.applyNewHolidays(Map.of(wed, "어린이날", MON, "대체공휴일(노동절)"));
 
         verify(requestRepository).findByStatusInOverlapping(
-                EnumSet.of(LeaveRequestStatus.PENDING, LeaveRequestStatus.LEAD_APPROVED,
+                EnumSet.of(LeaveRequestStatus.PENDING,
                         LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED),
                 MON, wed);
     }

@@ -1,15 +1,17 @@
 package com.company.leave.leave.domain;
 
+/**
+ * 휴가 신청 상태. 결재는 한 번(팀장·인사관리자·시스템 관리자 중 권한 있는 한 명)으로 확정된다.
+ * 2단계 결재의 LEAD_APPROVED 는 V21 에서 PENDING 으로 되돌리고 없앴다.
+ */
 public enum LeaveRequestStatus {
-    /** 결재 대기(팀장 단계 또는 인사 단계, 단계는 정책·조직으로 판단) */
+    /** 결재 대기 */
     PENDING,
-    /** 팀장 1차 승인 완료, 인사관리자 최종 승인 대기 */
-    LEAD_APPROVED,
-    /** 승인됨(최종) */
+    /** 승인됨 */
     APPROVED,
     /** 반려됨 */
     REJECTED,
-    /** 승인된 휴가에 대해 취소 요청됨(인사관리자 결재 대기) */
+    /** 승인된 휴가에 대해 취소 요청됨(결재자 결재 대기) */
     CANCEL_REQUESTED,
     /** 취소됨 */
     CANCELLED

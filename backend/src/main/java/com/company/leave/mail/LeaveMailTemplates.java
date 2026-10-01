@@ -3,14 +3,15 @@ package com.company.leave.mail;
 /**
  * 휴가 결재 메일 본문(일반 텍스트). 템플릿 엔진 없이 문자열로 만든다.
  *
- * <p>신청 건 하나에 받는 쪽별 대화(Thread)가 셋 있다. 각 대화의 첫 메일은 신청 번호로 정한 Message-ID 를 쓰고,
- * 이후 메일은 그 ID 에 답장(RE: 같은 제목)으로 붙어 메일함에서 한 대화로 보인다.
+ * <p>결재는 한 번(팀장·인사관리자·시스템 관리자 중 한 명)으로 확정된다. 신청 건 하나에 받는 쪽별 대화(Thread)가 셋 있다.
+ * 각 대화의 첫 메일은 신청 번호로 정한 Message-ID 를 쓰고, 이후 메일은 그 ID 에 답장(RE: 같은 제목)으로 붙는다.
  * <ul>
- *   <li>APPLICANT: 신청 접수 → 승인·반려·취소 결과</li>
- *   <li>LEAD: 1차 결재 요청(또는 팀장 단계가 없으면 승인 안내) → 승인·취소 안내</li>
- *   <li>HR: 결재 요청(팀장 승인 뒤면 최종 결재 요청) → 신청 철회·취소 요청</li>
+ *   <li>APPLICANT: 신청 접수(또는 인사관리자 강제 등록) → 승인·반려·취소 결과</li>
+ *   <li>APPROVER: 결재 요청 → 신청 철회·취소 요청</li>
+ *   <li>LEAD: 팀원 휴가 승인·등록 안내 → 취소 안내</li>
  * </ul>
  * 첫 메일 제목은 대화마다 고정이라, 답장 제목은 같은 정보로 다시 계산해 "RE: " 를 붙인다.
+ * 첫 메일이 보내지지 않은 대화에 답장하면(예: 팀장이 직접 승인해 안내를 받지 않음) 새 대화처럼 보일 뿐 문제는 없다.
  */
 public final class LeaveMailTemplates {
 
@@ -19,7 +20,7 @@ public final class LeaveMailTemplates {
     private LeaveMailTemplates() {
     }
 
-    public enum Thread { APPLICANT, LEAD, HR }
+    public enum Thread { APPLICANT, APPROVER, LEAD }
 
     /**
      * 메일에 쓰는 신청 정보.
@@ -28,11 +29,9 @@ public final class LeaveMailTemplates {
      * @param leaveLabel         휴가 종류(경조사 규정 포함, 예: "경조사(본인 결혼)")
      * @param period             기간(예: "2026-10-14 ~ 2026-10-15", 하루면 날짜 하나)
      * @param amount             일수·시간(예: "2일", "0.5일", "2시간")
-     * @param viaLead            팀장 1차 결재 단계를 거치는 건인지(대화 첫 메일 제목이 달라진다)
      */
     public record Info(long requestId, long createdEpochMillis, String applicantName, String departmentName,
-                       String leaveLabel, String period, String amount, String reason, String hrDirectReason,
-                       boolean viaLead) {
+                       String leaveLabel, String period, String amount, String reason) {
     }
 
     /** 대화 첫 메일이면 messageId, 답장이면 inReplyTo 가 채워진다. */
@@ -41,19 +40,32 @@ public final class LeaveMailTemplates {
 
     // --- 신청자 대화 ---
 
+    /** @param route 결재 경로 안내(예: "팀장 홍길동님 승인(인사관리자도 승인 가능)") */
     public static Mail submitted(Info info, String domain, String baseUrl, String route) {
         String body = info.applicantName() + "님, 휴가 신청이 접수되었습니다.\n\n"
                 + details(info)
-                + "결재 경로: " + route + "\n\n"
+                + "결재: " + route + "\n\n"
                 + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n";
         return root(info, Thread.APPLICANT, domain, body);
     }
 
-    public static Mail approved(Info info, String domain, String baseUrl) {
-        return applicantReply(info, domain, baseUrl, "휴가가 최종 승인되었습니다.", null);
+    /** 인사관리자가 대신 등록(바로 승인됨). 신청 접수 대신 이 메일이 대화의 첫 메일이 된다. */
+    public static Mail registered(Info info, String domain, String baseUrl, String by) {
+        String body = info.applicantName() + "님, " + by + "이 휴가를 등록했습니다. 승인 완료 상태입니다.\n\n"
+                + details(info)
+                + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n";
+        return root(info, Thread.APPLICANT, domain, body);
     }
 
-    /** @param rejectedBy 반려한 사람(예: "팀장 홍길동님", "인사관리자 김인사님") */
+    /** @param approvedBy 승인한 사람(예: "팀장 홍길동님"). 자가 승인이면 null */
+    public static Mail approved(Info info, String domain, String baseUrl, String approvedBy) {
+        String headline = approvedBy != null
+                ? approvedBy + "이 휴가를 승인했습니다."
+                : "자가 승인으로 휴가가 확정되었습니다.";
+        return applicantReply(info, domain, baseUrl, headline, null);
+    }
+
+    /** @param rejectedBy 반려한 사람(예: "팀장 홍길동님") */
     public static Mail rejected(Info info, String domain, String baseUrl, String rejectedBy, String reason) {
         return applicantReply(info, domain, baseUrl, rejectedBy + "이 휴가 신청을 반려했습니다.",
                 "반려 사유: " + orNone(reason));
@@ -69,25 +81,53 @@ public final class LeaveMailTemplates {
                 "반려 사유: " + orNone(reason));
     }
 
-    public static Mail cancelledByHr(Info info, String domain, String baseUrl) {
-        return applicantReply(info, domain, baseUrl, "인사관리자가 이 휴가를 취소했습니다.", null);
+    /** 결재 대기 중인 신청을 인사관리자가 취소. */
+    public static Mail cancelledByHr(Info info, String domain, String baseUrl, String by, String reason) {
+        return applicantReply(info, domain, baseUrl, by + "이 휴가 신청을 취소했습니다.",
+                reason != null && !reason.isBlank() ? "사유: " + reason : null);
     }
 
-    // --- 팀장 대화 ---
+    /** 승인된 휴가를 인사관리자가 강제 취소(시작 후 포함). */
+    public static Mail forceCancelled(Info info, String domain, String baseUrl, String by, String reason) {
+        return applicantReply(info, domain, baseUrl,
+                by + "이 승인된 휴가를 취소했습니다. 차감된 연차는 돌아갑니다.",
+                "취소 사유: " + orNone(reason));
+    }
 
-    public static Mail leadRequest(Info info, String domain, String baseUrl) {
-        String body = info.applicantName() + "님이 휴가를 신청했습니다. 1차 결재를 부탁드립니다.\n\n"
+    // --- 결재자 대화 ---
+
+    public static Mail approvalRequest(Info info, String domain, String baseUrl) {
+        String body = info.applicantName() + "님이 휴가를 신청했습니다. 결재를 부탁드립니다.\n\n"
                 + details(info)
                 + "결재함: " + url(baseUrl, "/approvals") + "\n";
-        return root(info, Thread.LEAD, domain, body);
+        return root(info, Thread.APPROVER, domain, body);
     }
 
-    /** 최종 승인 안내. 팀장 단계를 거쳤으면 결재 요청 메일에 답장, 아니면 이 메일이 대화의 첫 메일. */
-    public static Mail leadApprovedInfo(Info info, String domain, String baseUrl) {
-        String body = info.applicantName() + "님의 휴가가 최종 승인되었습니다.\n\n"
+    public static Mail withdrawn(Info info, String domain, String baseUrl) {
+        String body = info.applicantName() + "님이 결재 대기 중이던 휴가 신청을 취소했습니다. 더 결재하지 않아도 됩니다.\n\n"
                 + details(info)
-                + "캘린더: " + url(baseUrl, "/calendar") + "\n";
-        return info.viaLead() ? reply(info, Thread.LEAD, domain, body) : root(info, Thread.LEAD, domain, body);
+                + "결재함: " + url(baseUrl, "/approvals") + "\n";
+        return reply(info, Thread.APPROVER, domain, body);
+    }
+
+    public static Mail cancelRequested(Info info, String domain, String baseUrl, String cancelReason) {
+        String body = info.applicantName() + "님이 승인된 휴가의 취소를 요청했습니다. 결재를 부탁드립니다.\n\n"
+                + details(info)
+                + "취소 사유: " + orNone(cancelReason) + "\n\n"
+                + "결재함: " + url(baseUrl, "/approvals") + "\n";
+        return reply(info, Thread.APPROVER, domain, body);
+    }
+
+    // --- 담당 팀장 대화 ---
+
+    /** @param approvedBy 승인한 사람(예: "인사관리자 김인사님") */
+    public static Mail leadApprovedInfo(Info info, String domain, String baseUrl, String approvedBy) {
+        return leadRoot(info, domain, baseUrl, approvedBy + "이 " + info.applicantName() + "님의 휴가를 승인했습니다.");
+    }
+
+    public static Mail leadRegisteredInfo(Info info, String domain, String baseUrl, String by) {
+        return leadRoot(info, domain, baseUrl,
+                by + "이 " + info.applicantName() + "님의 휴가를 등록했습니다(승인 완료).");
     }
 
     public static Mail leadCancelledInfo(Info info, String domain, String baseUrl) {
@@ -97,32 +137,12 @@ public final class LeaveMailTemplates {
         return reply(info, Thread.LEAD, domain, body);
     }
 
-    // --- 인사관리자 대화 ---
-
-    public static Mail hrRequest(Info info, String domain, String baseUrl, String leadApproverName) {
-        String head = info.viaLead()
-                ? "팀장 " + leadApproverName + "님이 1차 승인한 휴가입니다. 최종 결재를 부탁드립니다.\n\n"
-                : info.applicantName() + "님이 휴가를 신청했습니다. 결재를 부탁드립니다.\n\n";
-        String direct = info.hrDirectReason() != null ? "팀장 부재로 인사 직행: " + info.hrDirectReason() + "\n\n" : "";
-        String body = head + details(info) + direct + "결재함: " + url(baseUrl, "/approvals") + "\n";
-        return root(info, Thread.HR, domain, body);
-    }
-
-    public static Mail hrCancelRequested(Info info, String domain, String baseUrl, String cancelReason) {
-        String body = info.applicantName() + "님이 승인된 휴가의 취소를 요청했습니다. 결재를 부탁드립니다.\n\n"
+    public static Mail leadForceCancelledInfo(Info info, String domain, String baseUrl, String by, String reason) {
+        String body = by + "이 " + info.applicantName() + "님의 승인된 휴가를 취소했습니다.\n\n"
                 + details(info)
-                + "취소 사유: " + orNone(cancelReason) + "\n\n"
-                + "결재함: " + url(baseUrl, "/approvals") + "\n";
-        return reply(info, Thread.HR, domain, body);
-    }
-
-    // --- 결재 대기 중 신청 철회(팀장·인사 대화 공통) ---
-
-    public static Mail withdrawn(Info info, Thread thread, String domain, String baseUrl) {
-        String body = info.applicantName() + "님이 결재 대기 중이던 휴가 신청을 취소했습니다. 더 결재하지 않아도 됩니다.\n\n"
-                + details(info)
-                + "결재함: " + url(baseUrl, "/approvals") + "\n";
-        return reply(info, thread, domain, body);
+                + "취소 사유: " + orNone(reason) + "\n\n"
+                + "캘린더: " + url(baseUrl, "/calendar") + "\n";
+        return reply(info, Thread.LEAD, domain, body);
     }
 
     // --- 대화(Thread) 공통 ---
@@ -131,11 +151,9 @@ public final class LeaveMailTemplates {
     public static String rootSubject(Info info, Thread thread) {
         String what = info.leaveLabel() + " " + info.period();
         return PREFIX + switch (thread) {
-            case APPLICANT -> "휴가 신청 접수 - " + what;
-            case LEAD -> (info.viaLead() ? "휴가 1차 결재 요청 - " : "팀원 휴가 승인 - ")
-                    + info.applicantName() + " " + what;
-            case HR -> (info.viaLead() ? "휴가 최종 결재 요청 - " : "휴가 결재 요청 - ")
-                    + info.applicantName() + " " + what;
+            case APPLICANT -> "내 휴가 - " + what;
+            case APPROVER -> "휴가 결재 요청 - " + info.applicantName() + " " + what;
+            case LEAD -> "팀원 휴가 - " + info.applicantName() + " " + what;
         };
     }
 
@@ -154,6 +172,13 @@ public final class LeaveMailTemplates {
         int at = address.lastIndexOf('@');
         String domain = at >= 0 ? address.substring(at + 1).trim() : "";
         return domain.isEmpty() ? "annual-leave.local" : domain;
+    }
+
+    private static Mail leadRoot(Info info, String domain, String baseUrl, String headline) {
+        String body = headline + "\n\n"
+                + details(info)
+                + "캘린더: " + url(baseUrl, "/calendar") + "\n";
+        return root(info, Thread.LEAD, domain, body);
     }
 
     private static Mail applicantReply(Info info, String domain, String baseUrl, String headline, String extra) {

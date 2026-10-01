@@ -48,7 +48,7 @@ public class DashboardService {
         long totalEmployees = employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE);
         int onLeaveToday = requestRepository.findApprovedBetween(today, today).size();
         long pending = requestRepository.countByStatusIn(java.util.EnumSet.of(
-                LeaveRequestStatus.PENDING, LeaveRequestStatus.LEAD_APPROVED, LeaveRequestStatus.CANCEL_REQUESTED));
+                LeaveRequestStatus.PENDING, LeaveRequestStatus.CANCEL_REQUESTED));
 
         List<LeaveBalance> balances = balanceRepository.findByYearExcludingSystemAccounts(year);
         BigDecimal totalGranted = balances.stream()
@@ -74,9 +74,6 @@ public class DashboardService {
         var balance = balanceService.getResponse(employeeId, year);
         long pendingCount = requestRepository
                 .findByEmployeeIdAndStatusOrderByStartDateDesc(employeeId, LeaveRequestStatus.PENDING)
-                .size()
-                + requestRepository
-                .findByEmployeeIdAndStatusOrderByStartDateDesc(employeeId, LeaveRequestStatus.LEAD_APPROVED)
                 .size();
 
         LocalDate today = LocalDate.now();

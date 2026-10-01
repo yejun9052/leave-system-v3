@@ -2,6 +2,7 @@ package com.company.leave.leave;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -68,46 +69,44 @@ class LeaveRequestControllerSecurityTest {
     }
 
     @Test
-    void 시스템_관리자는_모든_결재_API에서_서비스_호출_전에_403을_받는다() throws Exception {
-        authenticate(Set.of(Role.SYSTEM_ADMIN));
-        assertApprovalForbidden();
-        verifyNoInteractions(service, balances);
-    }
-
-    @Test
-    void 시스템_관리자_권한에_다른_권한이_섞여도_결재_API를_우회할_수_없다() throws Exception {
-        authenticate(Set.of(Role.SYSTEM_ADMIN, Role.HR_ADMIN, Role.TEAM_LEAD));
-        assertApprovalForbidden();
-        verifyNoInteractions(service, balances);
-    }
-
-    @Test
-    void 인사관리자는_결재함_승인_반려_취소_결재를_모두_할_수_있다() throws Exception {
-        authenticate(Set.of(Role.HR_ADMIN));
-        when(service.pendingForApprover(1L)).thenReturn(List.of());
-        mvc.perform(get("/api/leave-requests/pending")).andExpect(status().isOk());
-        for (String action : List.of("approve", "reject", "cancel/approve", "cancel/reject")) {
-            mvc.perform(post("/api/leave-requests/10/" + action).contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"reason\":\"변경\"}")).andExpect(status().isOk());
+    void 인사관리자와_시스템_관리자와_팀장은_결재함_승인_반려_취소_결재_API를_쓸_수_있다() throws Exception {
+        for (Role role : List.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN, Role.TEAM_LEAD)) {
+            authenticate(Set.of(role));
+            mvc.perform(get("/api/leave-requests/pending")).andExpect(status().isOk());
+            for (String action : List.of("approve", "reject", "cancel/approve", "cancel/reject")) {
+                mvc.perform(post("/api/leave-requests/10/" + action).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"변경\"}")).andExpect(status().isOk());
+            }
         }
-        verify(service).pendingForApprover(1L);
-        verify(service).approve(10L, 1L);
-        verify(service).reject(10L, 1L, "변경");
-        verify(service).approveCancellation(10L, 1L);
-        verify(service).rejectCancellation(10L, 1L, "변경");
+        verify(service, org.mockito.Mockito.times(3)).approve(10L, 1L);
+        verify(service, org.mockito.Mockito.times(3)).approveCancellation(10L, 1L);
+        verify(service, org.mockito.Mockito.times(3)).rejectCancellation(10L, 1L, "변경");
     }
 
     @Test
-    void 팀장은_1차_결재_API는_쓰지만_취소_결재는_403이다() throws Exception {
-        authenticate(Set.of(Role.TEAM_LEAD));
-        when(service.pendingForApprover(1L)).thenReturn(List.of());
-        mvc.perform(get("/api/leave-requests/pending")).andExpect(status().isOk());
-        mvc.perform(post("/api/leave-requests/10/approve")).andExpect(status().isOk());
-        mvc.perform(post("/api/leave-requests/10/reject").contentType(MediaType.APPLICATION_JSON)
-                .content("{}")).andExpect(status().isOk());
-        mvc.perform(post("/api/leave-requests/10/cancel/approve")).andExpect(status().isForbidden());
-        mvc.perform(post("/api/leave-requests/10/cancel/reject").contentType(MediaType.APPLICATION_JSON)
-                .content("{}")).andExpect(status().isForbidden());
+    void 일반_직원은_결재_API에서_서비스_호출_전에_403을_받는다() throws Exception {
+        authenticate(Set.of(Role.EMPLOYEE));
+        assertApprovalForbidden();
+        verifyNoInteractions(service, balances);
+    }
+
+    @Test
+    void 강제_등록은_인사관리자와_시스템_관리자만_쓸_수_있다() throws Exception {
+        String body = """
+                {"employeeId":20,"leaveTypeId":1,"startDate":"2026-09-01","endDate":"2026-09-01","reason":"병원"}
+                """;
+        for (Role role : List.of(Role.TEAM_LEAD, Role.EMPLOYEE)) {
+            authenticate(Set.of(role));
+            mvc.perform(post("/api/leave-requests/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(service);
+        for (Role role : List.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN)) {
+            authenticate(Set.of(role));
+            mvc.perform(post("/api/leave-requests/register").contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isOk());
+        }
+        verify(service, org.mockito.Mockito.times(2)).register(eq(1L), any());
     }
 
     @Test

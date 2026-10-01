@@ -94,7 +94,8 @@ class LeaveRequestServiceDayLeavesTest {
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
                 eventPublisher,
                 new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
-                        "noreply@company.com", "http://localhost:5173")));
+                        "noreply@company.com", "http://localhost:5173")),
+                org.mockito.Mockito.mock(com.company.leave.audit.AuditService.class));
 
         Department 개발팀 = 부서(2L, "개발팀");
         Department 영업팀 = 부서(4L, "영업팀");

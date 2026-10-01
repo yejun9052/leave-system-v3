@@ -19,12 +19,11 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByStartDateDesc(
             Long employeeId, LeaveRequestStatus status);
 
-    /** 기간이 겹치는 본인의 대기/1차 승인/승인 신청 목록 (부분 휴가 같은 날 합계 검사용) */
+    /** 기간이 겹치는 본인의 대기/승인 신청 목록 (부분 휴가 같은 날 합계 검사용) */
     @Query("""
             select r from LeaveRequest r
             where r.employee.id = :employeeId
               and r.status in (com.company.leave.leave.domain.LeaveRequestStatus.PENDING,
-                               com.company.leave.leave.domain.LeaveRequestStatus.LEAD_APPROVED,
                                com.company.leave.leave.domain.LeaveRequestStatus.APPROVED)
               and r.startDate <= :end and r.endDate >= :start
             """)
@@ -36,18 +35,16 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     @Query("""
             select count(r) > 0 from LeaveRequest r
             where r.employee.id = :employeeId and r.appliedYear = :year
-              and r.status in (com.company.leave.leave.domain.LeaveRequestStatus.PENDING,
-                               com.company.leave.leave.domain.LeaveRequestStatus.LEAD_APPROVED)
+              and r.status in (com.company.leave.leave.domain.LeaveRequestStatus.PENDING)
               and r.deductedDays > 0
             """)
     boolean existsPendingDeducting(@Param("employeeId") Long employeeId, @Param("year") int year);
 
-    /** 본인의 특정 연도 최종 결재 전(대기·1차 승인) 신청의 "차감 예정액" 합계(비차감 유형은 0이라 자연히 제외) */
+    /** 본인의 특정 연도 결재 대기 신청의 "차감 예정액" 합계(비차감 유형은 0이라 자연히 제외) */
     @Query("""
             select coalesce(sum(r.deductedDays), 0) from LeaveRequest r
             where r.employee.id = :employeeId and r.appliedYear = :year
-              and r.status in (com.company.leave.leave.domain.LeaveRequestStatus.PENDING,
-                               com.company.leave.leave.domain.LeaveRequestStatus.LEAD_APPROVED)
+              and r.status in (com.company.leave.leave.domain.LeaveRequestStatus.PENDING)
             """)
     BigDecimal sumPendingDeductedDays(@Param("employeeId") Long employeeId, @Param("year") int year);
 

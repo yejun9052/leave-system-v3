@@ -105,7 +105,8 @@ class LeaveRequestServiceStartDateTest {
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
                 eventPublisher,
                 new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
-                        "noreply@company.com", "http://localhost:5173")));
+                        "noreply@company.com", "http://localhost:5173")),
+                org.mockito.Mockito.mock(com.company.leave.audit.AuditService.class));
 
         Employee employee = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동").build();
         ReflectionTestUtils.setField(employee, "id", 10L);

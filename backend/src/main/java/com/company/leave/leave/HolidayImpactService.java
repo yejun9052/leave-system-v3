@@ -40,7 +40,7 @@ public class HolidayImpactService {
 
     private static final Logger log = LoggerFactory.getLogger(HolidayImpactService.class);
     static final Set<LeaveRequestStatus> TARGET_STATUSES = EnumSet.of(
-            LeaveRequestStatus.PENDING, LeaveRequestStatus.LEAD_APPROVED, LeaveRequestStatus.APPROVED,
+            LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED,
             LeaveRequestStatus.CANCEL_REQUESTED);
     static final String AUTO_CANCEL_REASON = "공휴일 지정으로 자동 취소";
 

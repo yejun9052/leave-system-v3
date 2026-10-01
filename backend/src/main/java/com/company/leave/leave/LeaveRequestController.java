@@ -41,6 +41,15 @@ public class LeaveRequestController {
         return ApiResponse.ok(leaveRequestService.create(SecurityUtils.currentEmployeeId(), req));
     }
 
+    @Operation(summary = "휴가 강제 등록 (인사관리자·시스템 관리자)",
+            description = "다른 직원의 휴가를 바로 승인 상태로 등록한다. 지난 날짜도 가능, 시작일은 근무일(주말·공휴일 불가). "
+                    + "블랙아웃·사전 신청 등 사용 통제는 적용하지 않고 겹침·잔액·경조사 규정은 확인한다.")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
+    @PostMapping("/register")
+    public ApiResponse<LeaveRequestDtos.Response> register(@Valid @RequestBody LeaveRequestDtos.Register req) {
+        return ApiResponse.ok(leaveRequestService.register(SecurityUtils.currentEmployeeId(), req));
+    }
+
     @Operation(summary = "휴가 종류별 신청 가능 여부 · 신청 미리보기",
             description = "정책 사용 여부와 병가·공가 조건(잔여 연차 1일 미만, 대기 중 연차 신청 없음)을 확인하고, "
                     + "승인 시 소멸될 남은 연차를 알려 준다(신청 화면 경고용). "
@@ -58,8 +67,8 @@ public class LeaveRequestController {
     }
 
     @Operation(summary = "내 결재 경로",
-            description = "신청하면 누가 먼저 결재하는지(팀장/인사관리자)와, 팀장이 오늘 종일 휴가로 부재라서 "
-                    + "인사관리자에게 바로 신청할 수 있는지 알려 준다.")
+            description = "결재자 종류(LEAD 결재 팀장 / HR 인사관리자 / SELF 자가 승인 가능)와 결재 팀장 이름. "
+                    + "어느 경우든 인사관리자도 결재할 수 있다.")
     @GetMapping("/approval-route")
     public ApiResponse<LeaveRequestDtos.ApprovalRoute> approvalRoute() {
         return ApiResponse.ok(leaveRequestService.approvalRoute(SecurityUtils.currentEmployeeId()));
@@ -75,21 +84,21 @@ public class LeaveRequestController {
     }
 
     @Operation(summary = "결재 대기 목록")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN') and !hasRole('SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
     @GetMapping("/pending")
     public ApiResponse<List<LeaveRequestDtos.Response>> pending() {
         return ApiResponse.ok(leaveRequestService.pendingForApprover(SecurityUtils.currentEmployeeId()));
     }
 
     @Operation(summary = "휴가 승인")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN') and !hasRole('SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping("/{id}/approve")
     public ApiResponse<LeaveRequestDtos.Response> approve(@PathVariable Long id) {
         return ApiResponse.ok(leaveRequestService.approve(id, SecurityUtils.currentEmployeeId()));
     }
 
     @Operation(summary = "휴가 반려")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN') and !hasRole('SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping("/{id}/reject")
     public ApiResponse<LeaveRequestDtos.Response> reject(
             @PathVariable Long id, @Valid @RequestBody LeaveRequestDtos.Reject req) {
@@ -97,7 +106,9 @@ public class LeaveRequestController {
                 leaveRequestService.reject(id, SecurityUtils.currentEmployeeId(), req.reason()));
     }
 
-    @Operation(summary = "휴가 취소 (대기건은 즉시 취소, 승인건은 취소 요청)")
+    @Operation(summary = "휴가 취소",
+            description = "본인: 대기 건은 즉시 취소, 승인 건은 시작 전까지 취소 요청. "
+                    + "인사관리자·시스템 관리자: 즉시 취소, 다른 직원의 승인 휴가나 이미 시작된 휴가는 강제 취소(사유 필수).")
     @PostMapping("/{id}/cancel")
     public ApiResponse<LeaveRequestDtos.Response> cancel(
             @PathVariable Long id,
@@ -106,16 +117,16 @@ public class LeaveRequestController {
         return ApiResponse.ok(leaveRequestService.cancel(id, SecurityUtils.currentEmployeeId(), reason));
     }
 
-    @Operation(summary = "휴가 취소 요청 승인 (인사관리자)")
-    @PreAuthorize("hasRole('HR_ADMIN') and !hasRole('SYSTEM_ADMIN')")
+    @Operation(summary = "휴가 취소 요청 승인 (결재자: 담당 팀장·인사관리자·시스템 관리자)")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping("/{id}/cancel/approve")
     public ApiResponse<LeaveRequestDtos.Response> approveCancellation(@PathVariable Long id) {
         return ApiResponse.ok(
                 leaveRequestService.approveCancellation(id, SecurityUtils.currentEmployeeId()));
     }
 
-    @Operation(summary = "휴가 취소 요청 반려 (인사관리자)")
-    @PreAuthorize("hasRole('HR_ADMIN') and !hasRole('SYSTEM_ADMIN')")
+    @Operation(summary = "휴가 취소 요청 반려 (결재자: 담당 팀장·인사관리자·시스템 관리자)")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
     @PostMapping("/{id}/cancel/reject")
     public ApiResponse<LeaveRequestDtos.Response> rejectCancellation(
             @PathVariable Long id, @Valid @RequestBody LeaveRequestDtos.Reject req) {

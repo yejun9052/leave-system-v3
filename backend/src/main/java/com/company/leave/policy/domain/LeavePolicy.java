@@ -60,9 +60,7 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "half_day_enabled", nullable = false)
     private boolean halfDayEnabled = true;
 
-    /** ON: 팀장 1차 승인 → 인사관리자 최종 승인. OFF: 모든 신청을 인사관리자가 바로 결재. */
-    @Column(name = "lead_approval_required", nullable = false)
-    private boolean leadApprovalRequired = true;
+    // lead_approval_required 열(2단계 결재 스위치, V17)은 단일 결재로 바뀌어 읽지 않는다. 열은 DB 에 남긴다(기본값 TRUE).
 
     /** 시간차(1시간 = 0.125일) 사용 여부. */
     @Column(name = "hourly_enabled", nullable = false)
@@ -113,7 +111,6 @@ public class LeavePolicy extends BaseTimeEntity {
         this.monthlyAccrualMax = s.monthlyAccrualMax();
         this.allowNegative = s.allowNegative();
         this.halfDayEnabled = s.halfDayEnabled();
-        this.leadApprovalRequired = s.leadApprovalRequired();
         this.hourlyEnabled = s.hourlyEnabled();
         this.maxConcurrentAbsence = s.maxConcurrentAbsence();
         this.minAdvanceDays = s.minAdvanceDays();
@@ -137,7 +134,6 @@ public class LeavePolicy extends BaseTimeEntity {
             boolean allowNegative,
             boolean halfDayEnabled,
             boolean hourlyEnabled,
-            boolean leadApprovalRequired,
             int maxConcurrentAbsence,
             int minAdvanceDays,
             int maxConsecutiveDays,
@@ -192,10 +188,6 @@ public class LeavePolicy extends BaseTimeEntity {
 
     public boolean isHalfDayEnabled() {
         return halfDayEnabled;
-    }
-
-    public boolean isLeadApprovalRequired() {
-        return leadApprovalRequired;
     }
 
     public boolean isHourlyEnabled() {

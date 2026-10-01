@@ -81,17 +81,8 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "approved_at")
     private Instant approvedAt;
 
-    /** 1차 승인한 팀장(2단계 결재). */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lead_approver_id")
-    private Employee leadApprover;
-
-    @Column(name = "lead_approved_at")
-    private Instant leadApprovedAt;
-
-    /** 팀장 부재로 인사관리자에게 바로 신청한 사유. null 이면 일반 경로. */
-    @Column(name = "hr_direct_reason", length = 500)
-    private String hrDirectReason;
+    // lead_approver_id·lead_approved_at·hr_direct_reason 열은 2단계 결재(V17) 기록으로 DB 에 남아 있지만
+    // 단일 결재에서는 쓰지 않아 매핑하지 않는다.
 
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
@@ -120,18 +111,6 @@ public class LeaveRequest extends BaseTimeEntity {
         this.status = LeaveRequestStatus.APPROVED;
         this.approver = approver;
         this.approvedAt = when;
-    }
-
-    /** 팀장 1차 승인 → 인사관리자 최종 승인 대기. */
-    public void leadApprove(Employee lead, Instant when) {
-        this.status = LeaveRequestStatus.LEAD_APPROVED;
-        this.leadApprover = lead;
-        this.leadApprovedAt = when;
-    }
-
-    /** 팀장 부재로 인사관리자에게 바로 신청(사유 기록). */
-    public void routeDirectToHr(String reason) {
-        this.hrDirectReason = reason;
     }
 
     public void reject(Employee approver, String reason, Instant when) {
@@ -176,7 +155,13 @@ public class LeaveRequest extends BaseTimeEntity {
         this.cancelReason = reason;
     }
 
-    /** 승인된 휴가에 대한 취소 요청 (팀장 재승인 대기). */
+    /** 인사관리자의 강제 취소(승인된 휴가, 시작 후도 가능). 사유를 남긴다. */
+    public void forceCancel(String reason) {
+        this.status = LeaveRequestStatus.CANCELLED;
+        this.cancelReason = reason;
+    }
+
+    /** 승인된 휴가에 대한 취소 요청 (결재자 결재 대기). */
     public void requestCancel(String reason) {
         this.status = LeaveRequestStatus.CANCEL_REQUESTED;
         this.cancelReason = reason;
@@ -192,9 +177,9 @@ public class LeaveRequest extends BaseTimeEntity {
         return status == LeaveRequestStatus.PENDING;
     }
 
-    /** 아직 최종 결재 전(대기 또는 1차 승인). 잔액·겹침 계산에서는 대기로 본다. */
+    /** 아직 결재 전(대기). 잔액·겹침 계산에서는 대기로 본다. */
     public boolean isAwaitingApproval() {
-        return status == LeaveRequestStatus.PENDING || status == LeaveRequestStatus.LEAD_APPROVED;
+        return status == LeaveRequestStatus.PENDING;
     }
 
     public boolean isCancelRequested() {
@@ -267,18 +252,6 @@ public class LeaveRequest extends BaseTimeEntity {
 
     public Instant getApprovedAt() {
         return approvedAt;
-    }
-
-    public Employee getLeadApprover() {
-        return leadApprover;
-    }
-
-    public Instant getLeadApprovedAt() {
-        return leadApprovedAt;
-    }
-
-    public String getHrDirectReason() {
-        return hrDirectReason;
     }
 
     public String getRejectReason() {

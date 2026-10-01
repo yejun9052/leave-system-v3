@@ -1,6 +1,7 @@
 package com.company.leave.leave;
 
 import com.company.leave.employee.domain.Employee;
+import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveRequest;
@@ -8,7 +9,6 @@ import com.company.leave.mail.AccountMailProperties;
 import com.company.leave.mail.LeaveMail;
 import com.company.leave.mail.LeaveMailTemplates;
 import com.company.leave.mail.LeaveMailTemplates.Info;
-import com.company.leave.mail.LeaveMailTemplates.Thread;
 import com.company.leave.notification.NotificationService;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -37,95 +37,110 @@ public class LeaveMessenger {
         this.mailProperties = mailProperties;
     }
 
-    /** 신청 접수: 신청자 + (팀장 단계면 팀장, 아니면 인사관리자). */
-    public void submitted(LeaveRequest r, Employee lead, List<Employee> hrs, boolean viaLead) {
-        Info info = info(r, viaLead);
-        String route = viaLead && lead != null
-                ? "팀장 " + lead.getName() + "님 1차 승인 → 인사관리자 최종 승인"
-                : "인사관리자 승인";
+    /** 신청 접수: 신청자에게 접수 안내, 결재자에게 결재 요청. */
+    public void submitted(LeaveRequest r, List<Employee> approvers, String route) {
+        Info info = info(r);
         deliver(List.of(r.getEmployee()), "LEAVE_SUBMITTED", "휴가 신청이 접수되었습니다.",
                 summary(r) + " · " + route, "/my-leaves",
                 LeaveMailTemplates.submitted(info, domain(), baseUrl(), route));
-        if (viaLead && lead != null) {
-            deliver(List.of(lead), "LEAVE_REQUESTED", "새 휴가 결재 요청", withApplicant(r), "/approvals",
-                    LeaveMailTemplates.leadRequest(info, domain(), baseUrl()));
-        } else {
-            deliver(hrs, "LEAVE_REQUESTED", "새 휴가 결재 요청", withApplicant(r)
-                            + (r.getHrDirectReason() != null ? " (팀장 부재로 인사 직행: " + r.getHrDirectReason() + ")" : ""),
-                    "/approvals", LeaveMailTemplates.hrRequest(info, domain(), baseUrl(), null));
-        }
+        deliver(approvers, "LEAVE_REQUESTED", "새 휴가 결재 요청", withApplicant(r), "/approvals",
+                LeaveMailTemplates.approvalRequest(info, domain(), baseUrl()));
     }
 
-    /** 팀장 1차 승인: 인사관리자에게 최종 결재 요청(알림+메일), 신청자에게 진행 안내(알림만). */
-    public void leadApproved(LeaveRequest r, List<Employee> hrs) {
-        Info info = info(r, true);
-        String leadName = r.getLeadApprover() != null ? r.getLeadApprover().getName() : "";
-        deliver(hrs, "LEAVE_FINAL_APPROVAL_REQUESTED", "휴가 최종 승인 요청",
-                withApplicant(r) + " (팀장 1차 승인 완료)", "/approvals",
-                LeaveMailTemplates.hrRequest(info, domain(), baseUrl(), leadName));
-        notificationService.notify(r.getEmployee().getId(), "LEAVE_LEAD_APPROVED", "팀장이 휴가를 1차 승인했습니다.",
-                summary(r) + " · 인사관리자 최종 승인 대기", "/my-leaves");
-    }
-
-    /** 최종 승인: 신청자 + 팀장(없거나 본인이 승인했으면 생략). */
-    public void finalApproved(LeaveRequest r, Employee lead, boolean viaLead) {
-        Info info = info(r, viaLead);
-        deliver(List.of(r.getEmployee()), "LEAVE_APPROVED", "휴가가 승인되었습니다.", summary(r), "/my-leaves",
-                LeaveMailTemplates.approved(info, domain(), baseUrl()));
+    /** 승인: 신청자 + 담당 팀장(결재한 사람이 아니면). */
+    public void approved(LeaveRequest r, Employee approver, Employee lead) {
+        Info info = info(r);
+        boolean self = approver.getId().equals(r.getEmployee().getId());
+        deliver(List.of(r.getEmployee()), "LEAVE_APPROVED", "휴가가 승인되었습니다.",
+                summary(r) + (self ? " · 자가 승인" : " · " + label(approver)), "/my-leaves",
+                LeaveMailTemplates.approved(info, domain(), baseUrl(), self ? null : label(approver)));
         if (lead != null) {
             deliver(List.of(lead), "LEAVE_APPROVED_INFO", "팀원 휴가 승인",
-                    r.getEmployee().getName() + "님의 " + summary(r) + "가 최종 승인되었습니다.", "/calendar",
-                    LeaveMailTemplates.leadApprovedInfo(info, domain(), baseUrl()));
+                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + label(approver) + " 승인", "/calendar",
+                    LeaveMailTemplates.leadApprovedInfo(info, domain(), baseUrl(), label(approver)));
         }
     }
 
     /** 반려: 신청자. */
-    public void rejected(LeaveRequest r, Employee rejector, boolean byLead, String reason, boolean viaLead) {
-        String by = (byLead ? "팀장 " : "인사관리자 ") + rejector.getName() + "님";
+    public void rejected(LeaveRequest r, Employee rejector, String reason) {
         deliver(List.of(r.getEmployee()), "LEAVE_REJECTED", "휴가가 반려되었습니다.",
-                summary(r) + " · " + (reason != null && !reason.isBlank() ? reason : "사유 미기재"), "/my-leaves",
-                LeaveMailTemplates.rejected(info(r, viaLead), domain(), baseUrl(), by, reason));
+                summary(r) + " · " + orNone(reason), "/my-leaves",
+                LeaveMailTemplates.rejected(info(r), domain(), baseUrl(), label(rejector), reason));
     }
 
-    /** 결재 대기 중 신청자가 철회: 그 건을 결재하던 사람(팀장 또는 인사관리자). */
-    public void withdrawn(LeaveRequest r, Collection<Employee> approvers, boolean leadStage, boolean viaLead) {
+    /** 결재 대기 중 신청자가 철회: 결재 요청을 받았던 사람. */
+    public void withdrawn(LeaveRequest r, Collection<Employee> approvers) {
         deliver(approvers, "LEAVE_WITHDRAWN", "휴가 신청 취소", withApplicant(r) + " · 신청자가 취소함", "/approvals",
-                LeaveMailTemplates.withdrawn(info(r, viaLead), leadStage ? Thread.LEAD : Thread.HR, domain(), baseUrl()));
+                LeaveMailTemplates.withdrawn(info(r), domain(), baseUrl()));
     }
 
-    /** 인사관리자가 휴가(대기·승인)를 직접 취소: 신청자. */
-    public void cancelledByHr(LeaveRequest r, boolean viaLead) {
-        deliver(List.of(r.getEmployee()), "LEAVE_CANCELLED_BY_HR", "인사관리자가 휴가를 취소했습니다.", summary(r),
-                "/my-leaves", LeaveMailTemplates.cancelledByHr(info(r, viaLead), domain(), baseUrl()));
+    /** 결재 대기 중인 신청을 인사관리자가 취소: 신청자. */
+    public void cancelledByHr(LeaveRequest r, Employee hr, String reason) {
+        deliver(List.of(r.getEmployee()), "LEAVE_CANCELLED_BY_HR", "인사관리자가 휴가 신청을 취소했습니다.",
+                summary(r), "/my-leaves",
+                LeaveMailTemplates.cancelledByHr(info(r), domain(), baseUrl(), label(hr), reason));
     }
 
-    /** 승인된 휴가의 취소 요청: 인사관리자. */
-    public void cancelRequested(LeaveRequest r, List<Employee> hrs, boolean viaLead) {
-        deliver(hrs, "LEAVE_CANCEL_REQUESTED", "휴가 취소 요청", withApplicant(r), "/approvals",
-                LeaveMailTemplates.hrCancelRequested(info(r, viaLead), domain(), baseUrl(), r.getCancelReason()));
+    /** 승인된 휴가의 취소 요청: 결재자. */
+    public void cancelRequested(LeaveRequest r, List<Employee> approvers) {
+        deliver(approvers, "LEAVE_CANCEL_REQUESTED", "휴가 취소 요청", withApplicant(r), "/approvals",
+                LeaveMailTemplates.cancelRequested(info(r), domain(), baseUrl(), r.getCancelReason()));
     }
 
-    /** 취소 요청 승인: 신청자. */
-    public void cancelApproved(LeaveRequest r, boolean viaLead) {
+    /** 취소 요청 승인(또는 인사관리자의 취소 요청 건 확정): 신청자. */
+    public void cancelApproved(LeaveRequest r) {
         deliver(List.of(r.getEmployee()), "LEAVE_CANCEL_APPROVED", "휴가 취소가 승인되었습니다.", summary(r),
-                "/my-leaves", LeaveMailTemplates.cancelApproved(info(r, viaLead), domain(), baseUrl()));
+                "/my-leaves", LeaveMailTemplates.cancelApproved(info(r), domain(), baseUrl()));
     }
 
     /** 취소 요청 반려: 신청자. */
-    public void cancelRejected(LeaveRequest r, String reason, boolean viaLead) {
+    public void cancelRejected(LeaveRequest r, String reason) {
         deliver(List.of(r.getEmployee()), "LEAVE_CANCEL_REJECTED", "휴가 취소 요청이 반려되었습니다.",
-                reason != null && !reason.isBlank() ? reason : "사유 미기재", "/my-leaves",
-                LeaveMailTemplates.cancelRejected(info(r, viaLead), domain(), baseUrl(), reason));
+                orNone(reason), "/my-leaves",
+                LeaveMailTemplates.cancelRejected(info(r), domain(), baseUrl(), reason));
     }
 
-    /** 승인됐던 휴가가 취소 확정: 팀장에게 안내. */
-    public void leadCancelledInfo(LeaveRequest r, Employee lead, boolean viaLead) {
+    /** 승인됐던 휴가가 취소 확정: 담당 팀장에게 안내. */
+    public void leadCancelledInfo(LeaveRequest r, Employee lead) {
         deliver(List.of(lead), "LEAVE_CANCELLED_INFO", "팀원 휴가 취소",
                 r.getEmployee().getName() + "님의 " + r.getLeaveType().getName() + "(" + period(r) + ") 사용이 취소되었습니다.",
-                "/calendar", LeaveMailTemplates.leadCancelledInfo(info(r, viaLead), domain(), baseUrl()));
+                "/calendar", LeaveMailTemplates.leadCancelledInfo(info(r), domain(), baseUrl()));
+    }
+
+    /** 인사관리자 강제 취소: 신청자 + 담당 팀장. */
+    public void forceCancelled(LeaveRequest r, Employee hr, String reason, Employee lead) {
+        Info info = info(r);
+        deliver(List.of(r.getEmployee()), "LEAVE_FORCE_CANCELLED", "휴가가 취소되었습니다.",
+                summary(r) + " · " + label(hr) + " · 사유: " + reason, "/my-leaves",
+                LeaveMailTemplates.forceCancelled(info, domain(), baseUrl(), label(hr), reason));
+        if (lead != null) {
+            deliver(List.of(lead), "LEAVE_CANCELLED_INFO", "팀원 휴가 취소",
+                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + label(hr) + " 취소", "/calendar",
+                    LeaveMailTemplates.leadForceCancelledInfo(info, domain(), baseUrl(), label(hr), reason));
+        }
+    }
+
+    /** 인사관리자 강제 등록(바로 승인): 신청자 + 담당 팀장. */
+    public void registered(LeaveRequest r, Employee hr, Employee lead) {
+        Info info = info(r);
+        deliver(List.of(r.getEmployee()), "LEAVE_REGISTERED", "휴가가 등록되었습니다.",
+                summary(r) + " · " + label(hr) + " 등록", "/my-leaves",
+                LeaveMailTemplates.registered(info, domain(), baseUrl(), label(hr)));
+        if (lead != null) {
+            deliver(List.of(lead), "LEAVE_APPROVED_INFO", "팀원 휴가 등록",
+                    r.getEmployee().getName() + "님의 " + summary(r) + " · " + label(hr) + " 등록", "/calendar",
+                    LeaveMailTemplates.leadRegisteredInfo(info, domain(), baseUrl(), label(hr)));
+        }
     }
 
     // --- 공통 ---
+
+    /** 처리한 사람 표시: "인사관리자 김인사님", "시스템 관리자 시스템관리자님", "팀장 홍길동님". */
+    static String label(Employee e) {
+        String role = e.hasRole(Role.HR_ADMIN) ? "인사관리자 "
+                : e.hasRole(Role.SYSTEM_ADMIN) ? "시스템 관리자 " : "팀장 ";
+        return role + e.getName() + "님";
+    }
 
     private void deliver(Collection<Employee> recipients, String type, String title, String message, String link,
                          LeaveMailTemplates.Mail mail) {
@@ -146,14 +161,14 @@ public class LeaveMessenger {
         }
     }
 
-    private Info info(LeaveRequest r, boolean viaLead) {
+    private Info info(LeaveRequest r) {
         Employee e = r.getEmployee();
         String label = r.getLeaveType().getName()
                 + (r.getSpecialRuleName() != null ? "(" + r.getSpecialRuleName() + ")" : "");
         long created = r.getCreatedAt() != null ? r.getCreatedAt().toEpochMilli() : 0L;
         return new Info(r.getId() != null ? r.getId() : 0L, created, e.getName(),
                 e.getDepartment() != null ? e.getDepartment().getName() : null,
-                label, period(r), amount(r), r.getReason(), r.getHrDirectReason(), viaLead);
+                label, period(r), amount(r), r.getReason());
     }
 
     private static String summary(LeaveRequest r) {
@@ -175,6 +190,10 @@ public class LeaveMessenger {
             return WorkdayCalculator.hoursOf(r.getDays()) + "시간";
         }
         return r.getDays().stripTrailingZeros().toPlainString() + "일";
+    }
+
+    private static String orNone(String text) {
+        return text != null && !text.isBlank() ? text : "사유 미기재";
     }
 
     private String domain() {

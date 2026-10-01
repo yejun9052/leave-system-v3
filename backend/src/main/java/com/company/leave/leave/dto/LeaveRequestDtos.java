@@ -1,7 +1,6 @@
 package com.company.leave.leave.dto;
 
 import com.company.leave.leave.accrual.WorkdayCalculator;
-import com.company.leave.leave.domain.ApprovalStage;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
@@ -22,7 +21,6 @@ public final class LeaveRequestDtos {
      * @param hours               시간차의 시간 수(1~3). 다른 종류는 무시
      * @param forfeitAcknowledged 병가·공가 승인 시 남은 연차가 소멸된다는 안내를 확인했는지(소멸분이 있을 때 필수)
      * @param specialRuleId       경조사 규정(규정이 연결된 종류면 필수, 신청 근무일 수 ≤ 규정 일수)
-     * @param hrDirectReason      팀장 부재로 인사관리자에게 바로 신청할 때의 사유(팀장이 오늘 종일 휴가일 때만 허용)
      */
     public record Create(
             @NotNull Long leaveTypeId,
@@ -31,36 +29,42 @@ public final class LeaveRequestDtos {
             @Size(max = 500) String reason,
             @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
             Boolean forfeitAcknowledged,
-            Long specialRuleId,
-            @Size(max = 500) String hrDirectReason) {
+            Long specialRuleId) {
 
         public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason) {
-            this(leaveTypeId, startDate, endDate, reason, null, null, null, null);
+            this(leaveTypeId, startDate, endDate, reason, null, null, null);
         }
 
         public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
                       Integer hours, Boolean forfeitAcknowledged) {
-            this(leaveTypeId, startDate, endDate, reason, hours, forfeitAcknowledged, null, null);
-        }
-
-        public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
-                      Integer hours, Boolean forfeitAcknowledged, Long specialRuleId) {
-            this(leaveTypeId, startDate, endDate, reason, hours, forfeitAcknowledged, specialRuleId, null);
+            this(leaveTypeId, startDate, endDate, reason, hours, forfeitAcknowledged, null);
         }
     }
 
     /**
-     * 신청자의 결재 경로(신청 화면 안내용).
-     *
-     * @param leadApprovalRequired 정책: 팀장 1차 승인 사용 여부
-     * @param firstStage           신청하면 먼저 결재할 단계(LEAD 팀장 / HR 인사관리자)
-     * @param leadName             1차 결재할 팀장 이름(없으면 null)
-     * @param leadAbsent           팀장이 오늘 종일 휴가로 부재인지
-     * @param leadAbsenceType      팀장 부재 휴가 종류(예: 연차)
-     * @param hrDirectAvailable    팀장 부재로 인사관리자에게 바로 신청할 수 있는지(사유 필수)
+     * 인사관리자 강제 등록: 다른 직원의 휴가를 바로 승인 상태로 등록한다.
+     * 지난 날짜도 가능하지만 시작일은 근무일이어야 한다(주말·공휴일 불가). 사용 통제(블랙아웃·사전 신청 등)는 적용하지 않는다.
      */
-    public record ApprovalRoute(boolean leadApprovalRequired, ApprovalStage firstStage, String leadName,
-                                boolean leadAbsent, String leadAbsenceType, boolean hrDirectAvailable) {
+    public record Register(
+            @NotNull Long employeeId,
+            @NotNull Long leaveTypeId,
+            @NotNull LocalDate startDate,
+            @NotNull LocalDate endDate,
+            @Size(max = 500) String reason,
+            @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
+            Long specialRuleId) {
+    }
+
+    /** 결재자 종류: 팀장 / 인사관리자 / 본인(최상위 부서 팀장·인사관리자의 자가 승인). */
+    public enum ApproverKind { LEAD, HR, SELF }
+
+    /**
+     * 신청자의 결재 경로(신청 화면 안내용). 팀장·인사관리자·시스템 관리자 중 한 명이 승인하면 확정된다.
+     *
+     * @param approverKind 주 결재자: 상위 결재 팀장(LEAD), 결재 팀장이 없으면 인사관리자(HR), 자가 승인 가능하면 SELF
+     * @param leadName     결재 팀장 이름(LEAD 일 때)
+     */
+    public record ApprovalRoute(ApproverKind approverKind, String leadName) {
     }
 
     /**
@@ -153,30 +157,25 @@ public final class LeaveRequestDtos {
             String rejectReason,
             String cancelReason,
             Instant createdAt,
-            /** 1차 승인한 팀장(2단계 결재) */
-            String leadApproverName,
-            Instant leadApprovedAt,
-            /** 팀장 부재로 인사관리자에게 바로 신청한 사유 */
-            String hrDirectReason,
-            /** 결재함에서만: 이 건의 현재 결재 단계(LEAD 팀장 / HR 인사관리자) */
-            ApprovalStage approvalStage,
+            /** 결재함에서만: 결재자 본인의 신청인지(자가 승인 건) */
+            Boolean ownRequest,
             /** 결재함에서만: 결재자에게 보여 줄 경고(예: 경조사가 팀 동시 부재 한도 초과) */
             String approvalWarning,
-            /** 신청 응답: 결재할 인사관리자가 없는 경우의 안내 */
+            /** 신청 응답: 결재할 사람이 없는 경우의 안내 */
             String requestWarning) {
 
-        public Response withInbox(ApprovalStage stage, String warning) {
+        public Response withInbox(boolean own, String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
                     leaveTypeColor, startDate, endDate, days, portion, hours, forfeitedDays, specialRuleName,
                     specialRuleDays, status, reason, approverName, approvedAt, rejectReason, cancelReason,
-                    createdAt, leadApproverName, leadApprovedAt, hrDirectReason, stage, warning, requestWarning);
+                    createdAt, own, warning, requestWarning);
         }
 
         public Response withRequestWarning(String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
                     leaveTypeColor, startDate, endDate, days, portion, hours, forfeitedDays, specialRuleName,
                     specialRuleDays, status, reason, approverName, approvedAt, rejectReason, cancelReason,
-                    createdAt, leadApproverName, leadApprovedAt, hrDirectReason, approvalStage, approvalWarning, warning);
+                    createdAt, ownRequest, approvalWarning, warning);
         }
 
         public static Response from(LeaveRequest r) {
@@ -205,9 +204,6 @@ public final class LeaveRequestDtos {
                     r.getRejectReason(),
                     r.getCancelReason(),
                     r.getCreatedAt(),
-                    r.getLeadApprover() != null ? r.getLeadApprover().getName() : null,
-                    r.getLeadApprovedAt(),
-                    r.getHrDirectReason(),
                     null,
                     null,
                     null);
