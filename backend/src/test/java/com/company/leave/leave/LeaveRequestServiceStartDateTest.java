@@ -103,7 +103,9 @@ class LeaveRequestServiceStartDateTest {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
                 holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
-                eventPublisher);
+                eventPublisher,
+                new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
+                        "noreply@company.com", "http://localhost:5173")));
 
         Employee employee = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동").build();
         ReflectionTestUtils.setField(employee, "id", 10L);

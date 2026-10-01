@@ -115,7 +115,9 @@ class LeaveRequestServiceSickAndPartialTest {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
                 holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
-                eventPublisher);
+                eventPublisher,
+                new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
+                        "noreply@company.com", "http://localhost:5173")));
 
         employee = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동").build();
         ReflectionTestUtils.setField(employee, "id", EMP);
@@ -234,11 +236,14 @@ class LeaveRequestServiceSickAndPartialTest {
             verify(notificationService).notify(eq(EMP), eq("LEAVE_FORFEITED"), anyString(),
                     org.mockito.ArgumentMatchers.contains("0.5일"), eq("/my-leaves"));
             ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
-            verify(eventPublisher).publishEvent(events.capture());
-            assertThat(events.getValue()).isInstanceOfSatisfying(AccountMailEvents.LeaveForfeited.class, mail -> {
-                assertThat(mail.email()).isEqualTo("user@company.com");
-                assertThat(mail.forfeitedDays()).isEqualTo("0.5");
-            });
+            verify(eventPublisher, org.mockito.Mockito.atLeastOnce()).publishEvent(events.capture());
+            // 결재 메일(접수·승인)과 별도로 소멸 안내 메일이 정확히 한 통
+            assertThat(events.getAllValues()).filteredOn(AccountMailEvents.LeaveForfeited.class::isInstance)
+                    .singleElement()
+                    .isInstanceOfSatisfying(AccountMailEvents.LeaveForfeited.class, mail -> {
+                        assertThat(mail.email()).isEqualTo("user@company.com");
+                        assertThat(mail.forfeitedDays()).isEqualTo("0.5");
+                    });
         }
 
         @Test
@@ -250,7 +255,7 @@ class LeaveRequestServiceSickAndPartialTest {
 
             assertThat(request.getForfeitedDays()).isEqualByComparingTo("0");
             verify(notificationService, never()).notify(any(), eq("LEAVE_FORFEITED"), any(), any(), any());
-            verify(eventPublisher, never()).publishEvent(any(Object.class));
+            verify(eventPublisher, never()).publishEvent(any(AccountMailEvents.LeaveForfeited.class));
         }
 
         @Test

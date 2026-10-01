@@ -92,7 +92,9 @@ class LeaveRequestServiceDayLeavesTest {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
                 holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
-                eventPublisher);
+                eventPublisher,
+                new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
+                        "noreply@company.com", "http://localhost:5173")));
 
         Department 개발팀 = 부서(2L, "개발팀");
         Department 영업팀 = 부서(4L, "영업팀");

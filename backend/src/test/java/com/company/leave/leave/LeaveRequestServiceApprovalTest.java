@@ -31,6 +31,7 @@ import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveRequestDtos;
 import com.company.leave.leave.repository.LeaveRequestRepository;
+import com.company.leave.mail.LeaveMail;
 import com.company.leave.notification.NotificationService;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.LeavePolicy;
@@ -47,6 +48,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DisplayNameGeneration;
 import org.junit.jupiter.api.DisplayNameGenerator;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -117,7 +119,9 @@ class LeaveRequestServiceApprovalTest {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
                 holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
-                eventPublisher);
+                eventPublisher,
+                new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
+                        "noreply@company.com", "http://localhost:5173")));
 
         Department 본사 = 부서(1L, "본사", null);
         Department 제품개발팀 = 부서(2L, "제품개발팀", 본사);
@@ -279,7 +283,9 @@ class LeaveRequestServiceApprovalTest {
 
         assertThat(response.requestWarning()).isNull();
         verify(notificationService, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
-        verify(notificationService, never()).notify(eq(11L), anyString(), anyString(), anyString(), anyString());
+        verify(notificationService, never()).notify(eq(11L), eq("LEAVE_NO_HR_APPROVER"), anyString(), anyString(), anyString());
+        // 본인에게는 접수 안내만, 다른 사람에게 결재 요청은 없다
+        verify(notificationService, never()).notify(anyLong(), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -611,6 +617,188 @@ class LeaveRequestServiceApprovalTest {
     void 상위_부서_팀장은_하위_부서_팀장의_연차_정보를_계속_조회할_수_있다() {
         assertThatCode(() -> service.assertCanViewEmployeeData(개발팀장.getId(), 파트장.getId()))
                 .doesNotThrowAnyException();
+    }
+
+    // --- 결재 메일 ---
+
+    @Nested
+    @DisplayName("결재 메일")
+    @DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
+    class 결재_메일 {
+
+        private static final String 파트원_메일 = "e13@company.com";
+        private static final String 파트장_메일 = "e7@company.com";
+        private static final String 인사_메일 = "e11@company.com";
+
+        @Test
+        void 정책이_켜져_있으면_신청_때_신청자와_팀장에게_메일이_간다() {
+            service.create(파트원.getId(), 신청서());
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to)
+                    .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(파트장_메일));
+            assertThat(받은(mails, 파트원_메일).subject()).startsWith("[연차관리] 휴가 신청 접수 - 연차");
+            assertThat(받은(mails, 파트장_메일).subject()).startsWith("[연차관리] 휴가 1차 결재 요청 - 직원13");
+            assertThat(받은(mails, 파트장_메일).messageId()).endsWith(".lead@company.com>");
+            verify(notificationService).notify(eq(13L), eq("LEAVE_SUBMITTED"), anyString(), anyString(), anyString());
+            verify(notificationService).notify(eq(7L), eq("LEAVE_REQUESTED"), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void 팀장이_1차_승인하면_인사관리자에게_최종_결재_요청_메일이_간다() {
+            LeaveRequest request = 대기_신청(파트원);
+
+            service.approve(request.getId(), 파트장.getId());
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to).containsExactly(List.of(인사_메일));
+            assertThat(mails.get(0).subject()).startsWith("[연차관리] 휴가 최종 결재 요청 - 직원13");
+            assertThat(mails.get(0).body()).contains("팀장 직원7님이 1차 승인");
+            verify(notificationService).notify(eq(11L), eq("LEAVE_FINAL_APPROVAL_REQUESTED"),
+                    anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void 최종_승인되면_신청자와_팀장에게_메일이_가고_팀장_메일은_결재_요청_메일의_답장이다() {
+            LeaveRequest request = 대기_신청(파트원);
+            service.approve(request.getId(), 파트장.getId());
+            org.mockito.Mockito.clearInvocations(eventPublisher, notificationService);
+
+            service.approve(request.getId(), 인사관리자.getId());
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to)
+                    .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(파트장_메일));
+            LeaveMail 팀장 = 받은(mails, 파트장_메일);
+            assertThat(팀장.subject()).startsWith("RE: [연차관리] 휴가 1차 결재 요청 - 직원13");
+            assertThat(팀장.inReplyTo()).isEqualTo("<leave-" + request.getId() + "-0.lead@company.com>");
+            assertThat(팀장.messageId()).isNull();
+            LeaveMail 신청자 = 받은(mails, 파트원_메일);
+            assertThat(신청자.subject()).startsWith("RE: [연차관리] 휴가 신청 접수");
+            assertThat(신청자.inReplyTo()).isEqualTo("<leave-" + request.getId() + "-0.applicant@company.com>");
+            verify(notificationService).notify(eq(13L), eq("LEAVE_APPROVED"), anyString(), anyString(), anyString());
+            verify(notificationService).notify(eq(7L), eq("LEAVE_APPROVED_INFO"), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void 정책이_꺼져_있으면_신청_때_신청자와_인사관리자에게_메일이_간다() {
+            when(policy.isLeadApprovalRequired()).thenReturn(false);
+
+            service.create(파트원.getId(), 신청서());
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to)
+                    .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(인사_메일));
+            assertThat(받은(mails, 인사_메일).subject()).startsWith("[연차관리] 휴가 결재 요청 - 직원13");
+        }
+
+        @Test
+        void 정책이_꺼져_있으면_최종_승인_때_팀장에게는_새_대화로_승인_안내가_간다() {
+            when(policy.isLeadApprovalRequired()).thenReturn(false);
+            LeaveRequest request = 대기_신청(파트원);
+
+            service.approve(request.getId(), 인사관리자.getId());
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to)
+                    .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(파트장_메일));
+            LeaveMail 팀장 = 받은(mails, 파트장_메일);
+            assertThat(팀장.subject()).startsWith("[연차관리] 팀원 휴가 승인 - 직원13");
+            assertThat(팀장.messageId()).isEqualTo("<leave-" + request.getId() + "-0.lead@company.com>");
+            assertThat(팀장.inReplyTo()).isNull();
+        }
+
+        @Test
+        void 팀장_본인_휴가가_최종_승인되면_팀장_안내_메일은_없다() {
+            LeaveRequest request = 대기_신청(개발팀장);
+
+            service.approve(request.getId(), 인사관리자.getId());
+
+            assertThat(보낸_메일()).extracting(LeaveMail::to).containsExactly(List.of("e2@company.com"));
+        }
+
+        @Test
+        void 반려하면_신청자에게만_반려_사유와_함께_메일이_간다() {
+            LeaveRequest request = 대기_신청(파트원);
+
+            service.reject(request.getId(), 파트장.getId(), "프로젝트 마감");
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to).containsExactly(List.of(파트원_메일));
+            assertThat(mails.get(0).subject()).startsWith("RE: [연차관리] 휴가 신청 접수");
+            assertThat(mails.get(0).body()).contains("팀장 직원7님이 휴가 신청을 반려했습니다").contains("반려 사유: 프로젝트 마감");
+            verify(notificationService).notify(eq(13L), eq("LEAVE_REJECTED"), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void 결재_대기_중에_신청자가_취소하면_결재하던_팀장에게_메일이_간다() {
+            LeaveRequest request = 대기_신청(파트원);
+
+            service.cancel(request.getId(), 파트원.getId(), null);
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to).containsExactly(List.of(파트장_메일));
+            assertThat(mails.get(0).subject()).startsWith("RE: [연차관리] 휴가 1차 결재 요청");
+            assertThat(mails.get(0).body()).contains("신청을 취소했습니다");
+        }
+
+        @Test
+        void 승인된_휴가의_취소_요청은_인사관리자에게_가고_취소_승인은_신청자와_팀장에게_간다() {
+            LeaveRequest request = 대기_신청(파트원);
+            request.leadApprove(파트장, Instant.now());
+            request.approve(인사관리자, Instant.now());
+
+            service.cancel(request.getId(), 파트원.getId(), "일정 변경");
+            List<LeaveMail> 요청 = 보낸_메일();
+            assertThat(요청).extracting(LeaveMail::to).containsExactly(List.of(인사_메일));
+            assertThat(요청.get(0).subject()).startsWith("RE: [연차관리] 휴가 최종 결재 요청");
+            assertThat(요청.get(0).body()).contains("취소 사유: 일정 변경");
+
+            org.mockito.Mockito.clearInvocations(eventPublisher);
+            service.approveCancellation(request.getId(), 인사관리자.getId());
+
+            List<LeaveMail> 승인 = 보낸_메일();
+            assertThat(승인).extracting(LeaveMail::to)
+                    .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(파트장_메일));
+            assertThat(받은(승인, 파트장_메일).body()).contains("승인된 휴가가 취소되었습니다");
+            assertThat(받은(승인, 파트원_메일).body()).contains("취소 요청이 승인되어");
+        }
+
+        @Test
+        void 취소_요청을_반려하면_신청자에게_메일이_간다() {
+            LeaveRequest request = 대기_신청(파트원);
+            request.approve(인사관리자, Instant.now());
+            request.requestCancel("일정 변경");
+
+            service.rejectCancellation(request.getId(), 인사관리자.getId(), "인력 부족");
+
+            List<LeaveMail> mails = 보낸_메일();
+            assertThat(mails).extracting(LeaveMail::to).containsExactly(List.of(파트원_메일));
+            assertThat(mails.get(0).body()).contains("반려 사유: 인력 부족");
+        }
+
+        @Test
+        void 관리_전용_계정에는_메일을_보내지_않는다() {
+            Employee 시스템팀장 = 직원(30L, 부서(9L, "시스템팀", null), Role.EMPLOYEE);
+            ReflectionTestUtils.setField(시스템팀장, "systemAccount", true);
+            LeaveRequest request = 대기_신청(파트원);
+            request.leadApprove(시스템팀장, Instant.now());
+
+            service.approve(request.getId(), 인사관리자.getId());
+
+            assertThat(보낸_메일()).extracting(LeaveMail::to).containsExactly(List.of(파트원_메일));
+        }
+
+        private List<LeaveMail> 보낸_메일() {
+            org.mockito.ArgumentCaptor<Object> events = org.mockito.ArgumentCaptor.forClass(Object.class);
+            verify(eventPublisher, org.mockito.Mockito.atLeast(0)).publishEvent(events.capture());
+            return events.getAllValues().stream()
+                    .filter(LeaveMail.class::isInstance).map(LeaveMail.class::cast).toList();
+        }
+
+        private LeaveMail 받은(List<LeaveMail> mails, String to) {
+            return mails.stream().filter(m -> m.to().contains(to)).findFirst().orElseThrow();
+        }
     }
 
     // --- helpers ---
