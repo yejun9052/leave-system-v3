@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, X, Inbox } from "lucide-react";
+import axios from "axios";
+import { CalendarPlus, Check, X, Inbox } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +26,10 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
+import { useAuthStore } from "@/store/auth";
 import type { LeaveRequest } from "@/types";
 import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
+import LeaveRegisterDialog from "./LeaveRegisterDialog";
 
 type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
 
@@ -34,23 +37,27 @@ type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
 function summary(r: LeaveRequest): string {
   const period = r.startDate === r.endDate ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
   const rule = r.specialRuleName ? ` ${formatSpecialRule(r)}` : "";
-  const lead = r.approvalStage === "HR" && r.leadApproverName ? `\n팀장 ${r.leadApproverName} 1차 승인` : "";
-  const direct = r.hrDirectReason ? `\n팀장 부재로 인사 직행: ${r.hrDirectReason}` : "";
-  return `${r.employeeName} · ${r.leaveTypeName}${rule} ${period} (${formatLeaveAmount(r)})${lead}${direct}`;
+  return `${r.employeeName} · ${r.leaveTypeName}${rule} ${period} (${formatLeaveAmount(r)})`;
+}
+
+/** 다른 결재자가 먼저 처리한 신청(409): 목록을 새로 불러와야 한다. */
+function isAlreadyProcessed(e: unknown): boolean {
+  return axios.isAxiosError(e) && e.response?.status === 409;
 }
 
 export default function ApprovalsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const confirm = useConfirm();
+  const canRegister = useAuthStore((s) => s.hasAnyRole("HR_ADMIN", "SYSTEM_ADMIN"));
+  const [registering, setRegistering] = useState(false);
 
   const onApprove = async (r: LeaveRequest) => {
-    const isLead = r.approvalStage === "LEAD";
     const base = r.approvalWarning ? `${summary(r)}\n⚠ ${r.approvalWarning}` : summary(r);
     const ok = await confirm({
-      title: isLead ? "1차 승인할까요?" : r.approvalStage === "HR" ? "최종 승인할까요?" : "휴가를 승인할까요?",
-      description: isLead ? `${base}\n승인하면 인사관리자에게 최종 승인 요청이 갑니다.` : base,
-      confirmText: isLead ? "1차 승인" : r.approvalStage === "HR" ? "최종 승인" : "승인",
+      title: r.ownRequest ? "본인 신청을 자가 승인할까요?" : "휴가를 승인할까요?",
+      description: r.ownRequest ? `${base}\n자가 승인 기록이 이벤트 로그에 남습니다.` : base,
+      confirmText: "승인",
     });
     if (ok) approve.mutate(r.id);
   };
@@ -74,6 +81,10 @@ export default function ApprovalsPage() {
     qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
     qc.invalidateQueries({ queryKey: ["calendarEvents"] });
   };
+  const onError = (e: unknown) => {
+    toast({ title: extractErrorMessage(e), variant: "destructive" });
+    if (isAlreadyProcessed(e)) invalidate();
+  };
 
   const approve = useMutation({
     mutationFn: (id: number) => leaveApi.approve(id),
@@ -81,7 +92,7 @@ export default function ApprovalsPage() {
       toast({ title: "승인되었습니다.", variant: "success" });
       invalidate();
     },
-    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+    onError,
   });
 
   const approveCancel = useMutation({
@@ -90,14 +101,23 @@ export default function ApprovalsPage() {
       toast({ title: "취소 요청을 승인했습니다.", variant: "success" });
       invalidate();
     },
-    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+    onError,
   });
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">결재함</h1>
-        <p className="text-sm text-muted-foreground">팀원의 휴가 신청을 승인하거나 반려합니다.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">결재함</h1>
+          <p className="text-sm text-muted-foreground">
+            휴가 신청을 승인하거나 반려합니다. 결재자 한 명이 승인하면 확정됩니다.
+          </p>
+        </div>
+        {canRegister && (
+          <Button onClick={() => setRegistering(true)}>
+            <CalendarPlus className="h-4 w-4" /> 휴가 직접 등록
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -126,15 +146,18 @@ export default function ApprovalsPage() {
                 pending.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>
-                      {r.status === "CANCEL_REQUESTED" ? (
-                        <Badge variant="destructive">취소요청</Badge>
-                      ) : r.approvalStage === "LEAD" ? (
-                        <Badge variant="secondary">팀장 결재</Badge>
-                      ) : r.approvalStage === "HR" ? (
-                        <Badge variant="default">인사 결재</Badge>
-                      ) : (
-                        <Badge variant="secondary">신규</Badge>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {r.status === "CANCEL_REQUESTED" ? (
+                          <Badge variant="destructive">취소요청</Badge>
+                        ) : (
+                          <Badge variant="secondary">신규</Badge>
+                        )}
+                        {r.ownRequest && (
+                          <Badge variant="warning" title="결재자 본인의 신청입니다(자가 승인)">
+                            본인 신청
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="font-medium">{r.employeeName}</TableCell>
                     <TableCell>{r.departmentName ?? "-"}</TableCell>
@@ -151,12 +174,6 @@ export default function ApprovalsPage() {
                       </span>
                       {r.approvalWarning && (
                         <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
-                      )}
-                      {r.approvalStage === "HR" && r.leadApproverName && (
-                        <p className="mt-1 text-xs text-muted-foreground">팀장 {r.leadApproverName} 1차 승인</p>
-                      )}
-                      {r.hrDirectReason && (
-                        <p className="mt-1 text-xs text-muted-foreground">팀장 부재로 인사 직행: {r.hrDirectReason}</p>
                       )}
                     </TableCell>
                     <TableCell>
@@ -200,8 +217,7 @@ export default function ApprovalsPage() {
                               onClick={() => onApprove(r)}
                               disabled={approve.isPending}
                             >
-                              <Check className="h-4 w-4" />{" "}
-                              {r.approvalStage === "LEAD" ? "1차 승인" : r.approvalStage === "HR" ? "최종 승인" : "승인"}
+                              <Check className="h-4 w-4" /> 승인
                             </Button>
                             <Button
                               size="sm"
@@ -239,6 +255,8 @@ export default function ApprovalsPage() {
           }}
         />
       )}
+
+      {registering && <LeaveRegisterDialog onClose={() => setRegistering(false)} />}
     </div>
   );
 }
@@ -274,7 +292,11 @@ function RejectDialog({
       toast({ title: "반려되었습니다.", variant: "success" });
       onDone();
     },
-    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+    onError: (e) => {
+      toast({ title: extractErrorMessage(e), variant: "destructive" });
+      // 다른 결재자가 먼저 처리했으면 창을 닫고 목록을 새로 불러온다
+      if (isAlreadyProcessed(e)) onDone();
+    },
   });
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

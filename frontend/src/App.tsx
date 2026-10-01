@@ -22,7 +22,6 @@ import AuditLogPage from "@/features/audit/AuditLogPage";
 
 export default function App() {
   const loadMe = useAuthStore((s) => s.loadMe);
-  const user = useAuthStore((s) => s.user);
   const { data: license } = useQuery({ queryKey: ["license"], queryFn: licenseApi.status });
 
   useEffect(() => {
@@ -49,8 +48,7 @@ export default function App() {
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={user?.systemAccount || user?.roles.includes("SYSTEM_ADMIN")
-        ? [] : ["TEAM_LEAD", "HR_ADMIN"]} />}>
+      <Route element={<ProtectedRoute roles={["TEAM_LEAD", "HR_ADMIN", "SYSTEM_ADMIN"]} />}>
         <Route element={<AppLayout />}>
           <Route path="approvals" element={<ApprovalsPage />} />
         </Route>

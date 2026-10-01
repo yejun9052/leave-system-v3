@@ -28,6 +28,9 @@ const ACTION_LABEL: Record<string, string> = {
   cancel: "취소 요청",
   cancel_approve: "취소 승인",
   cancel_reject: "취소 반려",
+  self_approve: "자가 승인",
+  force_cancel: "강제 취소",
+  register: "강제 등록",
   move: "이동",
   reactivate: "복원",
   password: "비밀번호 변경",
@@ -39,7 +42,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 // 삭제·반려성 동작은 붉은 배지로 강조
-const NEGATIVE_ACTIONS = new Set(["DELETE", "reject", "cancel", "cancel_reject"]);
+const NEGATIVE_ACTIONS = new Set(["DELETE", "reject", "cancel", "cancel_reject", "force_cancel"]);
 
 const RESOURCE_LABEL: Record<string, string> = {
   auth: "인증",
