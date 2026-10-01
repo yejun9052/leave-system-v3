@@ -85,7 +85,8 @@ class AnnouncementMessengerTest {
         verify(notifications, never()).notify(eq(1L), anyString(), anyString(), anyString(), anyString());
         AnnouncementMail mail = 보낸_메일();
         assertThat(mail.bcc()).containsExactly("qa1@company.com", "dev1@company.com");
-        assertThat(mail.body()).contains("처리자: 직원1 (인사관리자)");
+        assertThat(mail.text()).contains("수신자: 재직 중인 전 직원").contains("처리자: 직원1 (인사관리자)");
+        assertThat(mail.html()).contains(">연차 사용 금지 기간 추가 안내</h1>");
     }
 
     @Test
@@ -104,7 +105,8 @@ class AnnouncementMessengerTest {
 
         AnnouncementMail mail = 보낸_메일();
         assertThat(mail.bcc()).containsExactlyInAnyOrder("qa1@company.com", "dev1@company.com");
-        assertThat(mail.body()).contains("범위: 개발팀 일정").contains("변경 전").contains("범위: QA팀 일정");
+        assertThat(mail.text()).contains("수신자: 개발팀·QA팀 소속 직원")
+                .contains("범위: 개발팀 일정").contains("변경 전 범위: QA팀 일정");
     }
 
     @Test

@@ -48,11 +48,11 @@ public class LeaveMailService {
 
     MimeMessage toMimeMessage(LeaveMail mail) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
         helper.setFrom(properties.from());
         helper.setTo(mail.to().toArray(String[]::new));
         helper.setSubject(mail.subject());
-        helper.setText(mail.body(), false);
+        helper.setText(mail.text(), mail.html());
         if (mail.messageId() != null) {
             message.setHeader("Message-ID", mail.messageId());
         }

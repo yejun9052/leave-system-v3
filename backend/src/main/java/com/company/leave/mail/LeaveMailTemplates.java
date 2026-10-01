@@ -1,7 +1,12 @@
 package com.company.leave.mail;
 
+import com.company.leave.mail.MailLayout.Content;
+import com.company.leave.mail.MailLayout.Row;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * 휴가 결재 메일 본문(일반 텍스트). 템플릿 엔진 없이 문자열로 만든다.
+ * 휴가 결재 메일 내용. 모양은 {@link MailLayout}(제목 → 안내 문장 → 표 → 바로가기, HTML + 일반 텍스트).
  *
  * <p>결재는 한 번(팀장·인사관리자·시스템 관리자 중 한 명)으로 확정된다. 신청 건 하나에 받는 쪽별 대화(Thread)가 셋 있다.
  * 각 대화의 첫 메일은 신청 번호로 정한 Message-ID 를 쓰고, 이후 메일은 그 ID 에 답장(RE: 같은 제목)으로 붙는다.
@@ -12,10 +17,14 @@ package com.company.leave.mail;
  * </ul>
  * 첫 메일 제목은 대화마다 고정이라, 답장 제목은 같은 정보로 다시 계산해 "RE: " 를 붙인다.
  * 첫 메일이 보내지지 않은 대화에 답장하면(예: 팀장이 직접 승인해 안내를 받지 않음) 새 대화처럼 보일 뿐 문제는 없다.
+ * 표의 수신자 줄은 받는 사람마다 따로 보낼 때 넣는다({@link Content#withRecipient}).
  */
 public final class LeaveMailTemplates {
 
     private static final String PREFIX = "[연차관리] ";
+    private static final String MY_LEAVES = "내 휴가 확인하기";
+    private static final String APPROVALS = "결재함 바로가기";
+    private static final String CALENDAR = "캘린더 보기";
 
     private LeaveMailTemplates() {
     }
@@ -35,23 +44,34 @@ public final class LeaveMailTemplates {
     }
 
     /** 대화 첫 메일이면 messageId, 답장이면 inReplyTo 가 채워진다. */
-    public record Mail(String subject, String body, String messageId, String inReplyTo) {
+    public record Mail(String subject, Content content, String messageId, String inReplyTo) {
+
+        /** 일반 텍스트 본문(수신자 줄 없이). */
+        public String body() {
+            return content.text();
+        }
     }
 
     /**
-     * 처리한 사람. 결과 메일마다 "처리자: 홍길동 (팀장 · 개발팀)" 줄로 들어간다.
+     * 처리한 사람. 메일 표에 "처리자: 홍길동 (팀장)" 으로 들어간다.
      *
      * @param role 처리한 자격(예: "팀장", "인사관리자", "시스템 관리자", "신청자")
      */
-    public record Handler(String role, String name, String departmentName) {
+    public record Handler(String role, String name) {
 
-        /** 문장에 쓰는 이름: "팀장 홍길동님" */
+        /** 앱 알림에 쓰는 이름: "팀장 홍길동님" */
         public String title() {
             return role + " " + name + "님";
         }
 
-        String line() {
-            return "처리자: " + name + " (" + role + (departmentName != null ? " · " + departmentName : "") + ")\n";
+        /** 메일 안내 문장에 쓰는 이름: "홍길동님" (자격은 표의 처리자 줄에 나온다) */
+        public String honorific() {
+            return name + "님";
+        }
+
+        /** 표에 쓰는 이름: "홍길동 (팀장)" */
+        public String display() {
+            return name + " (" + role + ")";
         }
     }
 
@@ -59,111 +79,106 @@ public final class LeaveMailTemplates {
 
     /** @param route 결재 경로 안내(예: "팀장 홍길동님 승인(인사관리자도 승인 가능)") */
     public static Mail submitted(Info info, String domain, String baseUrl, String route) {
-        String body = info.applicantName() + "님, 휴가 신청이 접수되었습니다.\n\n"
-                + details(info)
-                + "결재: " + route + "\n\n"
-                + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n";
-        return root(info, Thread.APPLICANT, domain, body);
+        Content content = content("휴가 신청 접수 안내",
+                List.of("휴가 신청이 접수되었습니다.", "결재가 끝나면 결과를 메일로 알려 드립니다."),
+                null, info, List.of(Row.of("결재", route)), "결재 대기", MY_LEAVES, baseUrl, "/my-leaves");
+        return root(info, Thread.APPLICANT, domain, content);
     }
 
     /** 인사관리자가 대신 등록(바로 승인됨). 신청 접수 대신 이 메일이 대화의 첫 메일이 된다. */
     public static Mail registered(Info info, String domain, String baseUrl, Handler by) {
-        String body = info.applicantName() + "님, " + by.title() + "이 휴가를 등록했습니다. 승인 완료 상태입니다.\n\n"
-                + by.line()
-                + details(info)
-                + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n";
-        return root(info, Thread.APPLICANT, domain, body);
+        Content content = content("휴가 등록 안내",
+                List.of(by.honorific() + "이 휴가를 등록했습니다.", "아래 휴가 내역은 승인 완료 상태입니다."),
+                by, info, List.of(), "승인 완료", MY_LEAVES, baseUrl, "/my-leaves");
+        return root(info, Thread.APPLICANT, domain, content);
     }
 
     /** @param self 신청자 본인의 자가 승인이면 true */
     public static Mail approved(Info info, String domain, String baseUrl, Handler by, boolean self) {
-        String headline = self
-                ? "자가 승인으로 휴가가 확정되었습니다."
-                : by.title() + "이 휴가를 승인했습니다.";
-        return applicantReply(info, domain, baseUrl, headline, by, null);
+        String headline = self ? "자가 승인으로 휴가가 확정되었습니다." : by.honorific() + "이 휴가를 승인했습니다.";
+        return applicantReply(info, domain, baseUrl, "휴가 승인 안내",
+                List.of(headline, "아래 휴가 내역은 승인 완료 상태입니다."), by, List.of(), "승인 완료");
     }
 
     public static Mail rejected(Info info, String domain, String baseUrl, Handler by, String reason) {
-        return applicantReply(info, domain, baseUrl, by.title() + "이 휴가 신청을 반려했습니다.", by,
-                "반려 사유: " + orNone(reason));
+        return applicantReply(info, domain, baseUrl, "휴가 반려 안내",
+                List.of(by.honorific() + "이 휴가 신청을 반려했습니다."), by,
+                List.of(Row.of("반려 사유", orNone(reason))), "반려");
     }
 
     /** 취소 요청 승인(또는 인사관리자의 취소 요청 건 확정). */
     public static Mail cancelApproved(Info info, String domain, String baseUrl, Handler by) {
-        return applicantReply(info, domain, baseUrl,
-                by.title() + "이 휴가 취소 요청을 승인해 휴가가 취소되었습니다. 차감된 연차는 돌아갑니다.", by, null);
+        return applicantReply(info, domain, baseUrl, "휴가 취소 승인 안내",
+                List.of(by.honorific() + "이 휴가 취소 요청을 승인해 휴가가 취소되었습니다.", "차감된 연차는 돌아갑니다."), by,
+                List.of(), "취소 완료");
     }
 
     public static Mail cancelRejected(Info info, String domain, String baseUrl, Handler by, String reason) {
-        return applicantReply(info, domain, baseUrl,
-                by.title() + "이 휴가 취소 요청을 반려했습니다. 휴가는 승인 상태로 유지됩니다.", by,
-                "반려 사유: " + orNone(reason));
+        return applicantReply(info, domain, baseUrl, "휴가 취소 반려 안내",
+                List.of(by.honorific() + "이 휴가 취소 요청을 반려했습니다.", "휴가는 승인 상태로 유지됩니다."), by,
+                List.of(Row.of("반려 사유", orNone(reason))), "승인 유지");
     }
 
     /** 결재 대기 중인 신청을 인사관리자가 취소. */
     public static Mail cancelledByHr(Info info, String domain, String baseUrl, Handler by, String reason) {
-        return applicantReply(info, domain, baseUrl, by.title() + "이 휴가 신청을 취소했습니다.", by,
-                reason != null && !reason.isBlank() ? "사유: " + reason : null);
+        return applicantReply(info, domain, baseUrl, "휴가 신청 취소 안내",
+                List.of(by.honorific() + "이 휴가 신청을 취소했습니다."), by,
+                reason != null && !reason.isBlank() ? List.of(Row.of("취소 사유", reason)) : List.of(), "신청 취소");
     }
 
     /** 승인된 휴가를 인사관리자가 강제 취소(시작 후 포함). */
     public static Mail forceCancelled(Info info, String domain, String baseUrl, Handler by, String reason) {
-        return applicantReply(info, domain, baseUrl,
-                by.title() + "이 승인된 휴가를 취소했습니다. 차감된 연차는 돌아갑니다.", by,
-                "취소 사유: " + orNone(reason));
+        return applicantReply(info, domain, baseUrl, "휴가 취소 안내",
+                List.of(by.honorific() + "이 승인된 휴가를 취소했습니다.", "차감된 연차는 돌아갑니다."), by,
+                List.of(Row.of("취소 사유", orNone(reason))), "취소 완료");
     }
 
     // --- 결재자 대화 ---
 
     public static Mail approvalRequest(Info info, String domain, String baseUrl) {
-        String body = info.applicantName() + "님이 휴가를 신청했습니다. 결재를 부탁드립니다.\n\n"
-                + details(info)
-                + "결재함: " + url(baseUrl, "/approvals") + "\n";
-        return root(info, Thread.APPROVER, domain, body);
+        Content content = content("휴가 결재 요청",
+                List.of(info.applicantName() + "님이 휴가를 신청했습니다.", "결재를 부탁드립니다."),
+                null, info, List.of(), "결재 대기", APPROVALS, baseUrl, "/approvals");
+        return root(info, Thread.APPROVER, domain, content);
     }
 
     public static Mail withdrawn(Info info, String domain, String baseUrl) {
-        String body = info.applicantName() + "님이 결재 대기 중이던 휴가 신청을 취소했습니다. 더 결재하지 않아도 됩니다.\n\n"
-                + new Handler("신청자", info.applicantName(), info.departmentName()).line()
-                + details(info)
-                + "결재함: " + url(baseUrl, "/approvals") + "\n";
-        return reply(info, Thread.APPROVER, domain, body);
+        Content content = content("휴가 신청 철회 안내",
+                List.of(info.applicantName() + "님이 결재 대기 중이던 휴가 신청을 취소했습니다.", "더 결재하지 않아도 됩니다."),
+                new Handler("신청자", info.applicantName()), info, List.of(), "신청 취소",
+                APPROVALS, baseUrl, "/approvals");
+        return reply(info, Thread.APPROVER, domain, content);
     }
 
     public static Mail cancelRequested(Info info, String domain, String baseUrl, String cancelReason) {
-        String body = info.applicantName() + "님이 승인된 휴가의 취소를 요청했습니다. 결재를 부탁드립니다.\n\n"
-                + details(info)
-                + "취소 사유: " + orNone(cancelReason) + "\n\n"
-                + "결재함: " + url(baseUrl, "/approvals") + "\n";
-        return reply(info, Thread.APPROVER, domain, body);
+        Content content = content("휴가 취소 결재 요청",
+                List.of(info.applicantName() + "님이 승인된 휴가의 취소를 요청했습니다.", "결재를 부탁드립니다."),
+                null, info, List.of(Row.of("취소 사유", orNone(cancelReason))), "취소 요청",
+                APPROVALS, baseUrl, "/approvals");
+        return reply(info, Thread.APPROVER, domain, content);
     }
 
     // --- 담당 팀장 대화 ---
 
     public static Mail leadApprovedInfo(Info info, String domain, String baseUrl, Handler by) {
-        return leadRoot(info, domain, baseUrl, by.title() + "이 " + info.applicantName() + "님의 휴가를 승인했습니다.", by);
+        return leadMail(info, domain, baseUrl, true, "팀원 휴가 승인 안내",
+                by.honorific() + "이 " + info.applicantName() + "님의 휴가를 승인했습니다.", by, List.of(), "승인 완료");
     }
 
     public static Mail leadRegisteredInfo(Info info, String domain, String baseUrl, Handler by) {
-        return leadRoot(info, domain, baseUrl,
-                by.title() + "이 " + info.applicantName() + "님의 휴가를 등록했습니다(승인 완료).", by);
+        return leadMail(info, domain, baseUrl, true, "팀원 휴가 등록 안내",
+                by.honorific() + "이 " + info.applicantName() + "님의 휴가를 등록했습니다.", by, List.of(), "승인 완료");
     }
 
     public static Mail leadCancelledInfo(Info info, String domain, String baseUrl, Handler by) {
-        String body = info.applicantName() + "님의 승인된 휴가가 취소되었습니다.\n\n"
-                + by.line()
-                + details(info)
-                + "캘린더: " + url(baseUrl, "/calendar") + "\n";
-        return reply(info, Thread.LEAD, domain, body);
+        return leadMail(info, domain, baseUrl, false, "팀원 휴가 취소 안내",
+                info.applicantName() + "님의 승인된 휴가가 취소되었습니다.", by, List.of(), "취소 완료");
     }
 
     public static Mail leadForceCancelledInfo(Info info, String domain, String baseUrl, Handler by, String reason) {
-        String body = by.title() + "이 " + info.applicantName() + "님의 승인된 휴가를 취소했습니다.\n\n"
-                + by.line()
-                + details(info)
-                + "취소 사유: " + orNone(reason) + "\n\n"
-                + "캘린더: " + url(baseUrl, "/calendar") + "\n";
-        return reply(info, Thread.LEAD, domain, body);
+        return leadMail(info, domain, baseUrl, false, "팀원 휴가 취소 안내",
+                by.honorific() + "이 " + info.applicantName() + "님의 승인된 휴가를 취소했습니다.", by,
+                List.of(Row.of("취소 사유", orNone(reason))), "취소 완료");
     }
 
     // --- 대화(Thread) 공통 ---
@@ -195,46 +210,43 @@ public final class LeaveMailTemplates {
         return domain.isEmpty() ? "annual-leave.local" : domain;
     }
 
-    private static Mail leadRoot(Info info, String domain, String baseUrl, String headline, Handler by) {
-        String body = headline + "\n\n"
-                + by.line()
-                + details(info)
-                + "캘린더: " + url(baseUrl, "/calendar") + "\n";
-        return root(info, Thread.LEAD, domain, body);
+    /** 팀장 대화: 승인·등록 안내가 첫 메일, 취소 안내가 답장. */
+    private static Mail leadMail(Info info, String domain, String baseUrl, boolean root, String title, String headline,
+                                 Handler by, List<Row> extra, String status) {
+        Content content = content(title, List.of(headline), by, info, extra, status, CALENDAR, baseUrl, "/calendar");
+        return root ? root(info, Thread.LEAD, domain, content) : reply(info, Thread.LEAD, domain, content);
     }
 
-    private static Mail applicantReply(Info info, String domain, String baseUrl, String headline, Handler by,
-                                       String extra) {
-        String body = info.applicantName() + "님, " + headline + "\n\n"
-                + by.line()
-                + details(info)
-                + (extra != null ? extra + "\n\n" : "")
-                + "내 휴가: " + url(baseUrl, "/my-leaves") + "\n";
-        return reply(info, Thread.APPLICANT, domain, body);
+    private static Mail applicantReply(Info info, String domain, String baseUrl, String title, List<String> intro,
+                                       Handler by, List<Row> extra, String status) {
+        return reply(info, Thread.APPLICANT, domain,
+                content(title, intro, by, info, extra, status, MY_LEAVES, baseUrl, "/my-leaves"));
     }
 
-    private static Mail root(Info info, Thread thread, String domain, String body) {
-        return new Mail(rootSubject(info, thread), body, threadId(info, thread, domain), null);
+    /** 표: [처리자] | 신청자·소속·휴가 종류·기간·사유 + 추가 줄(반려 사유 등) + 처리 상태. */
+    private static Content content(String title, List<String> intro, Handler by, Info info, List<Row> extra,
+                                   String status, String linkLabel, String baseUrl, String path) {
+        List<Row> rows = new ArrayList<>();
+        rows.add(Row.of("신청자", info.applicantName()));
+        rows.add(Row.of("소속", info.departmentName() != null ? info.departmentName() : "-"));
+        rows.add(Row.of("휴가 종류", info.leaveLabel()));
+        rows.add(Row.of("휴가 기간", info.period() + " (" + info.amount() + ")"));
+        rows.add(Row.of("신청 사유", orNone(info.reason())));
+        rows.addAll(extra);
+        rows.add(Row.strong("처리 상태", status));
+        List<Row> head = by != null ? List.of(Row.of("처리자", by.display())) : List.of();
+        return new Content(title, intro, head, rows, linkLabel, MailLayout.url(baseUrl, path));
     }
 
-    private static Mail reply(Info info, Thread thread, String domain, String body) {
-        return new Mail("RE: " + rootSubject(info, thread), body, null, threadId(info, thread, domain));
+    private static Mail root(Info info, Thread thread, String domain, Content content) {
+        return new Mail(rootSubject(info, thread), content, threadId(info, thread, domain), null);
     }
 
-    private static String details(Info info) {
-        return "신청자: " + info.applicantName()
-                + (info.departmentName() != null ? " (" + info.departmentName() + ")" : "") + "\n"
-                + "종류: " + info.leaveLabel() + "\n"
-                + "기간: " + info.period() + " (" + info.amount() + ")\n"
-                + "사유: " + orNone(info.reason()) + "\n\n";
+    private static Mail reply(Info info, Thread thread, String domain, Content content) {
+        return new Mail("RE: " + rootSubject(info, thread), content, null, threadId(info, thread, domain));
     }
 
     private static String orNone(String text) {
         return text == null || text.isBlank() ? "미기재" : text;
-    }
-
-    private static String url(String baseUrl, String path) {
-        String base = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        return base + path;
     }
 }

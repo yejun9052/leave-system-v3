@@ -10,12 +10,15 @@ import com.company.leave.mail.LeaveMail;
 import com.company.leave.mail.LeaveMailTemplates;
 import com.company.leave.mail.LeaveMailTemplates.Handler;
 import com.company.leave.mail.LeaveMailTemplates.Info;
+import com.company.leave.mail.MailLayout;
 import com.company.leave.notification.NotificationService;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -147,15 +150,16 @@ public class LeaveMessenger {
     // --- 공통 ---
 
     /**
-     * 처리한 사람: 자격(인사관리자 > 시스템 관리자 > 팀장) + 이름 + 부서.
-     * 메일에는 "처리자: 홍길동 (팀장 · 개발팀)", 문장·알림에는 "팀장 홍길동님" 으로 쓴다.
+     * 처리한 사람: 자격(인사관리자 > 시스템 관리자 > 팀장) + 이름.
+     * 메일 표에는 "홍길동 (팀장)", 문장·알림에는 "팀장 홍길동님" 으로 쓴다.
      */
     public static Handler handler(Employee e) {
         String role = e.hasRole(Role.HR_ADMIN) ? "인사관리자"
                 : e.hasRole(Role.SYSTEM_ADMIN) ? "시스템 관리자" : "팀장";
-        return new Handler(role, e.getName(), e.getDepartment() != null ? e.getDepartment().getName() : null);
+        return new Handler(role, e.getName());
     }
 
+    /** 알림은 받는 사람 모두, 메일은 표의 수신자 줄이 사람마다 달라 한 사람씩 따로 보낸다. */
     private void deliver(Collection<Employee> recipients, String type, String title, String message, String link,
                          LeaveMailTemplates.Mail mail) {
         Map<Long, Employee> unique = new LinkedHashMap<>();
@@ -164,15 +168,16 @@ public class LeaveMessenger {
             return;
         }
         unique.values().forEach(e -> notificationService.notify(e.getId(), type, title, message, link));
-        List<String> to = unique.values().stream()
+        Set<String> sent = new HashSet<>();
+        unique.values().stream()
                 .filter(e -> !e.isSystemAccount())
-                .map(Employee::getEmail)
-                .filter(email -> email != null && email.contains("@"))
-                .distinct()
-                .toList();
-        if (!to.isEmpty()) {
-            eventPublisher.publishEvent(new LeaveMail(to, mail.subject(), mail.body(), mail.messageId(), mail.inReplyTo()));
-        }
+                .filter(e -> e.getEmail() != null && e.getEmail().contains("@"))
+                .filter(e -> sent.add(e.getEmail()))
+                .forEach(e -> {
+                    MailLayout.Content content = mail.content().withRecipient(e.getName());
+                    eventPublisher.publishEvent(new LeaveMail(List.of(e.getEmail()), mail.subject(), content.text(),
+                            content.html(), mail.messageId(), mail.inReplyTo()));
+                });
     }
 
     private Info info(LeaveRequest r) {

@@ -46,12 +46,12 @@ public class AnnouncementMailService {
 
     MimeMessage toMimeMessage(AnnouncementMail mail) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
         helper.setFrom(properties.from());
         helper.setTo(properties.from());
         helper.setBcc(mail.bcc().toArray(String[]::new));
         helper.setSubject(mail.subject());
-        helper.setText(mail.body(), false);
+        helper.setText(mail.text(), mail.html());
         return message;
     }
 }

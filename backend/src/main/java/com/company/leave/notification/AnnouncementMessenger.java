@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,8 @@ public class AnnouncementMessenger {
     public record EventView(String title, LocalDate start, LocalDate end, CalendarEventScope scope,
                             Long departmentId) {
     }
+
+    private static final String ALL_STAFF = "재직 중인 전 직원";
 
     private final EmployeeRepository employeeRepository;
     private final DepartmentRepository departmentRepository;
@@ -64,7 +67,7 @@ public class AnnouncementMessenger {
         }
         Employee actor = employeeRepository.findById(actorId).orElse(null);
         AnnouncementMailTemplates.Mail mail = AnnouncementMailTemplates.blackout(change, now, before,
-                handler(actor), mailProperties.linkBaseUrl());
+                handler(actor), ALL_STAFF, mailProperties.linkBaseUrl());
         deliver(companyWide(), actorId, "BLACKOUT_" + change.name(), "연차 사용 금지 기간 " + change.label(),
                 now.name() + " (" + period(now.start(), now.end()) + ")", mail);
     }
@@ -85,7 +88,8 @@ public class AnnouncementMessenger {
         Schedule nowSchedule = schedule(now);
         Employee actor = employeeRepository.findById(actorId).orElse(null);
         AnnouncementMailTemplates.Mail mail = AnnouncementMailTemplates.event(change, nowSchedule,
-                before != null ? schedule(before) : null, handler(actor), mailProperties.linkBaseUrl());
+                before != null ? schedule(before) : null, handler(actor),
+                audienceLabel(now, before), mailProperties.linkBaseUrl());
         deliver(recipients.values(), actorId, "CALENDAR_EVENT_" + change.name(),
                 nowSchedule.scopeLabel() + " " + change.label(),
                 now.title() + " (" + period(now.start(), now.end()) + ")", mail);
@@ -104,7 +108,8 @@ public class AnnouncementMessenger {
                 .distinct()
                 .toList();
         if (!bcc.isEmpty()) {
-            eventPublisher.publishEvent(new AnnouncementMail(bcc, mail.subject(), mail.body()));
+            eventPublisher.publishEvent(new AnnouncementMail(bcc, mail.subject(), mail.content().text(),
+                    mail.content().html()));
         }
     }
 
@@ -117,6 +122,19 @@ public class AnnouncementMessenger {
         };
     }
 
+    /** 메일 표의 수신자 줄: 전체 일정이 끼면 "재직 중인 전 직원", 아니면 "개발팀·QA팀 소속 직원". */
+    private String audienceLabel(EventView now, EventView before) {
+        List<EventView> views = before != null ? List.of(now, before) : List.of(now);
+        if (views.stream().anyMatch(v -> v.scope() == CalendarEventScope.COMPANY)) {
+            return ALL_STAFF;
+        }
+        return views.stream()
+                .filter(v -> v.scope() == CalendarEventScope.DEPARTMENT)
+                .map(v -> departmentName(v.departmentId()))
+                .distinct()
+                .collect(Collectors.joining("·")) + " 소속 직원";
+    }
+
     private List<Employee> companyWide() {
         return employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE);
     }
@@ -124,15 +142,19 @@ public class AnnouncementMessenger {
     private Schedule schedule(EventView view) {
         String scope = switch (view.scope()) {
             case COMPANY -> "전체 일정";
-            case DEPARTMENT -> departmentRepository.findById(Objects.requireNonNullElse(view.departmentId(), -1L))
-                    .map(Department::getName).orElse("부서") + " 일정";
+            case DEPARTMENT -> departmentName(view.departmentId()) + " 일정";
             case PERSONAL -> "개인 일정";
         };
         return new Schedule(view.title(), view.start(), view.end(), scope);
     }
 
+    private String departmentName(Long departmentId) {
+        return departmentRepository.findById(Objects.requireNonNullElse(departmentId, -1L))
+                .map(Department::getName).orElse("부서");
+    }
+
     private static Handler handler(Employee actor) {
-        return actor != null ? LeaveMessenger.handler(actor) : new Handler("관리자", "알 수 없음", null);
+        return actor != null ? LeaveMessenger.handler(actor) : new Handler("관리자", "알 수 없음");
     }
 
     private static String period(LocalDate start, LocalDate end) {

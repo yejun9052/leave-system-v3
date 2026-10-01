@@ -13,6 +13,8 @@ import jakarta.mail.Message;
 import jakarta.mail.Session;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +43,7 @@ class LeaveMailServiceTest {
     @Test
     void 대화의_첫_메일은_정한_Message_ID_로_한_통에_모든_받는_사람에게_보낸다() throws Exception {
         service.onLeaveMail(new LeaveMail(List.of("a@company.com", "b@company.com"), "[연차관리] 휴가 결재 요청",
-                "본문", "<leave-1-0.hr@company.com>", null));
+                "본문", "<p>본문</p>", "<leave-1-0.hr@company.com>", null));
 
         MimeMessage sent = sent();
         assertThat(sent.getHeader("Message-ID", null)).isEqualTo("<leave-1-0.hr@company.com>");
@@ -55,7 +57,7 @@ class LeaveMailServiceTest {
 
     @Test
     void 답장은_In_Reply_To_와_References_로_같은_대화에_묶는다() throws Exception {
-        service.onLeaveMail(new LeaveMail(List.of("a@company.com"), "RE: [연차관리] 휴가 신청 접수", "본문",
+        service.onLeaveMail(new LeaveMail(List.of("a@company.com"), "RE: [연차관리] 휴가 신청 접수", "본문", "<p>본문</p>",
                 null, "<leave-1-0.applicant@company.com>"));
 
         MimeMessage sent = sent();
@@ -65,8 +67,21 @@ class LeaveMailServiceTest {
     }
 
     @Test
+    void HTML_본문과_일반_텍스트_본문을_함께_담는다() throws Exception {
+        service.onLeaveMail(new LeaveMail(List.of("a@company.com"), "제목", "plain body", "<p>html body</p>",
+                null, null));
+
+        ByteArrayOutputStream raw = new ByteArrayOutputStream();
+        sent().writeTo(raw);
+        assertThat(raw.toString(StandardCharsets.UTF_8))
+                .contains("multipart/alternative")
+                .contains("text/plain").contains("plain body")
+                .contains("text/html").contains("<p>html body</p>");
+    }
+
+    @Test
     void 받는_사람이_없으면_보내지_않는다() {
-        service.onLeaveMail(new LeaveMail(List.of(), "제목", "본문", null, null));
+        service.onLeaveMail(new LeaveMail(List.of(), "제목", "본문", "<p>본문</p>", null, null));
 
         verify(sender, never()).send(any(MimeMessage.class));
     }
@@ -75,7 +90,7 @@ class LeaveMailServiceTest {
     void 발송에_실패해도_예외를_밖으로_던지지_않는다() {
         doThrow(new MailSendException("SMTP down")).when(sender).send(any(MimeMessage.class));
 
-        assertThatCode(() -> service.onLeaveMail(new LeaveMail(List.of("a@company.com"), "제목", "본문", null, null)))
+        assertThatCode(() -> service.onLeaveMail(new LeaveMail(List.of("a@company.com"), "제목", "본문", "<p>본문</p>", null, null)))
                 .doesNotThrowAnyException();
     }
 
