@@ -10,10 +10,11 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
+  SortableTableHead,
 } from "@/components/ui/table";
+import { useTableSort } from "@/lib/useTableSort";
 
 // 삭제·반려성 동작은 붉은 배지로 강조
 const NEGATIVE_ACTIONS = new Set(["DELETE", "reject", "cancel", "cancel_reject", "force_cancel"]);
@@ -26,6 +27,15 @@ export default function AuditLogPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["auditLogs", { search, page }],
     queryFn: () => auditApi.list(search, page, 30),
+  });
+  // 서버가 최신순으로 페이지를 나눠 주므로 정렬은 지금 페이지 안에서만 한다
+  const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {
+    time: (a) => a.createdAt,
+    actor: (a) => a.actorName,
+    action: (a) => a.actionLabel,
+    entity: (a) => `${a.entityLabel ?? a.entityType} ${a.entityId ?? ""}`,
+    result: (a) => a.success,
+    detail: (a) => a.detail,
   });
 
   const onSearch = (e: React.FormEvent) => {
@@ -65,12 +75,12 @@ export default function AuditLogPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[170px]">시간</TableHead>
-                <TableHead>사용자</TableHead>
-                <TableHead>동작</TableHead>
-                <TableHead>대상</TableHead>
-                <TableHead>결과</TableHead>
-                <TableHead>상세</TableHead>
+                <SortableTableHead sortKey="time" sort={sort} onSort={toggle} className="w-[170px]">시간</SortableTableHead>
+                <SortableTableHead sortKey="actor" sort={sort} onSort={toggle}>사용자</SortableTableHead>
+                <SortableTableHead sortKey="action" sort={sort} onSort={toggle}>동작</SortableTableHead>
+                <SortableTableHead sortKey="entity" sort={sort} onSort={toggle}>대상</SortableTableHead>
+                <SortableTableHead sortKey="result" sort={sort} onSort={toggle}>결과</SortableTableHead>
+                <SortableTableHead sortKey="detail" sort={sort} onSort={toggle}>상세</SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -81,7 +91,7 @@ export default function AuditLogPage() {
                   </TableCell>
                 </TableRow>
               ) : data && data.content.length > 0 ? (
-                data.content.map((a) => (
+                sorted.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {new Date(a.createdAt).toLocaleString("ko-KR")}

@@ -13,6 +13,7 @@ import {
 } from "@/api/policy";
 import type { LeavePortion, LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
+import { useTableSort, type SortValue } from "@/lib/useTableSort";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  SortableTableHead,
   Table,
   TableBody,
   TableCell,
@@ -344,6 +346,14 @@ function LeaveTypeTab() {
   });
   const [editing, setEditing] = useState<LeaveType | null>(null);
   const [creating, setCreating] = useState(false);
+  const { sorted, sort, toggle } = useTableSort(types, {
+    name: (t) => t.name,
+    code: (t) => t.code,
+    deduct: (t) => t.deductDays,
+    portion: (t) => `${PORTION_LABEL[t.portion]}${t.requiresAnnualExhausted ? " (연차 소진 후)" : ""}`,
+    annual: (t) => t.deductFromAnnual,
+    active: (t) => t.active,
+  });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["leaveTypes"] });
 
@@ -368,17 +378,17 @@ function LeaveTypeTab() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>이름</TableHead>
-                <TableHead>코드</TableHead>
-                <TableHead>차감</TableHead>
-                <TableHead>단위</TableHead>
-                <TableHead>연차차감</TableHead>
-                <TableHead>상태</TableHead>
+                <SortableTableHead sortKey="name" sort={sort} onSort={toggle}>이름</SortableTableHead>
+                <SortableTableHead sortKey="code" sort={sort} onSort={toggle}>코드</SortableTableHead>
+                <SortableTableHead sortKey="deduct" sort={sort} onSort={toggle}>차감</SortableTableHead>
+                <SortableTableHead sortKey="portion" sort={sort} onSort={toggle}>단위</SortableTableHead>
+                <SortableTableHead sortKey="annual" sort={sort} onSort={toggle}>연차차감</SortableTableHead>
+                <SortableTableHead sortKey="active" sort={sort} onSort={toggle}>상태</SortableTableHead>
                 <TableHead className="text-right">관리</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {types.map((t) => (
+              {sorted.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell>
                     <span className="inline-flex items-center gap-2">
@@ -633,7 +643,7 @@ function RulesTab() {
               }}
             ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
-          <RuleTable rows={awards.map((a) => ({ id: a.id, cells: [`${a.years}년`, `${a.bonusDays}일`, a.name ?? "-"] }))}
+          <RuleTable rows={awards.map((a) => ({ id: a.id, cells: [`${a.years}년`, `${a.bonusDays}일`, a.name ?? "-"], values: [a.years, a.bonusDays, a.name] }))}
             headers={["근속", "포상", "명칭"]} onDelete={async (id) => {
               const ok = await confirm({ title: "포상휴가 규칙을 삭제할까요?", confirmText: "삭제", destructive: true });
               if (ok) delAward.mutate(id);
@@ -662,7 +672,7 @@ function RulesTab() {
               disabled={!sName.trim()}
             ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
-          <RuleTable rows={specials.map((s) => ({ id: s.id, cells: [s.name, `${s.days}일`] }))}
+          <RuleTable rows={specials.map((s) => ({ id: s.id, cells: [s.name, `${s.days}일`], values: [s.name, s.days] }))}
             headers={["사유/관계", "일수"]} onDelete={async (id) => {
               const ok = await confirm({ title: "경조사 규정을 삭제할까요?", confirmText: "삭제", destructive: true });
               if (ok) delSpecial.mutate(id);
@@ -719,7 +729,7 @@ function BlackoutTab() {
             disabled={!name.trim()}
           ><Plus className="h-4 w-4" /> 추가</Button>
         </div>
-        <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name] }))}
+        <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name], values: [`${b.startDate} ${b.endDate}`, b.name] }))}
           headers={["기간", "명칭"]} onDelete={async (id) => {
             const ok = await confirm({ title: "사용 금지 기간을 삭제할까요?", confirmText: "삭제", destructive: true });
             if (ok) del.mutate(id);
@@ -736,6 +746,13 @@ function PromotionTab() {
   const { data: targets = [], refetch } = useQuery({
     queryKey: ["promotionTargets", year],
     queryFn: () => promotionApi.targets(year),
+  });
+  const { sorted, sort, toggle } = useTableSort(targets, {
+    name: (t) => t.name,
+    department: (t) => t.department,
+    granted: (t) => t.granted,
+    used: (t) => t.used,
+    remaining: (t) => t.remaining,
   });
   const run = useMutation({
     mutationFn: () => promotionApi.run(year),
@@ -769,12 +786,15 @@ function PromotionTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>이름</TableHead><TableHead>부서</TableHead>
-              <TableHead>부여</TableHead><TableHead>사용</TableHead><TableHead>잔여</TableHead>
+              <SortableTableHead sortKey="name" sort={sort} onSort={toggle}>이름</SortableTableHead>
+              <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
+              <SortableTableHead sortKey="granted" sort={sort} onSort={toggle}>부여</SortableTableHead>
+              <SortableTableHead sortKey="used" sort={sort} onSort={toggle}>사용</SortableTableHead>
+              <SortableTableHead sortKey="remaining" sort={sort} onSort={toggle}>잔여</SortableTableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {targets.length > 0 ? targets.map((t) => (
+            {sorted.length > 0 ? sorted.map((t) => (
               <TableRow key={t.employeeId}>
                 <TableCell className="font-medium">{t.name}</TableCell>
                 <TableCell>{t.department ?? "-"}</TableCell>
@@ -798,19 +818,28 @@ function RuleTable({
   onDelete,
 }: {
   headers: string[];
-  rows: { id: number; cells: string[] }[];
+  /** values: 열마다 정렬에 쓸 값(숫자·날짜 등). 없으면 화면 글자로 정렬 */
+  rows: { id: number; cells: string[]; values?: SortValue[] }[];
   onDelete: (id: number) => void;
 }) {
+  const accessors = Object.fromEntries(
+    headers.map((_, i) => [String(i), (r: (typeof rows)[number]) => (r.values ?? r.cells)[i]]),
+  );
+  const { sorted, sort, toggle } = useTableSort(rows, accessors);
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          {headers.map((h) => <TableHead key={h}>{h}</TableHead>)}
+          {headers.map((h, i) => (
+            <SortableTableHead key={h} sortKey={String(i)} sort={sort} onSort={toggle}>
+              {h}
+            </SortableTableHead>
+          ))}
           <TableHead className="text-right">관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length > 0 ? rows.map((r) => (
+        {sorted.length > 0 ? sorted.map((r) => (
           <TableRow key={r.id}>
             {r.cells.map((c, i) => <TableCell key={i}>{c}</TableCell>)}
             <TableCell className="text-right">

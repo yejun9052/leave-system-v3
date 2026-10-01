@@ -32,7 +32,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  SortableTableHead,
 } from "@/components/ui/table";
+import { useTableSort } from "@/lib/useTableSort";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +61,9 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
   ON_LEAVE: "휴직",
   RESIGNED: "퇴사",
 };
+
+const ROLE_RANK: Role[] = ["SYSTEM_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
+const STATUS_RANK: EmployeeStatus[] = ["ACTIVE", "ON_LEAVE", "RESIGNED"];
 
 export default function EmployeePage() {
   const qc = useQueryClient();
@@ -88,6 +93,16 @@ export default function EmployeePage() {
   const { data, isLoading } = useQuery({
     queryKey: ["employees", { search, page }],
     queryFn: () => employeeApi.search({ keyword: search || undefined, page, size: 15 }),
+  });
+  // 서버가 이름순으로 페이지를 나눠 주므로 정렬은 지금 페이지 안에서만 한다
+  const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {
+    name: (e) => e.name,
+    email: (e) => e.email,
+    department: (e) => e.departmentName,
+    position: (e) => e.position,
+    // 권한은 높은 권한 순(시스템관리자 → 인사관리자 → 팀장 → 사원)
+    roles: (e) => Math.min(...e.roles.map((r) => ROLE_RANK.indexOf(r))),
+    status: (e) => STATUS_RANK.indexOf(e.status),
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["employees"] });
@@ -201,12 +216,12 @@ export default function EmployeePage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>이름</TableHead>
-                <TableHead>이메일</TableHead>
-                <TableHead>부서</TableHead>
-                <TableHead>직급</TableHead>
-                <TableHead>권한</TableHead>
-                <TableHead>상태</TableHead>
+                <SortableTableHead sortKey="name" sort={sort} onSort={toggle}>이름</SortableTableHead>
+                <SortableTableHead sortKey="email" sort={sort} onSort={toggle}>이메일</SortableTableHead>
+                <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
+                <SortableTableHead sortKey="position" sort={sort} onSort={toggle}>직급</SortableTableHead>
+                <SortableTableHead sortKey="roles" sort={sort} onSort={toggle}>권한</SortableTableHead>
+                <SortableTableHead sortKey="status" sort={sort} onSort={toggle}>상태</SortableTableHead>
                 <TableHead className="text-right">관리</TableHead>
               </TableRow>
             </TableHeader>
@@ -218,7 +233,7 @@ export default function EmployeePage() {
                   </TableCell>
                 </TableRow>
               ) : data && data.content.length > 0 ? (
-                data.content.map((e) => (
+                sorted.map((e) => (
                   <TableRow key={e.id}>
                     <TableCell className="font-medium">{e.name}</TableCell>
                     <TableCell className="text-muted-foreground">{e.email}</TableCell>

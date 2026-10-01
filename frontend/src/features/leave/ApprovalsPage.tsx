@@ -15,7 +15,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  SortableTableHead,
 } from "@/components/ui/table";
+import { useTableSort } from "@/lib/useTableSort";
 import {
   Dialog,
   DialogContent,
@@ -76,6 +78,16 @@ export default function ApprovalsPage() {
     queryKey: ["pendingApprovals"],
     queryFn: leaveApi.pending,
   });
+  const { sorted, sort, toggle } = useTableSort(pending, {
+    // 구분: 신규 → 취소요청, 같은 구분 안에서는 본인 신청 먼저
+    kind: (r) => (r.status === "CANCEL_REQUESTED" ? 2 : 0) + (r.ownRequest ? 0 : 1),
+    employee: (r) => r.employeeName,
+    department: (r) => r.departmentName,
+    type: (r) => r.leaveTypeName,
+    period: (r) => `${r.startDate} ${r.endDate}`,
+    days: (r) => r.days,
+    reason: (r) => (r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
@@ -125,13 +137,13 @@ export default function ApprovalsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>구분</TableHead>
-                <TableHead>신청자</TableHead>
-                <TableHead>부서</TableHead>
-                <TableHead>종류</TableHead>
-                <TableHead>기간</TableHead>
-                <TableHead>일수</TableHead>
-                <TableHead>사유</TableHead>
+                <SortableTableHead sortKey="kind" sort={sort} onSort={toggle}>구분</SortableTableHead>
+                <SortableTableHead sortKey="employee" sort={sort} onSort={toggle}>신청자</SortableTableHead>
+                <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
+                <SortableTableHead sortKey="type" sort={sort} onSort={toggle}>종류</SortableTableHead>
+                <SortableTableHead sortKey="period" sort={sort} onSort={toggle}>기간</SortableTableHead>
+                <SortableTableHead sortKey="days" sort={sort} onSort={toggle}>일수</SortableTableHead>
+                <SortableTableHead sortKey="reason" sort={sort} onSort={toggle}>사유</SortableTableHead>
                 <TableHead className="text-right">결재</TableHead>
               </TableRow>
             </TableHeader>
@@ -143,7 +155,7 @@ export default function ApprovalsPage() {
                   </TableCell>
                 </TableRow>
               ) : pending.length > 0 ? (
-                pending.map((r) => (
+                sorted.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">

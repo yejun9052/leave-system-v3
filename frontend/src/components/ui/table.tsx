@@ -1,5 +1,7 @@
 import * as React from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { SortState } from "@/lib/useTableSort";
 
 const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
   ({ className, ...props }, ref) => (
@@ -46,6 +48,45 @@ const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<
 );
 TableHead.displayName = "TableHead";
 
+/**
+ * 눌러서 정렬하는 열 제목(useTableSort 와 함께 사용). 정렬 중인 열은 ↑(오름차순)/↓(내림차순), 나머지는 흐린 ↕.
+ */
+function SortableTableHead<K extends string>({
+  sortKey,
+  sort,
+  onSort,
+  className,
+  children,
+}: {
+  sortKey: K;
+  sort: SortState<K> | null;
+  onSort: (key: K) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const active = sort?.key === sortKey ? sort.dir : null;
+  const Icon = active === "asc" ? ArrowUp : active === "desc" ? ArrowDown : ArrowUpDown;
+  return (
+    <TableHead
+      className={className}
+      aria-sort={active === "asc" ? "ascending" : active === "desc" ? "descending" : "none"}
+    >
+      <button
+        type="button"
+        className={cn(
+          "-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted hover:text-foreground",
+          active && "text-foreground",
+        )}
+        title={active === "asc" ? "내림차순으로 정렬" : active === "desc" ? "정렬 해제" : "오름차순으로 정렬"}
+        onClick={() => onSort(sortKey)}
+      >
+        {children}
+        <Icon className={cn("h-3.5 w-3.5", !active && "opacity-40")} />
+      </button>
+    </TableHead>
+  );
+}
+
 const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
     <td ref={ref} className={cn("p-3 align-middle", className)} {...props} />
@@ -53,4 +94,4 @@ const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<
 );
 TableCell.displayName = "TableCell";
 
-export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell };
+export { Table, TableHeader, TableBody, TableRow, TableHead, SortableTableHead, TableCell };
