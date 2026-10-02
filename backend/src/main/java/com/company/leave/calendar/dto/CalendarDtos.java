@@ -3,9 +3,11 @@ package com.company.leave.calendar.dto;
 import com.company.leave.calendar.domain.CalendarEvent;
 import com.company.leave.calendar.domain.CalendarEventScope;
 import com.company.leave.calendar.domain.CalendarEventSource;
+import com.company.leave.leave.dto.LeaveRequestDtos;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
+import java.util.List;
 
 public final class CalendarDtos {
 
@@ -52,6 +54,43 @@ public final class CalendarDtos {
                     null,
                     false);
         }
+    }
+
+    /**
+     * 캘린더 날짜 상세(휴가·일정이 몰린 날 확인용).
+     *
+     * @param holidayName 공휴일이면 이름(여러 개면 ", " 로 연결), 아니면 null
+     * @param leaves      그날에 걸친 휴가(부서·이름 순, 사유 없음)
+     * @param events      관리자·팀장이 등록한 일정(휴가·공휴일 제외)
+     */
+    public record DayDetail(
+            LocalDate date,
+            String holidayName,
+            List<LeaveRequestDtos.DayLeave> leaves,
+            List<DayEvent> events) {
+    }
+
+    /** 날짜 상세의 등록 일정. end 는 포함(마지막 날). */
+    public record DayEvent(
+            String id,
+            String title,
+            LocalDate start,
+            LocalDate end,
+            CalendarEventScope scope,
+            String colorHex) {
+
+        public static DayEvent from(CalendarEvent e) {
+            return new DayEvent("E" + e.getId(), e.getTitle(), e.getStartDate(), e.getEndDate(),
+                    e.getScope(), e.getColorHex());
+        }
+    }
+
+    /**
+     * 일정 등록 화면의 범위 선택지. 전사면 departmentId 가 null.
+     *
+     * @param label 화면 표시용("전체 일정", "{부서명} 일정")
+     */
+    public record EventScopeOption(CalendarEventScope scope, Long departmentId, String label) {
     }
 
     public record CreateEvent(

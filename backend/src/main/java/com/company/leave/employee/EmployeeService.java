@@ -1,5 +1,8 @@
 package com.company.leave.employee;
 
+import com.company.leave.auth.SessionTerminator;
+import com.company.leave.auth.password.PasswordResetService;
+import com.company.leave.auth.password.TemporaryPasswordGenerator;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.department.domain.Department;
@@ -12,6 +15,7 @@ import com.company.leave.employee.dto.EmployeeResponse;
 import com.company.leave.employee.dto.EmployeeSearchCondition;
 import com.company.leave.employee.repository.EmployeeRepository;
 import com.company.leave.license.LicenseService;
+import com.company.leave.mail.AccountMailEvents;
 import com.company.leave.security.SecurityUtils;
 import com.company.leave.security.UserPrincipal;
 import java.time.LocalDate;
@@ -24,30 +28,38 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Service
 public class EmployeeService {
-
-    /** 관리자가 초기 비밀번호를 지정하지 않은 경우 사용하는 기본값. */
-    public static final String DEFAULT_PASSWORD = "welcome1234!";
 
     private final EmployeeRepository employeeRepository;
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
     private final LicenseService licenseService;
+    private final SessionTerminator sessionTerminator;
+    private final TemporaryPasswordGenerator temporaryPasswordGenerator;
+    private final PasswordResetService passwordResetService;
+    private final DepartmentLeadSync leadSync;
 
     public EmployeeService(EmployeeRepository employeeRepository,
                            DepartmentRepository departmentRepository,
                            PasswordEncoder passwordEncoder,
                            ApplicationEventPublisher eventPublisher,
-                           LicenseService licenseService) {
+                           LicenseService licenseService,
+                           SessionTerminator sessionTerminator,
+                           TemporaryPasswordGenerator temporaryPasswordGenerator,
+                           PasswordResetService passwordResetService,
+                           DepartmentLeadSync leadSync) {
         this.employeeRepository = employeeRepository;
         this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
         this.licenseService = licenseService;
+        this.sessionTerminator = sessionTerminator;
+        this.temporaryPasswordGenerator = temporaryPasswordGenerator;
+        this.passwordResetService = passwordResetService;
+        this.leadSync = leadSync;
     }
 
     @Transactional(readOnly = true)
@@ -77,7 +89,7 @@ public class EmployeeService {
     private Set<Long> currentScopeDeptIds() {
         UserPrincipal p = SecurityUtils.currentPrincipal();
         boolean admin = p.getAuthorities().stream().anyMatch(a ->
-                a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("ROLE_HR_ADMIN"));
+                a.getAuthority().equals("ROLE_SYSTEM_ADMIN") || a.getAuthority().equals("ROLE_HR_ADMIN"));
         if (admin) {
             return null;
         }
@@ -90,71 +102,88 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeResponse create(EmployeeRequests.Create req) {
+        Set<Role> roles = resolveRoles(req.roles());
         // 동시 생성 직렬화 → 라이선스 최대 사용자 수 초과(TOCTOU) 방지
         employeeRepository.lockForUserCreation();
-        licenseService.checkUserQuota(employeeRepository.countByStatus(EmployeeStatus.ACTIVE));
+        licenseService.checkUserQuota(employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE));
         validateEmailUnique(req.email(), null);
-        validateEmployeeNoUnique(req.employeeNo(), null);
 
-        String rawPassword = StringUtils.hasText(req.initialPassword())
-                ? req.initialPassword() : DEFAULT_PASSWORD;
+        // 초기 비밀번호는 서버가 생성해 메일로만 전달(관리자는 값을 알 수 없음) → 첫 로그인 시 변경 강제
+        String temporaryPassword = temporaryPasswordGenerator.generate();
 
         Employee employee = Employee.builder()
                 .email(req.email())
-                .passwordHash(passwordEncoder.encode(rawPassword))
+                .passwordHash(passwordEncoder.encode(temporaryPassword))
                 .name(req.name())
-                .employeeNo(emptyToNull(req.employeeNo()))
                 .department(resolveDepartment(req.departmentId()))
                 .position(req.position())
                 .phone(req.phone())
                 .hireDate(req.hireDate())
-                .roles(resolveRoles(req.roles()))
+                .roles(roles)
                 .build();
+        employee.requirePasswordChange();
         Employee saved = employeeRepository.save(employee);
+        leadSync.afterSave(saved, null, false); // 팀장이면 부서장이 빈 소속 부서의 부서장으로
 
         // 연차 엔진에 신규 입사자 알림 → 초기 연차 부여 (Phase 3)
         eventPublisher.publishEvent(new EmployeeCreatedEvent(saved.getId()));
+        // 계정 생성 메일(임시 비밀번호) — 커밋 후 발송
+        eventPublisher.publishEvent(new AccountMailEvents.AccountCreated(
+                saved.getEmail(), saved.getName(), temporaryPassword));
         return EmployeeResponse.from(saved);
     }
 
     @Transactional
     public EmployeeResponse update(Long id, EmployeeRequests.Update req) {
-        Employee employee = getManageable(id);
+        Employee employee = getEntity(id);
+        if (employee.isSystemAccount()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
+        }
+        Set<Role> roles = resolveRoles(req.roles());
         validateEmailUnique(req.email(), id);
-        validateEmployeeNoUnique(req.employeeNo(), id);
+        Long previousDepartmentId = employee.getDepartmentId();
+        boolean wasTeamLead = DepartmentLeadSync.isActiveTeamLead(employee);
 
         employee.changeEmail(req.email());
         employee.updateProfile(req.name(), req.position(), req.phone());
-        employee.changeEmployeeNo(emptyToNull(req.employeeNo()));
         employee.changeHireDate(req.hireDate());
         employee.assignDepartment(resolveDepartment(req.departmentId()));
-        employee.replaceRoles(resolveRoles(req.roles()));
+        employee.replaceRoles(roles);
+        leadSync.afterSave(employee, previousDepartmentId, wasTeamLead);
         return EmployeeResponse.from(employee);
     }
 
     @Transactional
     public void resign(Long id, LocalDate resignedDate) {
         Employee employee = getManageable(id);
+        boolean wasTeamLead = DepartmentLeadSync.isActiveTeamLead(employee);
         employee.resign(resignedDate != null ? resignedDate : LocalDate.now());
+        leadSync.afterSave(employee, employee.getDepartmentId(), wasTeamLead); // 맡던 부서는 다른 팀장으로
+        // 퇴사자의 로그인 세션 즉시 폐기 (이후 요청은 AccountStateFilter 에서도 차단됨)
+        sessionTerminator.terminateAll(employee.getId());
     }
 
     @Transactional
     public void reactivate(Long id) {
-        getManageable(id).reactivate();
+        Employee employee = getManageable(id);
+        employee.reactivate();
+        leadSync.afterSave(employee, employee.getDepartmentId(), false);
     }
 
+    /** 관리자 초기화: 비밀번호를 바꾸지 않고 본인에게 재설정 링크 메일만 보낸다. */
     @Transactional
-    public void resetPassword(Long id, String newPassword) {
-        getManageable(id).changePassword(passwordEncoder.encode(newPassword));
+    public void sendPasswordResetMail(Long id) {
+        passwordResetService.issue(getManageable(id));
     }
 
+    /** 본인 비밀번호 변경. 성공하면 변경 요구 해제(세션 처리는 호출부에서). */
     @Transactional
     public void changeMyPassword(Long employeeId, String currentPassword, String newPassword) {
         Employee employee = getEntity(employeeId);
         if (!passwordEncoder.matches(currentPassword, employee.getPasswordHash())) {
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS, "현재 비밀번호가 올바르지 않습니다.");
+            throw new BusinessException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }
-        employee.changePassword(passwordEncoder.encode(newPassword));
+        employee.setOwnPassword(passwordEncoder.encode(newPassword));
     }
 
     @Transactional
@@ -188,6 +217,13 @@ public class EmployeeService {
         return employeeRepository.findAllIds();
     }
 
+    /** 재직 중인 인사관리자·시스템 관리자 ID(전사 결재자). 결재 팀장이 없는 직원의 휴가 결재 알림 수신자. */
+    @Transactional(readOnly = true)
+    public java.util.List<Long> activeAdminIds() {
+        return employeeRepository.findIdsByAnyRoleAndStatus(
+                EnumSet.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN), EmployeeStatus.ACTIVE);
+    }
+
     @Transactional(readOnly = true)
     public java.util.Set<Long> employeeIdsInDepartments(java.util.Collection<Long> departmentIds) {
         return new java.util.HashSet<>(employeeRepository.findIdsByDepartmentIdIn(departmentIds));
@@ -204,6 +240,9 @@ public class EmployeeService {
     }
 
     private Set<Role> resolveRoles(Set<Role> roles) {
+        if (roles != null && roles.contains(Role.SYSTEM_ADMIN)) {
+            throw new BusinessException(ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
+        }
         return (roles == null || roles.isEmpty()) ? EnumSet.of(Role.EMPLOYEE) : roles;
     }
 
@@ -213,21 +252,6 @@ public class EmployeeService {
                 throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
             }
         });
-    }
-
-    private void validateEmployeeNoUnique(String employeeNo, Long selfId) {
-        if (!StringUtils.hasText(employeeNo)) {
-            return;
-        }
-        employeeRepository.findByEmployeeNo(employeeNo.trim()).ifPresent(existing -> {
-            if (!existing.getId().equals(selfId)) {
-                throw new BusinessException(ErrorCode.EMPLOYEE_NO_DUPLICATED);
-            }
-        });
-    }
-
-    private String emptyToNull(String s) {
-        return StringUtils.hasText(s) ? s.trim() : null;
     }
 
     /** 신규 사용자 생성 이벤트 (연차 초기 부여 트리거). */

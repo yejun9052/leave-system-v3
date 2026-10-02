@@ -16,19 +16,6 @@ public final class EmployeeRequests {
     public record Create(
             @NotBlank @Email String email,
             @NotBlank @Size(max = 100) String name,
-            @Size(max = 50) String employeeNo,
-            Long departmentId,
-            @Size(max = 50) String position,
-            @Size(max = 30) String phone,
-            @NotNull LocalDate hireDate,
-            Set<Role> roles,
-            @Size(min = 8, max = 72) String initialPassword) {
-    }
-
-    public record Update(
-            @NotBlank @Email String email,
-            @NotBlank @Size(max = 100) String name,
-            @Size(max = 50) String employeeNo,
             Long departmentId,
             @Size(max = 50) String position,
             @Size(max = 30) String phone,
@@ -36,7 +23,14 @@ public final class EmployeeRequests {
             Set<Role> roles) {
     }
 
-    public record ResetPassword(@NotBlank @Size(min = 8, max = 72) String newPassword) {
+    public record Update(
+            @NotBlank @Email String email,
+            @NotBlank @Size(max = 100) String name,
+            Long departmentId,
+            @Size(max = 50) String position,
+            @Size(max = 30) String phone,
+            @NotNull LocalDate hireDate,
+            Set<Role> roles) {
     }
 
     public record ChangeMyPassword(

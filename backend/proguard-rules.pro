@@ -26,6 +26,7 @@
 -keep class org.springframework.** { *; }
 -keep class jakarta.** { *; }
 -keep class com.fasterxml.** { *; }
+-keep class tools.jackson.** { *; }
 -keep class org.hibernate.** { *; }
 -keep class com.querydsl.** { *; }
 -keep class org.flywaydb.** { *; }
@@ -60,6 +61,18 @@
     @jakarta.persistence.PersistenceContext *;
     @org.springframework.beans.factory.annotation.Autowired *;
     @org.springframework.beans.factory.annotation.Value *;
+}
+
+# 세션(DB)에 Java 직렬화로 저장되는 클래스(UserPrincipal 등): 필드명이 바뀌면
+# 재배포 후 기존 세션을 역직렬화하지 못하므로 직렬화 관련 멤버를 보존
+-keepclassmembers class com.company.leave.** implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    !static !transient <fields>;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
 }
 
 # enum values()/valueOf 보존

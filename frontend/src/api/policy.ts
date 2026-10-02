@@ -1,5 +1,5 @@
 import { api, unwrap } from "./client";
-import type { LeaveType } from "@/types";
+import type { LeavePortion, LeaveType } from "@/types";
 
 export type GrantBasis = "HIRE_DATE" | "FISCAL_YEAR";
 
@@ -16,12 +16,18 @@ export interface Policy {
   monthlyAccrualMax: number;
   allowNegative: boolean;
   halfDayEnabled: boolean;
+  hourlyEnabled: boolean;
   maxConcurrentAbsence: number;
   minAdvanceDays: number;
   maxConsecutiveDays: number;
+  /** 연차 촉진 자동 발송 ON/OFF (자동화 탭에서 따로 저장, 연차 정책 저장에는 반영되지 않음) */
   promotionEnabled: boolean;
+  /** 자동 발송 시기: 사용 기한 몇 개월 전(큰 값부터) */
+  promotionMonths: number[];
   carryOverEnabled: boolean;
   maxCarryOverDays: number;
+  /** 다음 연차 기간(다음 기산일 이후) 날짜의 연차 신청 허용 */
+  nextPeriodReservationEnabled: boolean;
 }
 
 export const policyApi = {
@@ -71,22 +77,88 @@ export const policyRulesApi = {
   removeBlackout: (id: number) => unwrap<void>(api.delete(`/policy/blackouts/${id}`)),
 };
 
+/** 촉진 대상: 사용 기한이 N개월 안이고 남은 연차가 있는 재직자 */
 export interface PromotionTarget {
   employeeId: number;
   name: string;
   department: string | null;
+  hasEmail: boolean;
+  /** 연차 기간(그 해에 시작한 기간) */
+  year: number;
+  periodStart: string;
+  /** 사용 기한 */
+  periodEnd: string;
+  /** 부여(이월 포함) */
   granted: number;
   used: number;
+  /** 결재 대기 중인 차감 예정(남은 연차에서 아직 빼지 않음) */
+  pending: number;
   remaining: number;
+  /** 사용 기한까지 남은 날(기한 당일 0) */
+  daysLeft: number;
+  /** "2개월 29일" (서버 계산) */
+  timeLeft: string;
+  /** 이번 연차 기간에 보낸 횟수 */
+  noticeCount: number;
+  lastNotifiedAt: string | null;
+}
+
+export interface PromotionSendResult {
+  sent: number;
+  mailed: number;
+  /** 그 사이 대상이 아니게 돼 건너뛴 인원 */
+  skipped: number;
 }
 
 export const promotionApi = {
-  targets: (year?: number) =>
-    unwrap<PromotionTarget[]>(api.get("/leave/promotion/targets", { params: { year } })),
-  run: (year?: number) =>
-    unwrap<{ year: number; notified: number }>(
-      api.post("/leave/promotion/run", null, { params: { year } }),
+  /** keyword: 이름·부서 검색(공백으로 나눈 단어 모두, 상위 부서로 찾으면 하위 부서 포함) */
+  targets: (months: number, keyword?: string) =>
+    unwrap<PromotionTarget[]>(
+      api.get("/leave/promotion/targets", { params: { months, keyword: keyword || undefined } }),
     ),
+  send: (employeeIds: number[]) =>
+    unwrap<PromotionSendResult>(api.post("/leave/promotion/send", { employeeIds })),
+};
+
+/** 자동 작업 상태: 항상 실행 / 켜짐 / 꺼짐 / 설정 없음(실행해도 건너뜀) */
+export type AutomationJobState = "ALWAYS" | "ON" | "OFF" | "NOT_CONFIGURED";
+
+export interface AutomationJob {
+  key: string;
+  name: string;
+  description: string;
+  /** "매일 01:00" */
+  schedule: string;
+  state: AutomationJobState;
+  lastStartedAt: string | null;
+  lastFinishedAt: string | null;
+  /** 성공 true, 실패 false, 건너뜀 null */
+  lastSuccess: boolean | null;
+  lastMessage: string | null;
+}
+
+/** 지금 자동 발송을 돌리면 보낼 직원 */
+export interface AutoPromotionTarget {
+  employeeId: number;
+  name: string;
+  department: string | null;
+  periodEnd: string;
+  timeLeft: string;
+  /** 이번에 보낼 발송 시기(사용 기한 N개월 전) */
+  stageMonths: number;
+}
+
+export interface AutomationOverview {
+  promotionEnabled: boolean;
+  promotionMonths: number[];
+  promotionPreview: AutoPromotionTarget[];
+  jobs: AutomationJob[];
+}
+
+export const automationApi = {
+  get: () => unwrap<AutomationOverview>(api.get("/policy/automation")),
+  updatePromotion: (promotionEnabled: boolean, promotionMonths: number[]) =>
+    unwrap<AutomationOverview>(api.put("/policy/automation/promotion", { promotionEnabled, promotionMonths })),
 };
 
 export interface LeaveTypeInput {
@@ -94,7 +166,8 @@ export interface LeaveTypeInput {
   name: string;
   deductDays: number;
   paid: boolean;
-  halfDay: boolean;
+  portion: LeavePortion;
+  requiresAnnualExhausted: boolean;
   deductFromAnnual: boolean;
   colorHex: string;
   sortOrder?: number;

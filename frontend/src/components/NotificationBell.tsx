@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { notificationApi } from "@/api/leave";
 import { Button } from "@/components/ui/button";
+import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 
 export default function NotificationBell() {
@@ -66,7 +67,7 @@ export default function NotificationBell() {
                   <p className="font-medium">{n.title}</p>
                   {n.message && <p className="text-xs text-muted-foreground">{n.message}</p>}
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {new Date(n.createdAt).toLocaleString("ko-KR")}
+                    {formatDateTime(n.createdAt)}
                   </p>
                 </li>
               ))

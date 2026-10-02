@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, ShieldCheck } from "lucide-react";
-import { auditApi, type AuditLog } from "@/api/audit";
+import { auditApi } from "@/api/audit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,56 +10,15 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
+  SortableTableHead,
 } from "@/components/ui/table";
-
-const ACTION_LABEL: Record<string, string> = {
-  POST: "생성",
-  PUT: "수정",
-  PATCH: "변경",
-  DELETE: "삭제",
-  LOGIN: "로그인",
-  CALL: "실행",
-  // 행위형 엔드포인트
-  approve: "승인",
-  reject: "반려",
-  cancel: "취소 요청",
-  cancel_approve: "취소 승인",
-  cancel_reject: "취소 반려",
-  move: "이동",
-  reactivate: "복원",
-  password: "비밀번호 변경",
-  grant: "연차 부여",
-  run: "촉진 발송",
-  import: "일괄 등록",
-  export: "내보내기",
-  "read-all": "알림 읽음",
-};
+import { formatDateTime } from "@/lib/dateFormat";
+import { useTableSort } from "@/lib/useTableSort";
 
 // 삭제·반려성 동작은 붉은 배지로 강조
-const NEGATIVE_ACTIONS = new Set(["DELETE", "reject", "cancel", "cancel_reject"]);
-
-const RESOURCE_LABEL: Record<string, string> = {
-  auth: "인증",
-  employees: "사용자",
-  departments: "부서",
-  "leave-requests": "휴가 신청",
-  "leave-types": "휴가 종류",
-  policy: "정책",
-  calendar: "캘린더",
-  leave: "연차 운영",
-  notifications: "알림",
-  reports: "리포트",
-};
-
-function actionLabel(a: AuditLog): string {
-  return ACTION_LABEL[a.action] ?? a.action;
-}
-function resourceLabel(a: AuditLog): string {
-  return RESOURCE_LABEL[a.entityType] ?? a.entityType;
-}
+const NEGATIVE_ACTIONS = new Set(["DELETE", "reject", "cancel", "cancel_reject", "force_cancel"]);
 
 export default function AuditLogPage() {
   const [keyword, setKeyword] = useState("");
@@ -69,6 +28,15 @@ export default function AuditLogPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["auditLogs", { search, page }],
     queryFn: () => auditApi.list(search, page, 30),
+  });
+  // 서버가 최신순으로 페이지를 나눠 주므로 정렬은 지금 페이지 안에서만 한다
+  const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {
+    time: (a) => a.createdAt,
+    actor: (a) => a.actorName,
+    action: (a) => a.actionLabel,
+    entity: (a) => `${a.entityLabel ?? a.entityType} ${a.entityId ?? ""}`,
+    result: (a) => a.success,
+    detail: (a) => a.detail,
   });
 
   const onSearch = (e: React.FormEvent) => {
@@ -93,7 +61,7 @@ export default function AuditLogPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="사용자·동작·대상·상세 검색"
+            placeholder="사용자·동작·대상·결과·상세·날짜(2026-10-01) 검색"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -108,12 +76,12 @@ export default function AuditLogPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[170px]">시간</TableHead>
-                <TableHead>사용자</TableHead>
-                <TableHead>동작</TableHead>
-                <TableHead>대상</TableHead>
-                <TableHead>결과</TableHead>
-                <TableHead>상세</TableHead>
+                <SortableTableHead sortKey="time" sort={sort} onSort={toggle} className="w-[170px]">시간</SortableTableHead>
+                <SortableTableHead sortKey="actor" sort={sort} onSort={toggle}>사용자</SortableTableHead>
+                <SortableTableHead sortKey="action" sort={sort} onSort={toggle}>동작</SortableTableHead>
+                <SortableTableHead sortKey="entity" sort={sort} onSort={toggle}>대상</SortableTableHead>
+                <SortableTableHead sortKey="result" sort={sort} onSort={toggle}>결과</SortableTableHead>
+                <SortableTableHead sortKey="detail" sort={sort} onSort={toggle}>상세</SortableTableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -124,19 +92,19 @@ export default function AuditLogPage() {
                   </TableCell>
                 </TableRow>
               ) : data && data.content.length > 0 ? (
-                data.content.map((a) => (
+                sorted.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {new Date(a.createdAt).toLocaleString("ko-KR")}
+                      {formatDateTime(a.createdAt)}
                     </TableCell>
                     <TableCell className="font-medium">{a.actorName}</TableCell>
                     <TableCell>
                       <Badge variant={NEGATIVE_ACTIONS.has(a.action) ? "destructive" : "secondary"}>
-                        {actionLabel(a)}
+                        {a.actionLabel}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {resourceLabel(a)}
+                      {a.entityLabel ?? a.entityType}
                       {a.entityId && <span className="text-muted-foreground"> #{a.entityId}</span>}
                     </TableCell>
                     <TableCell>

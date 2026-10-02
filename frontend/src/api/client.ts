@@ -1,5 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
-import { tokenStore } from "@/lib/tokenStore";
+import axios, { AxiosError } from "axios";
 
 /**
  * 백엔드 표준 응답 형태.
@@ -10,56 +9,41 @@ export interface ApiEnvelope<T> {
   error: { code: string; message: string; details?: unknown } | null;
 }
 
+/**
+ * 인증은 서버 세션(HttpOnly 쿠키)으로 처리되어 브라우저가 자동 전송한다.
+ * CSRF: 서버가 내려준 XSRF-TOKEN 쿠키 값을 axios 가 X-XSRF-TOKEN 헤더로 자동 첨부(같은 출처 요청).
+ */
 export const api = axios.create({
   baseURL: "/api",
   headers: { "Content-Type": "application/json" },
+  xsrfCookieName: "XSRF-TOKEN",
+  xsrfHeaderName: "X-XSRF-TOKEN",
 });
 
-api.interceptors.request.use((config) => {
-  const token = tokenStore.getAccess();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+// 앱 초기 로그인 확인(/auth/me)과 로그인 시도 자체의 401 은 호출부에서 처리
+const SKIP_REDIRECT_URLS = ["/auth/me", "/auth/login"];
 
-// --- Refresh-token handling on 401 ---
-let refreshing: Promise<string | null> | null = null;
-
-async function refreshAccessToken(): Promise<string | null> {
-  const refresh = tokenStore.getRefresh();
-  if (!refresh) return null;
-  try {
-    const res = await axios.post<ApiEnvelope<{ accessToken: string; refreshToken: string }>>(
-      "/api/auth/refresh",
-      { refreshToken: refresh },
-    );
-    const data = res.data.data;
-    tokenStore.set(data.accessToken, data.refreshToken);
-    return data.accessToken;
-  } catch {
-    tokenStore.clear();
-    return null;
-  }
+/**
+ * 세션이 없어서(만료·로그아웃·퇴사 처리) 받은 401 인지. 서버는 이때 오류 코드 UNAUTHORIZED 를 준다.
+ * 그 외 코드의 401(예: 로그인 실패)은 입력 오류라 로그인 페이지로 보내지 않는다.
+ */
+function isSessionLost(error: AxiosError): boolean {
+  if (error.response?.status !== 401) return false;
+  const code = (error.response.data as ApiEnvelope<unknown> | undefined)?.error?.code;
+  return !code || code === "UNAUTHORIZED";
 }
 
 api.interceptors.response.use(
   (res) => res,
-  async (error: AxiosError) => {
-    const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    if (error.response?.status === 401 && original && !original._retry) {
-      original._retry = true;
-      if (!refreshing) refreshing = refreshAccessToken();
-      const newToken = await refreshing;
-      refreshing = null;
-      if (newToken) {
-        original.headers.Authorization = `Bearer ${newToken}`;
-        return api(original);
-      }
-      // refresh 실패 → 로그인 페이지로
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
+  (error: AxiosError) => {
+    const url = error.config?.url ?? "";
+    if (
+      isSessionLost(error) &&
+      !SKIP_REDIRECT_URLS.includes(url) &&
+      window.location.pathname !== "/login"
+    ) {
+      // 세션 만료·강제 종료 → 로그인 페이지로
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   },

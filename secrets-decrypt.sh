@@ -26,7 +26,10 @@ dec_one() { # $1=name
 }
 
 dec_one db_password
-dec_one jwt_secret
+# mail_password 는 선택 항목: 암호문이 없으면 빈 파일 생성(compose 가 파일을 요구함)
+if [ -f "$ENC_DIR/mail_password.enc" ]; then dec_one mail_password; else : > "$PLAIN_DIR/mail_password"; fi
+# holiday_api_key 도 선택 항목(동일 처리)
+if [ -f "$ENC_DIR/holiday_api_key.enc" ]; then dec_one holiday_api_key; else : > "$PLAIN_DIR/holiday_api_key"; fi
 # 파일 644: 컨테이너 비-root 사용자가 /run/secrets 읽기 가능(상위 디렉터리 700 이 호스트 보호)
 chmod 644 "$PLAIN_DIR"/* 2>/dev/null || true
 echo "[OK] 복호화 완료 → $PLAIN_DIR/ (이제 docker compose up 가능)"

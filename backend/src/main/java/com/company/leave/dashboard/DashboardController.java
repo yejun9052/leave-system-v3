@@ -28,7 +28,7 @@ public class DashboardController {
     }
 
     @Operation(summary = "관리자 대시보드")
-    @PreAuthorize("hasAnyRole('HR_ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     @GetMapping("/admin")
     public ApiResponse<DashboardDtos.AdminDashboard> admin() {
         return ApiResponse.ok(dashboardService.admin());

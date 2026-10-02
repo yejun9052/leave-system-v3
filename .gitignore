@@ -11,6 +11,9 @@ build/
 .settings/
 .classpath
 .project
+# IntelliJ 자체 빌드 산출물(출력 폴더, 어노테이션 프로세서 생성 QueryDSL Q클래스)
+out/
+backend/src/main/generated/
 
 # Node / Frontend
 node_modules/

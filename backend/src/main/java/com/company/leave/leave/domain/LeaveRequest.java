@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -50,8 +51,29 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "deducted_days", nullable = false)
     private BigDecimal deductedDays = BigDecimal.ZERO;
 
+    /** 이 신청(병가·공가) 승인으로 소멸시킨 남은 연차. 취소되면 되돌린다. */
+    @Column(name = "forfeited_days", nullable = false)
+    private BigDecimal forfeitedDays = BigDecimal.ZERO;
+
+    /** 신청 때 고른 경조사 규정(규정이 삭제되면 null, 이름·일수는 신청 당시 값으로 남음). */
+    @Column(name = "special_rule_id")
+    private Long specialRuleId;
+
+    @Column(name = "special_rule_name", length = 60)
+    private String specialRuleName;
+
+    @Column(name = "special_rule_days")
+    private BigDecimal specialRuleDays;
+
     @Column(name = "applied_year", nullable = false)
     private int appliedYear;
+
+    /**
+     * deductedDays 중 다음 연차 기간(applied_year + 1)에서 빼는 몫. 휴가가 기산일을 걸치면 기산일부터의 날짜분(V25).
+     * 나머지(deductedDays − 이 값)는 applied_year 기간에서 뺀다.
+     */
+    @Column(name = "next_period_deducted_days", nullable = false)
+    private BigDecimal nextPeriodDeductedDays = BigDecimal.ZERO;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -67,8 +89,16 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "approved_at")
     private Instant approvedAt;
 
+    // lead_approver_id·lead_approved_at·hr_direct_reason 열은 2단계 결재(V17) 기록으로 DB 에 남아 있지만
+    // 단일 결재에서는 쓰지 않아 매핑하지 않는다.
+
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
+
+    /** 낙관적 락: 두 결재자가 같은 신청을 동시에 처리하면 한쪽만 반영된다(V22). */
+    @Version
+    @Column(nullable = false)
+    private long version;
 
     @Column(name = "cancel_reason", length = 500)
     private String cancelReason;
@@ -107,7 +137,50 @@ public class LeaveRequest extends BaseTimeEntity {
         this.status = LeaveRequestStatus.CANCELLED;
     }
 
-    /** 승인된 휴가에 대한 취소 요청 (팀장 재승인 대기). */
+    /** 공휴일 추가 등으로 일수를 다시 계산한 값으로 덮어쓴다(차감 전·후 모두 새 값 기준). */
+    public void adjustDays(BigDecimal days, BigDecimal deductedDays) {
+        this.days = days;
+        this.deductedDays = deductedDays;
+    }
+
+    /** 연차 기간 배정: 시작일이 속한 기간과, 그중 다음 기간에서 뺄 몫(공휴일 재계산·기간 전환 때 다시 정함). */
+    public void assignPeriods(int appliedYear, BigDecimal nextPeriodDeductedDays) {
+        this.appliedYear = appliedYear;
+        this.nextPeriodDeductedDays = nextPeriodDeductedDays != null ? nextPeriodDeductedDays : BigDecimal.ZERO;
+    }
+
+    /** 경조사 규정 연결(신청 당시 이름·일수를 함께 기록). */
+    public void attachSpecialRule(Long ruleId, String ruleName, BigDecimal ruleDays) {
+        this.specialRuleId = ruleId;
+        this.specialRuleName = ruleName;
+        this.specialRuleDays = ruleDays;
+    }
+
+    /** 승인 때 소멸시킨 남은 연차를 기록한다. */
+    public void recordForfeit(BigDecimal days) {
+        this.forfeitedDays = days;
+    }
+
+    /** 소멸분을 되돌린 뒤 기록을 지운다(이중 복구 방지). 되돌릴 양을 반환. */
+    public BigDecimal takeForfeitForRestore() {
+        BigDecimal days = this.forfeitedDays;
+        this.forfeitedDays = BigDecimal.ZERO;
+        return days;
+    }
+
+    /** 시스템 자동 취소(예: 기간 전체가 공휴일이 됨). 사유를 남긴다. */
+    public void autoCancel(String reason) {
+        this.status = LeaveRequestStatus.CANCELLED;
+        this.cancelReason = reason;
+    }
+
+    /** 인사관리자의 강제 취소(승인된 휴가, 시작 후도 가능). 사유를 남긴다. */
+    public void forceCancel(String reason) {
+        this.status = LeaveRequestStatus.CANCELLED;
+        this.cancelReason = reason;
+    }
+
+    /** 승인된 휴가에 대한 취소 요청 (결재자 결재 대기). */
     public void requestCancel(String reason) {
         this.status = LeaveRequestStatus.CANCEL_REQUESTED;
         this.cancelReason = reason;
@@ -120,6 +193,11 @@ public class LeaveRequest extends BaseTimeEntity {
     }
 
     public boolean isPending() {
+        return status == LeaveRequestStatus.PENDING;
+    }
+
+    /** 아직 결재 전(대기). 잔액·겹침 계산에서는 대기로 본다. */
+    public boolean isAwaitingApproval() {
         return status == LeaveRequestStatus.PENDING;
     }
 
@@ -159,8 +237,33 @@ public class LeaveRequest extends BaseTimeEntity {
         return deductedDays;
     }
 
+    public Long getSpecialRuleId() {
+        return specialRuleId;
+    }
+
+    public String getSpecialRuleName() {
+        return specialRuleName;
+    }
+
+    public BigDecimal getSpecialRuleDays() {
+        return specialRuleDays;
+    }
+
+    public BigDecimal getForfeitedDays() {
+        return forfeitedDays;
+    }
+
     public int getAppliedYear() {
         return appliedYear;
+    }
+
+    public BigDecimal getNextPeriodDeductedDays() {
+        return nextPeriodDeductedDays;
+    }
+
+    /** applied_year 기간에서 빼는 몫. */
+    public BigDecimal getCurrentPeriodDeductedDays() {
+        return deductedDays.subtract(nextPeriodDeductedDays);
     }
 
     public LeaveRequestStatus getStatus() {

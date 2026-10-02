@@ -7,6 +7,9 @@ import { useAuthStore } from "@/store/auth";
 import { ProtectedRoute } from "@/routes/ProtectedRoute";
 import AppLayout from "@/layouts/AppLayout";
 import LoginPage from "@/features/auth/LoginPage";
+import ForgotPasswordPage from "@/features/auth/ForgotPasswordPage";
+import ResetPasswordPage from "@/features/auth/ResetPasswordPage";
+import MyInfoPage from "@/features/me/MyInfoPage";
 import DepartmentPage from "@/features/department/DepartmentPage";
 import EmployeePage from "@/features/employee/EmployeePage";
 import PolicyPage from "@/features/policy/PolicyPage";
@@ -33,22 +36,25 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="my-leaves" element={<MyLeavesPage />} />
+          <Route path="me" element={<MyInfoPage />} />
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={["TEAM_LEAD", "HR_ADMIN", "SUPER_ADMIN"]} />}>
+      <Route element={<ProtectedRoute roles={["TEAM_LEAD", "HR_ADMIN", "SYSTEM_ADMIN"]} />}>
         <Route element={<AppLayout />}>
           <Route path="approvals" element={<ApprovalsPage />} />
         </Route>
       </Route>
 
-      <Route element={<ProtectedRoute roles={["HR_ADMIN", "SUPER_ADMIN"]} />}>
+      <Route element={<ProtectedRoute roles={["HR_ADMIN", "SYSTEM_ADMIN"]} />}>
         <Route element={<AppLayout />}>
           <Route path="admin/employees" element={<EmployeePage />} />
           <Route path="admin/departments" element={<DepartmentPage />} />

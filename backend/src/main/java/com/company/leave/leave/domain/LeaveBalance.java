@@ -81,6 +81,26 @@ public class LeaveBalance extends BaseTimeEntity {
         this.expired = expired;
     }
 
+    /** 사용·이월·소멸을 0으로 되돌린다(기간 기준을 바꿔 휴가 기록에서 다시 쌓을 때만). */
+    public void resetUsage() {
+        this.used = BigDecimal.ZERO;
+        this.carriedOver = BigDecimal.ZERO;
+        this.expired = BigDecimal.ZERO;
+    }
+
+    /** 남은 연차 소멸(병가·공가 승인 시). */
+    public void forfeit(BigDecimal days) {
+        this.expired = this.expired.add(days);
+    }
+
+    /** 소멸 되돌림(소멸을 일으킨 병가·공가가 취소될 때). */
+    public void restoreForfeit(BigDecimal days) {
+        this.expired = this.expired.subtract(days);
+        if (this.expired.signum() < 0) {
+            this.expired = BigDecimal.ZERO;
+        }
+    }
+
     public Long getId() {
         return id;
     }

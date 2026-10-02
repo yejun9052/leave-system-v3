@@ -6,15 +6,19 @@ spring:
     password: ${db_password}
     hikari:
       maximum-pool-size: 20
+  mail:
+    # Docker secret: /run/secrets/mail_password (configtree → 'mail_password'). 없으면 빈 값
+    password: ${mail_password:}
+
+app:
+  holiday-api:
+    # Docker secret: /run/secrets/holiday_api_key (configtree → 'holiday_api_key').
+    # 비어 있으면 환경변수 HOLIDAY_API_KEY, 그것도 없으면 동기화하지 않음
+    service-key: ${holiday_api_key:${HOLIDAY_API_KEY:}}
   jpa:
     properties:
       hibernate:
         show_sql: false
-
-app:
-  jwt:
-    # Docker secret: /run/secrets/jwt_secret (configtree → 'jwt_secret')
-    secret: ${jwt_secret}
 
 # 운영에서는 API 문서(Swagger/OpenAPI)를 비활성화 (외부 정보노출 방지)
 springdoc:

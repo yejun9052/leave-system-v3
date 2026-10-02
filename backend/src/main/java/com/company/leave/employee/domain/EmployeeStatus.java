@@ -5,9 +5,20 @@ package com.company.leave.employee.domain;
  */
 public enum EmployeeStatus {
     /** 재직 */
-    ACTIVE,
+    ACTIVE("재직"),
     /** 휴직 */
-    ON_LEAVE,
+    ON_LEAVE("휴직"),
     /** 퇴사 */
-    RESIGNED
+    RESIGNED("퇴사");
+
+    private final String label;
+
+    EmployeeStatus(String label) {
+        this.label = label;
+    }
+
+    /** 화면 표시 이름(목록 검색에도 쓴다). */
+    public String label() {
+        return label;
+    }
 }

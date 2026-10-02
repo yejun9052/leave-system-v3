@@ -36,7 +36,9 @@ public class EmployeeExcelService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final String[] HEADERS =
-            {"이메일", "이름", "사번", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한(콤마)"};
+            {"이메일", "이름", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한(콤마)"};
+    /** 사번 기능 삭제 전 양식: 3번째 열이 "사번". 이 열은 건너뛰고 읽는다. */
+    private static final String LEGACY_EMPLOYEE_NO_HEADER = "사번";
 
     private final EmployeeService employeeService;
     private final DepartmentRepository departmentRepository;
@@ -63,12 +65,11 @@ public class EmployeeExcelService {
                 Row row = sheet.createRow(r++);
                 row.createCell(0).setCellValue(e.email());
                 row.createCell(1).setCellValue(e.name());
-                row.createCell(2).setCellValue(orEmpty(e.employeeNo()));
-                row.createCell(3).setCellValue(orEmpty(e.departmentName()));
-                row.createCell(4).setCellValue(orEmpty(e.position()));
-                row.createCell(5).setCellValue(orEmpty(e.phone()));
-                row.createCell(6).setCellValue(e.hireDate() != null ? e.hireDate().toString() : "");
-                row.createCell(7).setCellValue(String.join(",", e.roles()));
+                row.createCell(2).setCellValue(orEmpty(e.departmentName()));
+                row.createCell(3).setCellValue(orEmpty(e.position()));
+                row.createCell(4).setCellValue(orEmpty(e.phone()));
+                row.createCell(5).setCellValue(e.hireDate() != null ? e.hireDate().toString() : "");
+                row.createCell(6).setCellValue(String.join(",", e.roles()));
             }
             for (int i = 0; i < HEADERS.length; i++) {
                 sheet.autoSizeColumn(i);
@@ -86,15 +87,31 @@ public class EmployeeExcelService {
      * (@Transactional)가 같은 트랜잭션에 합류해, 한 행이라도 실패하면 트랜잭션이 rollback-only 로
      * 표시되어 커밋 시 전체가 UnexpectedRollbackException 으로 실패한다. 트랜잭션을 두지 않으면
      * 각 create() 가 독립 트랜잭션으로 실행되어, 실패한 행만 롤백되고 나머지는 정상 등록된다.
+     * <p>제목 행의 3번째 열이 "사번"인 예전 양식은 그 열을 건너뛰고 읽는다(사번 값은 버림).
      */
     public ImportResult importFrom(InputStream in) {
         List<String> errors = new ArrayList<>();
         int created = 0;
         int rowNum = 1;
+        int shift = 0; // 예전 양식이면 1: 이름 뒤 열을 한 칸씩 밀어 읽는다
         try (Workbook wb = new XSSFWorkbook(in)) {
             Sheet sheet = wb.getSheetAt(0);
+            // 금지 권한은 파일 전체를 등록 전에 검사한다. 앞선 정상 행도 저장하지 않고 400으로 거부.
+            Row header = sheet.getRow(0);
+            int roleColumn = header != null && LEGACY_EMPLOYEE_NO_HEADER.equals(cell(header, 2)) ? 7 : 6;
+            for (Row row : sheet) {
+                if (row.getRowNum() == 0 || !StringUtils.hasText(cell(row, 0))) {
+                    continue;
+                }
+                String roles = cell(row, roleColumn);
+                if (StringUtils.hasText(roles) && Arrays.stream(roles.split(","))
+                        .map(String::trim).anyMatch(Role.SYSTEM_ADMIN.name()::equals)) {
+                    throw new BusinessException(ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
+                }
+            }
             for (Row row : sheet) {
                 if (row.getRowNum() == 0) {
+                    shift = LEGACY_EMPLOYEE_NO_HEADER.equals(cell(row, 2)) ? 1 : 0;
                     continue; // header
                 }
                 rowNum = row.getRowNum() + 1;
@@ -106,13 +123,11 @@ public class EmployeeExcelService {
                     EmployeeRequests.Create req = new EmployeeRequests.Create(
                             email,
                             cell(row, 1),
-                            cell(row, 2),
-                            resolveDepartmentId(cell(row, 3)),
-                            cell(row, 4),
-                            cell(row, 5),
-                            parseDate(cell(row, 6)),
-                            parseRoles(cell(row, 7)),
-                            null);
+                            resolveDepartmentId(cell(row, 2 + shift)),
+                            cell(row, 3 + shift),
+                            cell(row, 4 + shift),
+                            parseDate(cell(row, 5 + shift)),
+                            parseRoles(cell(row, 6 + shift)));
                     employeeService.create(req);
                     created++;
                 } catch (Exception ex) {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CalendarCheck2, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -41,15 +41,15 @@ export default function LoginPage() {
             <CalendarCheck2 className="h-6 w-6" />
           </div>
           <CardTitle className="text-xl">연차관리 시스템</CardTitle>
-          <CardDescription>회사 이메일로 로그인하세요</CardDescription>
+          <CardDescription>회사 이메일로 로그인하세요 (관리자는 아이디)</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">이메일</Label>
+              <Label htmlFor="email">이메일 또는 아이디</Label>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 autoComplete="username"
                 placeholder="you@company.com"
                 value={email}
@@ -74,6 +74,12 @@ export default function LoginPage() {
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               로그인
             </Button>
+            <Link
+              to="/forgot-password"
+              className="block text-center text-sm text-muted-foreground hover:text-foreground"
+            >
+              비밀번호를 잊으셨나요?
+            </Link>
           </form>
         </CardContent>
       </Card>

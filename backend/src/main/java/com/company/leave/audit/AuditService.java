@@ -5,11 +5,12 @@ import com.company.leave.audit.dto.AuditLogResponse;
 import com.company.leave.security.SecurityUtils;
 import com.company.leave.security.UserPrincipal;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Service
 public class AuditService {
@@ -52,9 +53,14 @@ public class AuditService {
                 entityId, detail, success));
     }
 
+    /**
+     * 이벤트 로그 검색(최신순). 표의 모든 칸(시간·사용자·동작·대상·결과·상세)으로 찾는다({@link AuditLogSearch}).
+     * 공백으로 나눈 단어는 모두 맞아야 한다(예: "QA 로그인").
+     */
     @Transactional(readOnly = true)
     public Page<AuditLogResponse> search(String keyword, Pageable pageable) {
-        String kw = StringUtils.hasText(keyword) ? "%" + keyword.trim().toLowerCase() + "%" : null;
-        return auditLogRepository.search(kw, pageable).map(AuditLogResponse::from);
+        Pageable newestFirst = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id")));
+        return auditLogRepository.findAll(AuditLogSearch.of(keyword), newestFirst).map(AuditLogResponse::from);
     }
 }

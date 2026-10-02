@@ -6,12 +6,13 @@ import {
   leaveTypeApi,
   leaveAdminApi,
   policyRulesApi,
-  promotionApi,
   type Policy,
   type GrantBasis,
   type LeaveTypeInput,
 } from "@/api/policy";
-import type { LeaveType } from "@/types";
+import type { LeavePortion, LeaveType } from "@/types";
+import { formatDays } from "@/lib/leaveFormat";
+import { useTableSort, type SortValue } from "@/lib/useTableSort";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  SortableTableHead,
   Table,
   TableBody,
   TableCell,
@@ -35,7 +37,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
+import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
+import HolidayTab from "./HolidayTab";
+import PromotionTab from "./PromotionTab";
+import AutomationTab from "./AutomationTab";
+
+const PORTION_LABEL: Record<LeavePortion, string> = {
+  FULL: "종일",
+  HALF: "반차",
+  QUARTER: "반반차(폐지)", // 시간차 2시간으로 대체. 과거 종류 표시용
+  HOURLY: "시간차",
+};
 
 export default function PolicyPage() {
   return (
@@ -50,7 +63,9 @@ export default function PolicyPage() {
           <TabsTrigger value="types">휴가 종류</TabsTrigger>
           <TabsTrigger value="rules">포상 · 경조사</TabsTrigger>
           <TabsTrigger value="blackout">블랙아웃</TabsTrigger>
+          <TabsTrigger value="holidays">공휴일</TabsTrigger>
           <TabsTrigger value="promotion">촉진 · 미사용</TabsTrigger>
+          <TabsTrigger value="automation">자동화</TabsTrigger>
         </TabsList>
         <TabsContent value="policy">
           <PolicyTab />
@@ -64,8 +79,14 @@ export default function PolicyPage() {
         <TabsContent value="blackout">
           <BlackoutTab />
         </TabsContent>
+        <TabsContent value="holidays">
+          <HolidayTab />
+        </TabsContent>
         <TabsContent value="promotion">
           <PromotionTab />
+        </TabsContent>
+        <TabsContent value="automation">
+          <AutomationTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -74,6 +95,7 @@ export default function PolicyPage() {
 
 function PolicyTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
   const [form, setForm] = useState<Omit<Policy, "id"> | null>(null);
@@ -163,16 +185,22 @@ function PolicyTab() {
             onChange={(v) => set("halfDayEnabled", v)}
           />
           <ToggleRow
+            label="시간차 사용"
+            desc="1시간(0.125일) 단위, 한 건 1~3시간, 기본 꺼짐. 반반차는 시간차 2시간으로 대체"
+            checked={form.hourlyEnabled}
+            onChange={(v) => set("hourlyEnabled", v)}
+          />
+          <ToggleRow
             label="마이너스 연차 허용"
             desc="잔여 연차를 초과해 신청 가능"
             checked={form.allowNegative}
             onChange={(v) => set("allowNegative", v)}
           />
           <ToggleRow
-            label="연차 촉진제도 사용"
-            desc="사용 기한 전 자동 안내"
-            checked={form.promotionEnabled}
-            onChange={(v) => set("promotionEnabled", v)}
+            label="다음 연차 기간 예약 허용"
+            desc="다음 기산일 이후 날짜도 신청(그 기간 예상 부여 일수 안에서, 다음 기간 끝까지)"
+            checked={form.nextPeriodReservationEnabled}
+            onChange={(v) => set("nextPeriodReservationEnabled", v)}
           />
           <ToggleRow
             label="미사용 연차 이월"
@@ -259,10 +287,31 @@ function PolicyTab() {
       </Card>
 
       <div className="flex flex-wrap gap-2 lg:col-span-2">
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+        <Button
+          onClick={async () => {
+            const ok = await confirm({
+              title: "정책을 저장할까요?",
+              description: "저장하면 이후 연차 계산에 바로 적용됩니다.",
+              confirmText: "저장",
+            });
+            if (ok) save.mutate();
+          }}
+          disabled={save.isPending}
+        >
           <Save className="h-4 w-4" /> 정책 저장
         </Button>
-        <Button variant="outline" onClick={() => grant.mutate()} disabled={grant.isPending}>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            const ok = await confirm({
+              title: "전 직원 연차를 부여/재계산할까요?",
+              description: "재직 중인 전 직원의 올해 연차를 다시 계산해 부여합니다.",
+              confirmText: "부여/재계산",
+            });
+            if (ok) grant.mutate();
+          }}
+          disabled={grant.isPending}
+        >
           <PlayCircle className="h-4 w-4" /> 전 직원 연차 부여/재계산
         </Button>
       </div>
@@ -294,6 +343,7 @@ function ToggleRow({
 
 function LeaveTypeTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: types = [] } = useQuery({
     queryKey: ["leaveTypes", "all"],
@@ -301,6 +351,14 @@ function LeaveTypeTab() {
   });
   const [editing, setEditing] = useState<LeaveType | null>(null);
   const [creating, setCreating] = useState(false);
+  const { sorted, sort, toggle } = useTableSort(types, {
+    name: (t) => t.name,
+    code: (t) => t.code,
+    deduct: (t) => t.deductDays,
+    portion: (t) => `${PORTION_LABEL[t.portion]}${t.requiresAnnualExhausted ? " (연차 소진 후)" : ""}`,
+    annual: (t) => t.deductFromAnnual,
+    active: (t) => t.active,
+  });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["leaveTypes"] });
 
@@ -325,17 +383,17 @@ function LeaveTypeTab() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>이름</TableHead>
-                <TableHead>코드</TableHead>
-                <TableHead>차감</TableHead>
-                <TableHead>반차</TableHead>
-                <TableHead>연차차감</TableHead>
-                <TableHead>상태</TableHead>
+                <SortableTableHead sortKey="name" sort={sort} onSort={toggle}>이름</SortableTableHead>
+                <SortableTableHead sortKey="code" sort={sort} onSort={toggle}>코드</SortableTableHead>
+                <SortableTableHead sortKey="deduct" sort={sort} onSort={toggle}>차감</SortableTableHead>
+                <SortableTableHead sortKey="portion" sort={sort} onSort={toggle}>단위</SortableTableHead>
+                <SortableTableHead sortKey="annual" sort={sort} onSort={toggle}>연차차감</SortableTableHead>
+                <SortableTableHead sortKey="active" sort={sort} onSort={toggle}>상태</SortableTableHead>
                 <TableHead className="text-right">관리</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {types.map((t) => (
+              {sorted.map((t) => (
                 <TableRow key={t.id}>
                   <TableCell>
                     <span className="inline-flex items-center gap-2">
@@ -347,8 +405,13 @@ function LeaveTypeTab() {
                     </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{t.code}</TableCell>
-                  <TableCell>{t.deductDays}</TableCell>
-                  <TableCell>{t.halfDay ? "예" : "-"}</TableCell>
+                  <TableCell>{formatDays(t.deductDays)}</TableCell>
+                  <TableCell>
+                    {PORTION_LABEL[t.portion] ?? "-"}
+                    {t.requiresAnnualExhausted && (
+                      <span className="ml-1 text-xs text-muted-foreground">(연차 소진 후)</span>
+                    )}
+                  </TableCell>
                   <TableCell>{t.deductFromAnnual ? "예" : "-"}</TableCell>
                   <TableCell>
                     <Badge variant={t.active ? "success" : "outline"}>
@@ -363,8 +426,13 @@ function LeaveTypeTab() {
                       <Button
                         size="icon"
                         variant="ghost"
-                        onClick={() => {
-                          if (confirm(`'${t.name}' 삭제?`)) remove.mutate(t.id);
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: `'${t.name}' 휴가 종류를 삭제할까요?`,
+                            confirmText: "삭제",
+                            destructive: true,
+                          });
+                          if (ok) remove.mutate(t.id);
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -405,13 +473,15 @@ function LeaveTypeDialog({
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const isEdit = !!type;
   const [form, setForm] = useState<LeaveTypeInput>({
     code: type?.code ?? "",
     name: type?.name ?? "",
     deductDays: type?.deductDays ?? 1,
     paid: type?.paid ?? true,
-    halfDay: type?.halfDay ?? false,
+    portion: type?.portion ?? "FULL",
+    requiresAnnualExhausted: type?.requiresAnnualExhausted ?? false,
     deductFromAnnual: type?.deductFromAnnual ?? true,
     colorHex: type?.colorHex ?? "#4f46e5",
     sortOrder: type?.sortOrder ?? 0,
@@ -453,7 +523,7 @@ function LeaveTypeDialog({
               <Label>차감 일수</Label>
               <Input
                 type="number"
-                step="0.5"
+                step="0.125"
                 value={form.deductDays}
                 onChange={(e) => set("deductDays", Number(e.target.value))}
               />
@@ -464,7 +534,30 @@ function LeaveTypeDialog({
             </div>
           </div>
           <ToggleRow label="유급" checked={form.paid} onChange={(v) => set("paid", v)} />
-          <ToggleRow label="반차 여부" checked={form.halfDay} onChange={(v) => set("halfDay", v)} />
+          <div className="space-y-2">
+            <Label>단위</Label>
+            <Select value={form.portion} onValueChange={(v) => set("portion", v as LeavePortion)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {/* 반반차는 폐지: 이미 반반차인 종류를 고칠 때만 현재 값으로 보여 준다 */}
+                {(Object.keys(PORTION_LABEL) as LeavePortion[])
+                  .filter((p) => p !== "QUARTER" || form.portion === "QUARTER")
+                  .map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {PORTION_LABEL[p]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <ToggleRow
+            label="잔여 연차 소진 후 사용(병가·공가)"
+            desc="잔여 연차 1일 미만·결재 대기 연차 없음일 때만 신청 가능, 승인 시 남은 연차 소멸"
+            checked={form.requiresAnnualExhausted}
+            onChange={(v) => set("requiresAnnualExhausted", v)}
+          />
           <ToggleRow
             label="연차 잔액에서 차감"
             checked={form.deductFromAnnual}
@@ -478,7 +571,13 @@ function LeaveTypeDialog({
               취소
             </Button>
             <Button
-              onClick={() => save.mutate()}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: isEdit ? `'${form.name}' 휴가 종류를 저장할까요?` : `'${form.name}' 휴가 종류를 추가할까요?`,
+                  confirmText: isEdit ? "저장" : "추가",
+                });
+                if (ok) save.mutate();
+              }}
               disabled={save.isPending || !form.name.trim() || (!isEdit && !form.code?.trim())}
             >
               저장
@@ -492,6 +591,7 @@ function LeaveTypeDialog({
 
 function RulesTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: awards = [] } = useQuery({ queryKey: ["awardRules"], queryFn: policyRulesApi.awards });
   const { data: specials = [] } = useQuery({ queryKey: ["specialRules"], queryFn: policyRulesApi.specials });
@@ -536,10 +636,23 @@ function RulesTab() {
               <Input type="number" step="0.5" className="w-20" value={aDays} onChange={(e) => setADays(Number(e.target.value))} /></div>
             <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
               <Input value={aName} onChange={(e) => setAName(e.target.value)} placeholder="예: 5년 근속 포상" /></div>
-            <Button size="sm" onClick={() => addAward.mutate()}><Plus className="h-4 w-4" /> 추가</Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "포상휴가 규칙을 추가할까요?",
+                  description: `근속 ${aYears}년 도달 시 ${aDays}일을 부여하는 규칙을 추가합니다.`,
+                  confirmText: "추가",
+                });
+                if (ok) addAward.mutate();
+              }}
+            ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
-          <RuleTable rows={awards.map((a) => ({ id: a.id, cells: [`${a.years}년`, `${a.bonusDays}일`, a.name ?? "-"] }))}
-            headers={["근속", "포상", "명칭"]} onDelete={(id) => delAward.mutate(id)} />
+          <RuleTable rows={awards.map((a) => ({ id: a.id, cells: [`${a.years}년`, `${a.bonusDays}일`, a.name ?? "-"], values: [a.years, a.bonusDays, a.name] }))}
+            headers={["근속", "포상", "명칭"]} onDelete={async (id) => {
+              const ok = await confirm({ title: "포상휴가 규칙을 삭제할까요?", confirmText: "삭제", destructive: true });
+              if (ok) delAward.mutate(id);
+            }} />
         </CardContent>
       </Card>
 
@@ -551,10 +664,24 @@ function RulesTab() {
               <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="예: 본인 결혼" /></div>
             <div className="space-y-1"><Label className="text-xs">일수</Label>
               <Input type="number" step="0.5" className="w-20" value={sDays} onChange={(e) => setSDays(Number(e.target.value))} /></div>
-            <Button size="sm" onClick={() => addSpecial.mutate()} disabled={!sName.trim()}><Plus className="h-4 w-4" /> 추가</Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: `'${sName}' 경조사 규정을 추가할까요?`,
+                  description: `${sDays}일이 부여되는 규정으로 추가합니다.`,
+                  confirmText: "추가",
+                });
+                if (ok) addSpecial.mutate();
+              }}
+              disabled={!sName.trim()}
+            ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
-          <RuleTable rows={specials.map((s) => ({ id: s.id, cells: [s.name, `${s.days}일`] }))}
-            headers={["사유/관계", "일수"]} onDelete={(id) => delSpecial.mutate(id)} />
+          <RuleTable rows={specials.map((s) => ({ id: s.id, cells: [s.name, `${s.days}일`], values: [s.name, s.days] }))}
+            headers={["사유/관계", "일수"]} onDelete={async (id) => {
+              const ok = await confirm({ title: "경조사 규정을 삭제할까요?", confirmText: "삭제", destructive: true });
+              if (ok) delSpecial.mutate(id);
+            }} />
         </CardContent>
       </Card>
     </div>
@@ -563,6 +690,7 @@ function RulesTab() {
 
 function BlackoutTab() {
   const { toast } = useToast();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: rows = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
   const today = new Date().toISOString().slice(0, 10);
@@ -593,61 +721,24 @@ function BlackoutTab() {
             <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
           <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
-          <Button size="sm" onClick={() => add.mutate()} disabled={!name.trim()}><Plus className="h-4 w-4" /> 추가</Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const ok = await confirm({
+                title: `'${name}' 사용 금지 기간을 추가할까요?`,
+                description: `${start} ~ ${end} 기간에는 연차를 신청할 수 없게 됩니다.`,
+                confirmText: "추가",
+              });
+              if (ok) add.mutate();
+            }}
+            disabled={!name.trim()}
+          ><Plus className="h-4 w-4" /> 추가</Button>
         </div>
-        <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name] }))}
-          headers={["기간", "명칭"]} onDelete={(id) => del.mutate(id)} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function PromotionTab() {
-  const { toast } = useToast();
-  const [year, setYear] = useState(new Date().getFullYear());
-  const { data: targets = [], refetch } = useQuery({
-    queryKey: ["promotionTargets", year],
-    queryFn: () => promotionApi.targets(year),
-  });
-  const run = useMutation({
-    mutationFn: () => promotionApi.run(year),
-    onSuccess: (r) => toast({ title: `${r.notified}명에게 촉진 알림을 보냈습니다.`, variant: "success" }),
-    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
-  });
-
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base">연차 촉진 · 미사용 현황</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1"><Label className="text-xs">연도</Label>
-            <Input type="number" className="w-28" value={year} onChange={(e) => setYear(Number(e.target.value))} /></div>
-          <Button size="sm" variant="secondary" onClick={() => refetch()}>조회</Button>
-          <Button size="sm" onClick={() => run.mutate()} disabled={run.isPending || targets.length === 0}>
-            <PlayCircle className="h-4 w-4" /> 촉진 알림 발송 ({targets.length})
-          </Button>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>이름</TableHead><TableHead>부서</TableHead>
-              <TableHead>부여</TableHead><TableHead>사용</TableHead><TableHead>잔여</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {targets.length > 0 ? targets.map((t) => (
-              <TableRow key={t.employeeId}>
-                <TableCell className="font-medium">{t.name}</TableCell>
-                <TableCell>{t.department ?? "-"}</TableCell>
-                <TableCell>{t.granted}</TableCell>
-                <TableCell>{t.used}</TableCell>
-                <TableCell><Badge variant="warning">{t.remaining}일</Badge></TableCell>
-              </TableRow>
-            )) : (
-              <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">잔여 연차가 있는 대상이 없습니다.</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
+        <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name], values: [`${b.startDate} ${b.endDate}`, b.name] }))}
+          headers={["기간", "명칭"]} onDelete={async (id) => {
+            const ok = await confirm({ title: "사용 금지 기간을 삭제할까요?", confirmText: "삭제", destructive: true });
+            if (ok) del.mutate(id);
+          }} />
       </CardContent>
     </Card>
   );
@@ -659,19 +750,28 @@ function RuleTable({
   onDelete,
 }: {
   headers: string[];
-  rows: { id: number; cells: string[] }[];
+  /** values: 열마다 정렬에 쓸 값(숫자·날짜 등). 없으면 화면 글자로 정렬 */
+  rows: { id: number; cells: string[]; values?: SortValue[] }[];
   onDelete: (id: number) => void;
 }) {
+  const accessors = Object.fromEntries(
+    headers.map((_, i) => [String(i), (r: (typeof rows)[number]) => (r.values ?? r.cells)[i]]),
+  );
+  const { sorted, sort, toggle } = useTableSort(rows, accessors);
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          {headers.map((h) => <TableHead key={h}>{h}</TableHead>)}
+          {headers.map((h, i) => (
+            <SortableTableHead key={h} sortKey={String(i)} sort={sort} onSort={toggle}>
+              {h}
+            </SortableTableHead>
+          ))}
           <TableHead className="text-right">관리</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.length > 0 ? rows.map((r) => (
+        {sorted.length > 0 ? sorted.map((r) => (
           <TableRow key={r.id}>
             {r.cells.map((c, i) => <TableCell key={i}>{c}</TableCell>)}
             <TableCell className="text-right">

@@ -57,7 +57,7 @@ cd C:\alwork
 cd C:\alwork\frontend
 npm run dev
 ```
-- 확인: http://localhost:5173  (로그인 `admin@company.com` / `admin1234!`)
+- 확인: http://localhost:5173  (로그인 `admin` / `admin1234!`)
 
 ---
 

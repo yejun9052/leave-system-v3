@@ -15,6 +15,7 @@ import { useAuthStore } from "@/store/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LEAVE_STATUS_LABEL } from "@/types";
+import { formatDays } from "@/lib/leaveFormat";
 
 export default function DashboardPage() {
   const { user, isManager } = useAuthStore();
@@ -26,7 +27,8 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold">안녕하세요, {user?.name}님 👋</h1>
         <p className="text-sm text-muted-foreground">오늘의 휴가 현황을 확인하세요.</p>
       </div>
-      <PersonalSection />
+      {/* 관리 전용 계정은 직원이 아니므로 개인 연차·휴가 카드를 보여주지 않는다 */}
+      {!user?.systemAccount && <PersonalSection />}
       {manager && <AdminSection />}
     </div>
   );
@@ -39,8 +41,8 @@ function PersonalSection() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat icon={CalendarClock} label="잔여 연차" value={`${b?.remaining ?? 0}일`} accent />
-        <Stat icon={TrendingUp} label="올해 사용" value={`${b?.used ?? 0}일`} />
+        <Stat icon={CalendarClock} label="잔여 연차" value={`${formatDays(b?.remaining)}일`} accent />
+        <Stat icon={TrendingUp} label="이번 기간 사용" value={`${formatDays(b?.used)}일`} />
         <Stat icon={Inbox} label="결재 대기중" value={`${data?.pendingCount ?? 0}건`} />
         <Stat icon={Users} label="오늘 팀 부재" value={`${data?.teamOnLeaveToday ?? 0}명`} />
       </div>

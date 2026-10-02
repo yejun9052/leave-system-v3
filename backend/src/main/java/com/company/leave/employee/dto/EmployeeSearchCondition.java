@@ -6,7 +6,7 @@ import java.util.Set;
 /**
  * 사용자 검색 조건.
  *
- * @param keyword               이름/이메일/사번 부분일치
+ * @param keyword               이름/이메일 부분일치
  * @param departmentId          부서 필터 (해당 부서 직속)
  * @param status                재직 상태 필터
  * @param allowedDepartmentIds  조회 허용 부서 제한(권한 스코프). null=제한 없음(관리자),

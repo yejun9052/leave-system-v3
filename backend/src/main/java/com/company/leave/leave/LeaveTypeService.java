@@ -2,10 +2,17 @@ package com.company.leave.leave;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveTypeDtos;
 import com.company.leave.leave.repository.LeaveTypeRepository;
+import com.company.leave.policy.PolicyService;
+import com.company.leave.policy.domain.LeavePolicy;
+import com.company.leave.policy.domain.SpecialLeaveRule;
+import com.company.leave.policy.repository.SpecialLeaveRuleRepository;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,9 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class LeaveTypeService {
 
     private final LeaveTypeRepository leaveTypeRepository;
+    private final PolicyService policyService;
+    private final SpecialLeaveRuleRepository specialRuleRepository;
 
-    public LeaveTypeService(LeaveTypeRepository leaveTypeRepository) {
+    public LeaveTypeService(LeaveTypeRepository leaveTypeRepository, PolicyService policyService,
+                            SpecialLeaveRuleRepository specialRuleRepository) {
         this.leaveTypeRepository = leaveTypeRepository;
+        this.policyService = policyService;
+        this.specialRuleRepository = specialRuleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -23,7 +35,14 @@ public class LeaveTypeService {
         List<LeaveType> types = includeInactive
                 ? leaveTypeRepository.findAllByOrderBySortOrderAscIdAsc()
                 : leaveTypeRepository.findByActiveTrueOrderBySortOrderAscIdAsc();
-        return types.stream().map(LeaveTypeDtos.Response::from).toList();
+        LeavePolicy policy = policyService.getActivePolicy();
+        Map<String, List<SpecialLeaveRule>> rulesByCode = specialRuleRepository.findAllByOrderBySortOrderAscIdAsc()
+                .stream()
+                .filter(r -> r.getLeaveTypeCode() != null)
+                .collect(Collectors.groupingBy(SpecialLeaveRule::getLeaveTypeCode));
+        return types.stream()
+                .map(t -> LeaveTypeDtos.Response.from(t, policy, rulesByCode.getOrDefault(t.getCode(), List.of())))
+                .toList();
     }
 
     @Transactional
@@ -31,19 +50,24 @@ public class LeaveTypeService {
         if (leaveTypeRepository.existsByCode(req.code())) {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 존재하는 휴가 코드입니다: " + req.code());
         }
+        rejectQuarter(req.portion());
         LeaveType type = new LeaveType(req.code(), req.name(), req.deductDays(), req.paid(),
-                req.halfDay(), req.deductFromAnnual(), req.colorHex(),
+                req.portion(), req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0);
-        return LeaveTypeDtos.Response.from(leaveTypeRepository.save(type));
+        return toResponse(leaveTypeRepository.save(type));
     }
 
     @Transactional
     public LeaveTypeDtos.Response update(Long id, LeaveTypeDtos.Update req) {
         LeaveType type = getEntity(id);
-        type.update(req.name(), req.deductDays(), req.paid(), req.halfDay(),
-                req.deductFromAnnual(), req.colorHex(),
+        // 기존 반반차 종류는 비활성 상태로 이름 등을 고치는 것만 허용(과거 기록 보존용)
+        if (req.active()) {
+            rejectQuarter(req.portion());
+        }
+        type.update(req.name(), req.deductDays(), req.paid(), req.portion(),
+                req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0, req.active());
-        return LeaveTypeDtos.Response.from(type);
+        return toResponse(type);
     }
 
     @Transactional
@@ -57,5 +81,23 @@ public class LeaveTypeService {
     public LeaveType getEntity(Long id) {
         return leaveTypeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.LEAVE_TYPE_NOT_FOUND));
+    }
+
+    /** 이 종류에 연결된 경조사 규정(신청 때 선택). */
+    @Transactional(readOnly = true)
+    public List<SpecialLeaveRule> specialRulesOf(LeaveType type) {
+        return specialRuleRepository.findByLeaveTypeCodeOrderBySortOrderAscIdAsc(type.getCode());
+    }
+
+    /** 반반차는 시간차(2시간)로 대체되어 새로 만들거나 다시 켤 수 없다(V19). */
+    private static void rejectQuarter(DayPortion portion) {
+        if (portion == DayPortion.QUARTER) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "반반차는 시간차로 대체되었습니다. 2시간 시간차를 사용해 주세요.");
+        }
+    }
+
+    private LeaveTypeDtos.Response toResponse(LeaveType type) {
+        return LeaveTypeDtos.Response.from(type, policyService.getActivePolicy(), specialRulesOf(type));
     }
 }

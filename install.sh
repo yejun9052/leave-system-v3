@@ -170,7 +170,7 @@ else
   fi
 fi
 
-# ---- 시크릿 준비 (DB 비밀번호 / JWT 서명키) ------------------------
+# ---- 시크릿 준비 (DB 비밀번호) ------------------------
 if [ -d secrets.enc ] && [ -f secrets-decrypt.sh ]; then
   # 암호화 모드: 암호문(secrets.enc) 을 마스터키로 복호화
   c_info "암호화된 시크릿(secrets.enc) 발견 → 복호화"
@@ -186,7 +186,8 @@ else
   }
   mkdir -p secrets
   [ -f secrets/db_password ] || { printf '%s' "$(gen_secret 28)" > secrets/db_password; c_ok "secrets/db_password 생성(무작위)"; }
-  [ -f secrets/jwt_secret ]  || { printf '%s' "$(gen_secret 64)" > secrets/jwt_secret;  c_ok "secrets/jwt_secret 생성(무작위)"; }
+  [ -f secrets/mail_password ] || { : > secrets/mail_password; c_ok "secrets/mail_password 생성(빈 파일 - SMTP 비밀번호는 직접 입력)"; }
+  [ -f secrets/holiday_api_key ] || { : > secrets/holiday_api_key; c_ok "secrets/holiday_api_key 생성(빈 파일 - 공휴일 API Decoding 키는 직접 입력)"; }
   chmod 700 secrets 2>/dev/null || true
   # 파일은 644: 컨테이너 비-root(appuser) 사용자가 /run/secrets 를 읽어야 함.
   # 상위 디렉터리가 700 이라 호스트의 다른 사용자는 진입 불가 → 실질 보호 유지.
@@ -199,8 +200,10 @@ if [ ! -f ".env" ]; then
   cp .env.prod.example .env
   c_warn ".env 를 생성했습니다. 반드시 값을 수정하세요:"
   echo "    - SITE_ADDRESS / APP_ORIGIN (접속 주소·포트)"
-  echo "    - POSTGRES_PASSWORD / JWT_SECRET (강력한 값)"
+  echo "    - POSTGRES_PASSWORD (강력한 값)"
   echo "    - LICENSE_KEY / LICENSE_HOST (발급받은 라이선스)"
+  echo "    - (SMTP 사용 시) secrets/mail_password 에 비밀번호 입력, .env 에 MAIL_* 설정"
+  echo "    - (공휴일 API 사용 시) secrets/holiday_api_key 에 공공데이터포털 Decoding 키 입력"
   echo
   echo "    nano .env    # 편집 후 저장"
   echo

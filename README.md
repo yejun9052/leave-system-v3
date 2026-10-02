@@ -6,7 +6,7 @@
 
 | 구분 | 스택 |
 |------|------|
-| Backend | Java 21, Spring Boot 3.4, Spring Security(JWT), Spring Data JPA, QueryDSL, Flyway |
+| Backend | Java 21, Spring Boot 4.1, Spring Security(서버 세션·Spring Session JDBC), Spring Data JPA, QueryDSL, Flyway |
 | Database | PostgreSQL 16 |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, TanStack Query, FullCalendar |
 | 인프라 | Docker Compose |
@@ -33,7 +33,7 @@ PostgreSQL이 `localhost:5432` (db: `annual_leave`, user: `leave`, pw: `leave123
 ```bash
 cd backend
 # 최초 1회: Gradle Wrapper 생성 (JDK21 + Gradle 설치 또는 IntelliJ 사용 시 자동)
-gradle wrapper --gradle-version 8.11.1
+gradle wrapper --gradle-version 9.8.0
 ./gradlew bootRun
 ```
 - API: http://localhost:8080
@@ -49,9 +49,9 @@ npm run dev
 - 웹: http://localhost:5173 (개발 프록시로 `/api` → 백엔드 8080 연결)
 
 ### 기본 관리자 계정
-- **로컬 개발(local 프로파일)**: `admin@company.com` / `admin1234!`
-- **운영(prod)**: 초기 비밀번호가 **설치마다 무작위 생성**되어 **최초 기동 로그에 1회** 표시됩니다(고정 기본 비번 없음). 로그인 후 즉시 변경하세요. — 자세한 내용 [DEPLOY.md](DEPLOY.md) 9장
-> 관리자 계정은 사용자 목록에 노출되지 않으며, 본인 프로필 화면에서 비밀번호를 변경합니다.
+- **로컬 개발(local 프로파일)**: 아이디 `admin` / `admin1234!` (로컬은 비밀번호 변경 강제 없음)
+- **운영(prod)**: 아이디 `admin` / 기본 비밀번호 `admin1234!` (신규 설치 기준, 이미 설치된 서버의 비밀번호는 바뀌지 않음). **첫 로그인 때 비밀번호 변경 강제**. — 자세한 내용 [DEPLOY.md](DEPLOY.md) 9장
+> `admin` 은 직원이 아닌 **관리 전용 계정**(이메일 대신 아이디로 로그인)이라 사용자 목록에 노출되지 않고 연차 부여·휴가 신청·인원 수·리포트 집계에서 제외되며, 본인 프로필 화면에서 비밀번호를 변경합니다.
 
 ## 프로젝트 구조
 ```
@@ -80,19 +80,19 @@ annual-leave/
 sudo bash install.sh
 
 # 또는 수동
-cp .env.prod.example .env          # 접속주소·라이선스 (DB비번·JWT는 secrets/ 파일)
+cp .env.prod.example .env          # 접속주소·라이선스 (DB비번은 secrets/ 파일)
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 - Caddy가 도메인으로 **HTTPS 인증서를 자동 발급**하고, 프론트 정적파일 + `/api` 프록시를 처리합니다.
 - 외부 노출 포트는 80/443뿐이며 backend·postgres는 내부 네트워크 전용입니다.
-- **DB 비밀번호·JWT 서명키는 `.env` 평문이 아니라 Docker secrets(`secrets/*`)** 로 관리합니다.
+- **DB 비밀번호는 `.env` 평문이 아니라 Docker secrets(`secrets/*`)** 로 관리합니다.
 - 배포 아티팩트는 **소스 미포함(난독화 jar)**, 컨테이너는 **비-root** 로 실행됩니다.
 
 ## 구현된 기능
 
-- **인증/권한**: JWT 로그인·토큰 재발급, 4단계 RBAC(시스템/인사/팀장/사원), 메서드 단위 인가
+- **인증/권한**: 세션 로그인·로그아웃(HttpOnly 세션 쿠키 + CSRF 보호, 세션은 DB 저장), 4단계 RBAC(시스템/인사/팀장/사원), 메서드 단위 인가
 - **부서 관리**: 트리 조회, 생성/수정/삭제, 상·하위 이동(재귀 CTE 순환 방지)
-- **사용자 관리**: 검색·페이지네이션, 생성/수정, 퇴사/복원, 비밀번호 초기화, 엑셀 가져오기/내보내기(행별 오류 보고), 비밀번호 입력 **마스킹**, 기본 시스템관리자 계정은 목록에서 **숨김**
+- **사용자 관리**: 검색·페이지네이션, 생성/수정, 퇴사/복원, **재설정 메일 발송**, **임시 비밀번호 메일 발송(첫 로그인 시 변경)**, 엑셀 가져오기/내보내기(행별 오류 보고), 기본 시스템관리자 계정은 목록에서 **숨김**
 - **연차 정책**: 입사일/회계연도 기준, 반차·마이너스연차·촉진·이월 설정
   - **근속 가산 정책화**: 기본일수·가산주기·가산량·상한·월차 설정(근로기준법 기본값 제공)
   - **장기근속 포상휴가**(근속 N년 자동 가산), **경조사 규정**(관계별 일수)
@@ -100,13 +100,13 @@ docker compose -f docker-compose.prod.yml up -d --build
   - **연차 촉진 자동화**(1차 7/1·2차 11/1 알림 배치) 및 미사용 연차 현황
 - **연차 엔진**: 근로기준법 기반 자동 산정(1년미만 월 적치, 1년 15일, 3년+ 가산, 최대 25일), 스케줄러 자동 부여/이월, 신규 입사자 초기 부여
 - **휴가 신청/결재**: 연차/오전·오후 반차, 근무일 자동 계산(주말·공휴일 제외), 중복 신청 방지, 잔액 검증, 팀장 승인/반려, 관리자 대리승인, 취소·잔액 복원
-- **캘린더**: FullCalendar 전사/부서/개인 뷰, 승인 휴가 자동 반영, 관리자·팀장 전사 일정 CRUD, 공휴일 표시
+- **캘린더**: FullCalendar 전사/부서/개인 뷰, 승인 휴가 자동 반영, 관리자·팀장 전사 일정 CRUD, 공휴일 표시, **공휴일 API 자동 동기화(매일 00:10) + 공휴일 추가 시 기존 휴가 자동 재계산·환원**
 - **대시보드**: 개인(잔여/사용/예정) + 관리자(재직·휴가자·소진율·월별/부서별 통계 차트)
 - **리포트**: 연차 사용 현황 엑셀 다운로드
 - **알림**: 신청/승인/반려 인앱 알림(헤더 벨), 안 읽음 배지
 - **이벤트(감사) 로그**: 모든 생성·수정·삭제·로그인 활동을 AOP로 자동 기록, 관리자 전용 조회 화면(검색·페이지네이션·성공/실패)
 - **PWA**: 홈 화면 설치, 오프라인 셸, 반응형(모바일/PC)
-- **보안**: 비밀번호 BCrypt·응답 미노출, 로그인 브루트포스 잠금(5회·15분), CSP 등 보안 헤더, DB비번·JWT를 **Docker secrets** 로 분리, 운영 Swagger 비활성, 컨테이너 비-root, 업로드 크기 제한 — 상세 [SECURITY.md](SECURITY.md)
+- **보안**: 비밀번호 BCrypt·응답 미노출, 로그인 브루트포스 잠금(5회·15분), CSP 등 보안 헤더, DB비번을 **Docker secrets** 로 분리, HttpOnly·Secure·SameSite 세션 쿠키 + CSRF 보호, 운영 Swagger 비활성, 컨테이너 비-root, 업로드 크기 제한 — 상세 [SECURITY.md](SECURITY.md)
 
 ## 테스트
 ```bash
@@ -132,10 +132,14 @@ cd backend
 
 ## 개발 참고
 
-- **Gradle Wrapper**: 저장소에는 wrapper 스크립트/설정만 포함되어 있습니다. JDK 21 + Gradle(또는 IntelliJ 내장 Gradle) 준비 후 최초 1회 `gradle wrapper --gradle-version 8.11.1` 로 `gradle-wrapper.jar` 를 생성하면 이후 `./gradlew` 사용이 가능합니다.
+- **Gradle Wrapper**: 저장소에는 wrapper 스크립트/설정만 포함되어 있습니다. JDK 21 + Gradle(또는 IntelliJ 내장 Gradle) 준비 후 최초 1회 `gradle wrapper --gradle-version 9.8.0` 로 `gradle-wrapper.jar` 를 생성하면 이후 `./gradlew` 사용이 가능합니다.
 - **PWA 아이콘**: 기본은 `favicon.svg` 를 사용합니다. 브랜드 PNG 아이콘(192/512px)을 쓰려면 `frontend/public/` 에 추가하고 `vite.config.ts` 의 manifest.icons 를 교체하세요.
-- **이메일 알림**: `application.yml` 의 `app.mail.enabled` 및 SMTP 설정으로 확장할 수 있습니다(현재 기본은 인앱 알림).
-- **초기 데이터**: 최초 구동 시 관리자 계정, 기본 정책, 휴가 종류 6종, 2026년 공휴일이 자동 시드됩니다.
+- **이메일**: 계정 메일(임시 비밀번호·비밀번호 재설정 링크)은 SMTP(`MAIL_*` 환경변수)로 발송하므로 SMTP 설정이 필수입니다. 휴가 신청·승인 알림은 인앱 알림입니다.
+- **초기 데이터**: 최초 구동 시 관리자 계정, 기본 정책, 휴가 종류 6종이 자동 시드되며, 2026년 공휴일은 공휴일 API 키가 없을 때만 대체 데이터로 시드됩니다.
+- **Flyway 마이그레이션 (첫 배포 전 정리 예정, 2026-10-02 결정)**: 아직 운영 DB가 없어(로컬 DB만 있음) 개발 중에는 `V1`, `V2`… 마이그레이션을 계속 추가합니다. **첫 배포 직전**에 그때까지의 마이그레이션을 현재 스키마 그대로의 새 `V1` 하나로 합칩니다.
+  1. 합친 `V1`로 만든 스키마가 기존 `V1~Vn`을 차례로 적용한 스키마와 같은지 비교합니다(테이블·컬럼·인덱스·제약조건·시드 데이터).
+  2. 로컬 DB(원본과 각 작업 공간)는 모두 지우고 새로 만든 뒤 시드 데이터를 다시 넣습니다.
+  3. **운영 DB가 한 번이라도 생긴 뒤에는 이미 적용된 마이그레이션을 고치거나 합치지 않습니다.** 바꿀 것은 새 버전으로 추가합니다.
 
 ## 라이선스
 사내 사용 목적.

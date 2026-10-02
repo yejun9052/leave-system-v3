@@ -1,7 +1,6 @@
 package com.company.leave.leave;
 
 import com.company.leave.employee.EmployeeService;
-import java.time.LocalDate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -30,7 +29,7 @@ public class EmployeeLeaveInitListener {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onEmployeeCreated(EmployeeService.EmployeeCreatedEvent event) {
         try {
-            leaveGrantService.grantForEmployee(event.employeeId(), LocalDate.now().getYear());
+            leaveGrantService.grantCurrentPeriod(event.employeeId());
         } catch (Exception e) {
             log.warn("신규 사용자 초기 연차 부여 실패 (employeeId={}): {}", event.employeeId(), e.getMessage());
         }

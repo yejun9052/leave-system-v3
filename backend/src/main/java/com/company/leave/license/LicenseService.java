@@ -2,7 +2,7 @@ package com.company.leave.license;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.security.PublicKey;
 import java.time.LocalDate;

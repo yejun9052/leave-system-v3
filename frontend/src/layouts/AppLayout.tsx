@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   LogOut,
   Menu,
+  UserRound,
   X,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import NotificationBell from "@/components/NotificationBell";
 import LicenseBanner from "@/features/license/LicenseBanner";
+import ForcePasswordChangeDialog from "@/features/auth/ForcePasswordChangeDialog";
 
 interface NavItem {
   to: string;
@@ -33,12 +35,13 @@ const NAV: NavItem[] = [
   { to: "/", label: "대시보드", icon: LayoutDashboard, end: true },
   { to: "/calendar", label: "캘린더", icon: CalendarDays },
   { to: "/my-leaves", label: "내 휴가", icon: CalendarCheck2 },
-  { to: "/approvals", label: "결재함", icon: Inbox, roles: ["TEAM_LEAD", "HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/employees", label: "사용자 관리", icon: Users, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/departments", label: "부서 관리", icon: Building2, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/policy", label: "정책 · 휴가종류", icon: Settings, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/reports", label: "리포트", icon: BarChart3, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
-  { to: "/admin/audit", label: "이벤트 로그", icon: ShieldCheck, roles: ["HR_ADMIN", "SUPER_ADMIN"] },
+  { to: "/me", label: "내 정보", icon: UserRound },
+  { to: "/approvals", label: "결재함", icon: Inbox, roles: ["TEAM_LEAD", "HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/employees", label: "사용자 관리", icon: Users, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/departments", label: "부서 관리", icon: Building2, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/policy", label: "정책 · 휴가종류", icon: Settings, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/reports", label: "리포트", icon: BarChart3, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
+  { to: "/admin/audit", label: "이벤트 로그", icon: ShieldCheck, roles: ["HR_ADMIN", "SYSTEM_ADMIN"] },
 ];
 
 export default function AppLayout() {
@@ -46,12 +49,24 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const visibleNav = NAV.filter((n) => !n.roles || hasAnyRole(...n.roles));
+  // 관리 전용 계정은 직원이 아니므로 "내 휴가" 메뉴를 숨긴다
+  const visibleNav = NAV.filter(
+    (n) => (!n.roles || hasAnyRole(...n.roles)) && !(user?.systemAccount && n.to === "/my-leaves"),
+  );
 
-  const onLogout = () => {
-    logout();
+  const onLogout = async () => {
+    await logout().catch(() => undefined);
     navigate("/login", { replace: true });
   };
+
+  // 비밀번호 변경 전에는 화면(과 그 화면의 API 호출)을 띄우지 않고 변경 창만 보여준다
+  if (user?.passwordChangeRequired) {
+    return (
+      <div className="min-h-dvh bg-muted/30">
+        <ForcePasswordChangeDialog />
+      </div>
+    );
+  }
 
   const NavList = () => (
     <nav className="flex flex-1 flex-col gap-1 px-3">
@@ -147,7 +162,7 @@ export default function AppLayout() {
 
 function primaryRoleLabel(roles?: Role[]): string {
   if (!roles || roles.length === 0) return "";
-  const order: Role[] = ["SUPER_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
+  const order: Role[] = ["SYSTEM_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
   const top = order.find((r) => roles.includes(r)) ?? roles[0];
   return ROLE_LABEL[top];
 }

@@ -3,6 +3,7 @@ package com.company.leave.calendar;
 import com.company.leave.calendar.domain.CalendarEvent;
 import com.company.leave.calendar.domain.CalendarEventScope;
 import com.company.leave.calendar.domain.CalendarEventSource;
+import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.dto.CalendarDtos;
 import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
@@ -10,11 +11,19 @@ import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.department.domain.Department;
 import com.company.leave.department.repository.DepartmentRepository;
+import com.company.leave.leave.LeaveRequestService;
+import com.company.leave.mail.AnnouncementMailTemplates.Change;
+import com.company.leave.notification.AnnouncementMessenger;
+import com.company.leave.notification.AnnouncementMessenger.EventView;
 import com.company.leave.security.UserPrincipal;
 import java.time.LocalDate;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,13 +34,19 @@ public class CalendarService {
     private final CalendarEventRepository eventRepository;
     private final HolidayRepository holidayRepository;
     private final DepartmentRepository departmentRepository;
+    private final LeaveRequestService leaveRequestService;
+    private final AnnouncementMessenger announcementMessenger;
 
     public CalendarService(CalendarEventRepository eventRepository,
                            HolidayRepository holidayRepository,
-                           DepartmentRepository departmentRepository) {
+                           DepartmentRepository departmentRepository,
+                           LeaveRequestService leaveRequestService,
+                           AnnouncementMessenger announcementMessenger) {
         this.eventRepository = eventRepository;
         this.holidayRepository = holidayRepository;
         this.departmentRepository = departmentRepository;
+        this.leaveRequestService = leaveRequestService;
+        this.announcementMessenger = announcementMessenger;
     }
 
     /** 기간 내 사용자가 볼 수 있는 모든 일정(휴가/관리자이벤트/공휴일). */
@@ -55,6 +70,25 @@ public class CalendarService {
         return result;
     }
 
+    /**
+     * 날짜 상세: 그날의 휴가(보이는 범위는 {@link LeaveRequestService#leavesOnDay}), 볼 수 있는 등록 일정, 공휴일 이름.
+     */
+    @Transactional(readOnly = true)
+    public CalendarDtos.DayDetail getDay(LocalDate date, UserPrincipal user) {
+        boolean admin = isAdmin(user);
+        List<CalendarDtos.DayEvent> events = eventRepository.findBetween(date, date).stream()
+                .filter(e -> e.getSource() == CalendarEventSource.ADMIN_EVENT && isVisible(e, user, admin))
+                .map(CalendarDtos.DayEvent::from)
+                .toList();
+        List<String> holidayNames = holidayRepository.findByDateBetweenOrderByDateAsc(date, date).stream()
+                .map(Holiday::getName)
+                .toList();
+        return new CalendarDtos.DayDetail(date,
+                holidayNames.isEmpty() ? null : String.join(", ", holidayNames),
+                leaveRequestService.leavesOnDay(user.getId(), date),
+                events);
+    }
+
     @Transactional
     public CalendarDtos.EventResponse create(CalendarDtos.CreateEvent req, UserPrincipal user) {
         if (req.scope() == CalendarEventScope.DEPARTMENT && req.departmentId() == null) {
@@ -76,17 +110,76 @@ public class CalendarService {
                 .createdBy(user.getId())
                 .build();
         eventRepository.save(event);
+        announcementMessenger.event(Change.CREATED, view(event), null, user.getId());
         return CalendarDtos.EventResponse.fromEvent(event, true);
+    }
+
+    /**
+     * 일정 등록 화면의 범위 선택지(개인 일정 제외).
+     * 관리자는 "전체 일정" + 모든 부서, 팀장은 맡은 부서(하위 포함)만. 부서는 부서 관리 트리 순서(상위 다음 하위,
+     * 같은 단계는 정렬순서·이름순). 팀장의 부서 범위는 저장 시 검사({@link #authorizeScope})와 같은 기준이다.
+     */
+    @Transactional(readOnly = true)
+    public List<CalendarDtos.EventScopeOption> eventScopes(UserPrincipal user) {
+        boolean admin = isAdmin(user);
+        Set<Long> allowed = admin ? null : ledDeptIds(user.getId());
+        List<CalendarDtos.EventScopeOption> options = new ArrayList<>();
+        if (admin) {
+            options.add(new CalendarDtos.EventScopeOption(CalendarEventScope.COMPANY, null, "전체 일정"));
+        }
+        for (Department d : departmentsInTreeOrder()) {
+            if (allowed == null || allowed.contains(d.getId())) {
+                options.add(new CalendarDtos.EventScopeOption(
+                        CalendarEventScope.DEPARTMENT, d.getId(), d.getName() + " 일정"));
+            }
+        }
+        return options;
+    }
+
+    /** 부서 관리 트리와 같은 순서: 최상위부터 깊이 우선, 같은 부모 아래는 정렬순서·이름순. */
+    private List<Department> departmentsInTreeOrder() {
+        List<Department> sorted = departmentRepository.findAllByOrderBySortOrderAscNameAsc();
+        Map<Long, List<Department>> children = new HashMap<>();
+        List<Department> roots = new ArrayList<>();
+        Set<Long> ids = new HashSet<>();
+        sorted.forEach(d -> ids.add(d.getId()));
+        for (Department d : sorted) {
+            Long parentId = d.getParentId();
+            if (parentId == null || !ids.contains(parentId)) {
+                roots.add(d);
+            } else {
+                children.computeIfAbsent(parentId, k -> new ArrayList<>()).add(d);
+            }
+        }
+        List<Department> ordered = new ArrayList<>(sorted.size());
+        Deque<Department> stack = new ArrayDeque<>();
+        for (int i = roots.size() - 1; i >= 0; i--) {
+            stack.push(roots.get(i));
+        }
+        while (!stack.isEmpty()) {
+            Department d = stack.pop();
+            ordered.add(d);
+            List<Department> kids = children.getOrDefault(d.getId(), List.of());
+            for (int i = kids.size() - 1; i >= 0; i--) {
+                stack.push(kids.get(i));
+            }
+        }
+        return ordered;
     }
 
     @Transactional
     public CalendarDtos.EventResponse update(Long id, CalendarDtos.CreateEvent req, UserPrincipal user) {
+        if (req.scope() == CalendarEventScope.DEPARTMENT && req.departmentId() == null) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "부서 일정은 부서를 지정해야 합니다.");
+        }
         CalendarEvent event = getEditableAdminEvent(id, user);
         authorizeScope(user, req.scope(), req.departmentId());
+        EventView before = view(event);
         event.update(req.title(), req.startDate(), req.endDate(), req.allDay(),
                 req.scope(),
                 req.colorHex() != null ? req.colorHex() : event.getColorHex(),
                 req.scope() == CalendarEventScope.DEPARTMENT ? req.departmentId() : null);
+        announcementMessenger.event(Change.UPDATED, view(event), before, user.getId());
         return CalendarDtos.EventResponse.fromEvent(event, true);
     }
 
@@ -94,6 +187,7 @@ public class CalendarService {
     public void delete(Long id, UserPrincipal user) {
         CalendarEvent event = getEditableAdminEvent(id, user);
         eventRepository.delete(event);
+        announcementMessenger.event(Change.DELETED, view(event), null, user.getId());
     }
 
     private CalendarEvent getEditableAdminEvent(Long id, UserPrincipal user) {
@@ -110,6 +204,11 @@ public class CalendarService {
         return event;
     }
 
+    /** 일정 추가·변경·삭제 알림·메일에 쓰는 내용(받는 사람은 범위로 정해진다). */
+    private static EventView view(CalendarEvent e) {
+        return new EventView(e.getTitle(), e.getStartDate(), e.getEndDate(), e.getScope(), e.getDepartmentId());
+    }
+
     private boolean isVisible(CalendarEvent e, UserPrincipal user, boolean admin) {
         return switch (e.getScope()) {
             case COMPANY -> true;
@@ -122,7 +221,7 @@ public class CalendarService {
 
     private boolean isAdmin(UserPrincipal user) {
         return user.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN")
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SYSTEM_ADMIN")
                         || a.getAuthority().equals("ROLE_HR_ADMIN"));
     }
 

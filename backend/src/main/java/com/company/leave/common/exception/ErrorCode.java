@@ -21,11 +21,21 @@ public enum ErrorCode {
     ACCOUNT_INACTIVE(HttpStatus.FORBIDDEN, "비활성화된 계정입니다."),
     TOO_MANY_LOGIN_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS,
             "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요."),
+    PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN, "비밀번호를 변경한 뒤 이용할 수 있습니다."),
+    /** 로그인된 사용자의 입력 오류라 401(세션 없음)이 아닌 400. */
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "현재 비밀번호가 올바르지 않습니다."),
+    HOLIDAY_SYNC_FAILED(HttpStatus.BAD_GATEWAY, "공휴일 동기화에 실패했습니다. 잠시 후 다시 시도하세요."),
+    // 400: 로그인 없이 쓰는 재설정 화면에서 401(→ 로그인 화면 이동)과 구분
+    PASSWORD_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST,
+            "링크가 만료되었거나 이미 사용되었습니다. 비밀번호 찾기를 다시 요청하세요."),
 
     // 사용자
     EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     EMAIL_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
-    EMPLOYEE_NO_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 사번입니다."),
+    SYSTEM_ADMIN_ROLE_RESTRICTED(HttpStatus.BAD_REQUEST,
+            "시스템 관리자 권한은 관리 전용 계정에만 부여할 수 있습니다."),
+    SYSTEM_ACCOUNT_ROLE_IMMUTABLE(HttpStatus.BAD_REQUEST,
+            "관리 전용 계정의 권한은 변경할 수 없습니다."),
 
     // 부서
     DEPARTMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "부서를 찾을 수 없습니다."),
@@ -43,6 +53,7 @@ public enum ErrorCode {
     INSUFFICIENT_LEAVE_BALANCE(HttpStatus.CONFLICT, "잔여 연차가 부족합니다."),
     LEAVE_DATE_OVERLAP(HttpStatus.CONFLICT, "이미 신청된 기간과 겹칩니다."),
     LEAVE_INVALID_PERIOD(HttpStatus.BAD_REQUEST, "휴가 기간이 올바르지 않습니다."),
+    LEAVE_DATE_TOO_FAR(HttpStatus.BAD_REQUEST, "신청할 수 있는 연차 기간을 넘었습니다."),
     LEAVE_NOT_PENDING(HttpStatus.CONFLICT, "대기 상태의 신청만 처리할 수 있습니다."),
     LEAVE_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작된 휴가는 취소할 수 없습니다."),
     LEAVE_NO_APPROVAL_PERMISSION(HttpStatus.FORBIDDEN, "해당 신청을 결재할 권한이 없습니다."),
@@ -50,6 +61,12 @@ public enum ErrorCode {
     LEAVE_MAX_CONSECUTIVE(HttpStatus.BAD_REQUEST, "최대 연속 사용일을 초과했습니다."),
     LEAVE_BLACKOUT(HttpStatus.CONFLICT, "연차 사용이 제한된 기간입니다."),
     LEAVE_TEAM_LIMIT(HttpStatus.CONFLICT, "같은 기간 팀 내 휴가 인원 제한을 초과했습니다."),
+    LEAVE_ANNUAL_NOT_EXHAUSTED(HttpStatus.CONFLICT, "잔여 연차를 먼저 사용해야 신청할 수 있습니다."),
+    LEAVE_PENDING_ANNUAL_EXISTS(HttpStatus.CONFLICT, "결재 대기 중인 연차 신청이 있어 신청할 수 없습니다."),
+    LEAVE_FORFEIT_NOT_ACKNOWLEDGED(HttpStatus.BAD_REQUEST, "남은 연차 소멸 안내를 확인해야 신청할 수 있습니다."),
+    LEAVE_TYPE_DISABLED(HttpStatus.BAD_REQUEST, "현재 정책에서 사용할 수 없는 휴가 종류입니다."),
+    LEAVE_SPECIAL_RULE_INVALID(HttpStatus.BAD_REQUEST, "경조사 규정을 올바르게 선택해 주세요."),
+    LEAVE_SPECIAL_RULE_EXCEEDED(HttpStatus.BAD_REQUEST, "규정 일수를 넘겨 신청할 수 없습니다."),
 
     // 캘린더
     CALENDAR_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "캘린더 일정을 찾을 수 없습니다."),

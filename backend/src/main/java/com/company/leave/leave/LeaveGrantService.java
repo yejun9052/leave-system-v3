@@ -1,26 +1,27 @@
 package com.company.leave.leave;
 
+import com.company.leave.common.exception.BusinessException;
+import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.EmployeeStatus;
 import com.company.leave.employee.repository.EmployeeRepository;
-import com.company.leave.leave.accrual.LeaveAccrualCalculator;
+import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.repository.LeaveBalanceRepository;
 import com.company.leave.policy.PolicyService;
-import com.company.leave.policy.domain.GrantBasis;
 import com.company.leave.policy.domain.LeavePolicy;
 import com.company.leave.policy.repository.ServiceAwardRuleRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.Period;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 연차 부여 엔진. 정책과 근속에 따라 연도별 연차 잔액을 계산·부여한다.
- * 스케줄러와 신규 입사 시점에 호출된다.
+ * 연차 부여 엔진. 정책과 근속에 따라 연차 기간별 잔액을 계산·부여한다.
+ * 연차 기간은 {@link LeavePeriodCalculator}(입사일 기준이면 입사 기념일부터 1년).
+ * 매일 배치가 직원마다 지금 기간을 부여하고, 기념일이 지나 새 기간이 시작되면 지난 기간 잔여를 이월·소멸한다.
  */
 @Service
 public class LeaveGrantService {
@@ -30,54 +31,116 @@ public class LeaveGrantService {
     private final EmployeeRepository employeeRepository;
     private final LeaveBalanceRepository balanceRepository;
     private final LeaveBalanceService balanceService;
-    private final LeaveAccrualCalculator calculator;
+    private final LeavePeriodCalculator periods;
     private final PolicyService policyService;
     private final ServiceAwardRuleRepository awardRuleRepository;
 
     public LeaveGrantService(EmployeeRepository employeeRepository,
                              LeaveBalanceRepository balanceRepository,
                              LeaveBalanceService balanceService,
-                             LeaveAccrualCalculator calculator,
+                             LeavePeriodCalculator periods,
                              PolicyService policyService,
                              ServiceAwardRuleRepository awardRuleRepository) {
         this.employeeRepository = employeeRepository;
         this.balanceRepository = balanceRepository;
         this.balanceService = balanceService;
-        this.calculator = calculator;
+        this.periods = periods;
         this.policyService = policyService;
         this.awardRuleRepository = awardRuleRepository;
     }
 
-    /** 특정 사용자의 특정 연도 연차를 (재)부여한다. 이월 규칙도 함께 반영. */
+    /** 특정 사용자의 특정 연차 기간을 (재)부여한다. 이월 규칙도 함께 반영. */
     @Transactional
     public LeaveBalance grantForEmployee(Long employeeId, int year) {
         Employee employee = employeeRepository.findById(employeeId).orElseThrow();
         LeavePolicy policy = policyService.getActivePolicy();
+        if (year > currentYear(employee, policy)) {
+            // 미리 부여하면 지금 기간 잔여가 이월·소멸 처리돼 버린다
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "아직 시작하지 않은 연차 기간은 부여할 수 없습니다.");
+        }
         return grant(employee, year, policy);
     }
 
-    /** 재직 중인 전 직원에게 해당 연도 연차를 부여한다. */
+    /** 특정 사용자의 지금 연차 기간을 (재)부여한다(신규 입사 등). */
+    @Transactional
+    public LeaveBalance grantCurrentPeriod(Long employeeId) {
+        Employee employee = employeeRepository.findById(employeeId).orElseThrow();
+        LeavePolicy policy = policyService.getActivePolicy();
+        return grant(employee, currentYear(employee, policy), policy);
+    }
+
+    /** 재직 중인 전 직원에게 year 에 시작한 연차 기간을 부여한다(관리 전용 계정 제외). */
     @Transactional
     public int grantAll(int year) {
         LeavePolicy policy = policyService.getActivePolicy();
         int count = 0;
-        for (Employee employee : employeeRepository.findByStatus(EmployeeStatus.ACTIVE)) {
+        for (Employee employee : employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)) {
+            if (employee.getHireDate() != null && year < employee.getHireDate().getYear()) {
+                continue; // 입사 전 기간은 없다
+            }
+            if (year > currentYear(employee, policy)) {
+                continue; // 아직 시작 전인 기간: 부여하면 지금 기간 잔여가 미리 소멸된다
+            }
             grant(employee, year, policy);
             count++;
         }
-        log.info("연차 부여 배치 완료: {}년 대상 {}명", year, count);
+        log.info("연차 부여 배치 완료: {}년 시작 기간, 대상 {}명", year, count);
         return count;
     }
 
-    private LeaveBalance grant(Employee employee, int year, LeavePolicy policy) {
-        LocalDate asOf = referenceDate(employee.getHireDate(), year, policy);
-        BigDecimal entitlement = calculator.annualEntitlement(employee.getHireDate(), asOf, policy);
+    /**
+     * 재직 중인 전 직원에게 각자 지금 연차 기간을 부여한다(매일 배치). 입사 기념일이 지나 새 기간이 시작된 직원은
+     * 이때 지난 기간 잔여가 이월·소멸된다.
+     */
+    @Transactional
+    public int grantCurrentPeriods() {
+        LeavePolicy policy = policyService.getActivePolicy();
+        int count = 0;
+        for (Employee employee : employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)) {
+            grant(employee, currentYear(employee, policy), policy);
+            count++;
+        }
+        log.info("연차 부여 배치 완료: 직원별 지금 기간, 대상 {}명", count);
+        return count;
+    }
 
-        // 장기근속 포상: 해당 연도에 근속 N년에 도달하면 보너스 연차 가산
-        int completedYears = Period.between(employee.getHireDate(), asOf).getYears();
-        BigDecimal bonus = awardRuleRepository.findByYears(completedYears)
-                .map(r -> r.getBonusDays()).orElse(BigDecimal.ZERO);
-        entitlement = entitlement.add(bonus);
+    /**
+     * 기간 기준을 바꾼 뒤 한 번: 직원마다 잔액이 있는 가장 오래된 기간부터 지금 기간까지 차례로 다시 부여해
+     * 기간별 부여 일수와 지난 기간 이월·소멸을 새 기준으로 맞춘다. 사용·소멸(병가·공가) 일수는 미리 다시 계산돼 있어야 한다.
+     */
+    @Transactional
+    public void regrantAllPeriods(Employee employee) {
+        LeavePolicy policy = policyService.getActivePolicy();
+        int current = currentYear(employee, policy);
+        int first = balanceRepository.findByEmployeeIdOrderByYearDesc(employee.getId()).stream()
+                .mapToInt(LeaveBalance::getYear).min().orElse(current);
+        if (employee.getHireDate() != null) {
+            first = Math.max(first, employee.getHireDate().getYear());
+        }
+        for (int year = first; year <= current; year++) {
+            grant(employee, year, policy);
+        }
+        // 아직 시작 전인 기간에 예전 기준(달력 연도)으로 미리 넣어 둔 부여 일수는 지운다. 그 기간이 시작되는 날 배치가 부여한다
+        balanceRepository.findByEmployeeIdOrderByYearDesc(employee.getId()).stream()
+                .filter(b -> b.getYear() > current)
+                .forEach(b -> b.setGranted(BigDecimal.ZERO));
+    }
+
+    private int currentYear(Employee employee, LeavePolicy policy) {
+        // 입사 예정자는 첫 기간(입사 연도)을 미리 부여한다
+        LocalDate hireDate = employee.getHireDate();
+        return periods.yearOf(hireDate, LocalDate.now(), policy);
+    }
+
+    private LeaveBalance grant(Employee employee, int year, LeavePolicy policy) {
+        BigDecimal entitlement = periods.entitlement(employee.getHireDate(), year, policy);
+
+        // [일시 중지 2026-09-30] 장기근속 포상 자동 가산. 정책 정리 전까지 연차 부여에 포상을 더하지 않는다.
+        // 다시 켤 때: 근속 연수는 LeaveAccrualCalculator.completedYears(2월 29일 입사자도 기념일 기준)를 쓸 것.
+        // int completedYears = LeaveAccrualCalculator.completedYears(employee.getHireDate(), periodStart);
+        // BigDecimal bonus = awardRuleRepository.findByYears(completedYears)
+        //         .map(r -> r.getBonusDays()).orElse(BigDecimal.ZERO);
+        // entitlement = entitlement.add(bonus);
 
         LeaveBalance balance = balanceService.getOrCreate(employee.getId(), year);
         balance.setGranted(entitlement);
@@ -85,7 +148,10 @@ public class LeaveGrantService {
         return balance;
     }
 
-    /** 전년도 잔여분을 정책에 따라 이월/소멸 처리한다. */
+    /**
+     * 지난 기간 잔여를 정책에 따라 이월/소멸 처리한다. 바로 앞 기간은 이월 규칙을 따르고,
+     * 그보다 오래된 기간에 남은 잔여(서버가 오래 꺼져 있었거나 지난 휴가가 취소돼 돌아온 연차)는 모두 소멸한다.
+     */
     private void applyCarryOver(Long employeeId, int year, LeavePolicy policy, LeaveBalance current) {
         balanceRepository.findByEmployeeIdAndYear(employeeId, year - 1).ifPresent(prev -> {
             BigDecimal prevRemaining = prev.remaining();
@@ -97,30 +163,12 @@ public class LeaveGrantService {
                 current.setCarriedOver(carry);
                 prev.setExpired(prev.getExpired().add(prevRemaining.subtract(carry)));
             } else {
-                // 이월 미허용: 전년 잔여 전부 소멸
+                // 이월 미허용: 전 기간 잔여 전부 소멸
                 prev.setExpired(prev.getExpired().add(prevRemaining));
             }
         });
-    }
-
-    /** 연차 산정 기준일. */
-    private LocalDate referenceDate(LocalDate hireDate, int year, LeavePolicy policy) {
-        if (policy.getGrantBasis() == GrantBasis.FISCAL_YEAR) {
-            return LocalDate.of(year, policy.getFiscalStartMonth(), policy.getFiscalStartDay());
-        }
-        // 입사일 기준: 입사연도는 현재까지의 월별 적치, 이후 연도는 그 해 입사 기념일 기준
-        if (year == hireDate.getYear()) {
-            LocalDate today = LocalDate.now();
-            LocalDate yearEnd = LocalDate.of(year, 12, 31);
-            return today.isBefore(yearEnd) ? today : yearEnd;
-        }
-        return safeAnniversary(hireDate, year);
-    }
-
-    private LocalDate safeAnniversary(LocalDate hireDate, int year) {
-        int day = hireDate.getDayOfMonth();
-        LocalDate firstOfMonth = LocalDate.of(year, hireDate.getMonth(), 1);
-        int lastDay = firstOfMonth.lengthOfMonth();
-        return LocalDate.of(year, hireDate.getMonth(), Math.min(day, lastDay));
+        balanceRepository.findByEmployeeIdOrderByYearDesc(employeeId).stream()
+                .filter(b -> b.getYear() < year - 1 && b.remaining().signum() > 0)
+                .forEach(old -> old.setExpired(old.getExpired().add(old.remaining())));
     }
 }
