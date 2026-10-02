@@ -35,7 +35,8 @@ public final class AuditLabels {
         ACTIONS.put("reactivate", "복원");
         ACTIONS.put("password", "비밀번호 변경");
         ACTIONS.put("grant", "연차 부여");
-        ACTIONS.put("run", "촉진 발송");
+        ACTIONS.put("run", "촉진 발송"); // 예전 일괄 촉진(/api/leave/promotion/run, 삭제됨) 기록 표시용
+        ACTIONS.put("send", "촉진 안내 발송");
         ACTIONS.put("import", "일괄 등록");
         ACTIONS.put("export", "내보내기");
         ACTIONS.put("read-all", "알림 읽음");

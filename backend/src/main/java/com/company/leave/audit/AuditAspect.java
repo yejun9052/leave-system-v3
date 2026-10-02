@@ -69,7 +69,7 @@ public class AuditAspect {
 
     private static final java.util.Set<String> ACTION_VERBS = java.util.Set.of(
             "approve", "reject", "cancel", "move", "reactivate", "password",
-            "grant", "run", "import", "export", "read-all", "register");
+            "grant", "run", "send", "import", "export", "read-all", "register");
 
     /**
      * 경로 끝의 행위 동사를 인식해 의미 있는 동작명을 만든다.
