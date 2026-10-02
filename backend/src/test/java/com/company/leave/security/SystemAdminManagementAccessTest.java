@@ -21,6 +21,9 @@ import com.company.leave.employee.EmployeeService;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.LeaveAdminController;
+import com.company.leave.batch.AutomationController;
+import com.company.leave.batch.AutomationService;
+import com.company.leave.batch.JobRunRecorder;
 import com.company.leave.leave.LeaveGrantService;
 import com.company.leave.policy.PolicyController;
 import com.company.leave.policy.PolicyService;
@@ -41,6 +44,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -60,6 +64,7 @@ class SystemAdminManagementAccessTest {
     private LeaveReportService reports;
     private AuditService audit;
     private LeaveGrantService grants;
+    private AutomationService automation;
 
     @BeforeEach
     void setUp() {
@@ -70,6 +75,7 @@ class SystemAdminManagementAccessTest {
         reports = mock(LeaveReportService.class);
         audit = mock(AuditService.class);
         grants = mock(LeaveGrantService.class);
+        automation = mock(AutomationService.class);
         context.registerBean(EmployeeService.class, () -> employees);
         context.registerBean(EmployeeExcelService.class, () -> mock(EmployeeExcelService.class));
         context.registerBean(SessionTerminator.class, () -> mock(SessionTerminator.class));
@@ -77,15 +83,19 @@ class SystemAdminManagementAccessTest {
         context.registerBean(LeaveReportService.class, () -> reports);
         context.registerBean(AuditService.class, () -> audit);
         context.registerBean(LeaveGrantService.class, () -> grants);
+        context.registerBean(JobRunRecorder.class, () -> new JobRunRecorder(mock(JdbcTemplate.class)));
+        context.registerBean(AutomationService.class, () -> automation);
         context.registerBean(EmployeeController.class);
         context.registerBean(PolicyController.class);
         context.registerBean(ReportController.class);
         context.registerBean(AuditController.class);
         context.registerBean(LeaveAdminController.class);
+        context.registerBean(AutomationController.class);
         context.refresh();
         mvc = MockMvcBuilders.standaloneSetup(context.getBean(EmployeeController.class),
                 context.getBean(PolicyController.class), context.getBean(ReportController.class),
-                context.getBean(AuditController.class), context.getBean(LeaveAdminController.class))
+                context.getBean(AuditController.class), context.getBean(LeaveAdminController.class),
+                context.getBean(AutomationController.class))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
 
         Employee admin = Employee.builder().email("admin").name("시스템 관리자").systemAccount(true)
@@ -155,5 +165,22 @@ class SystemAdminManagementAccessTest {
                 .andExpect(status().isOk());
         verify(grants).grantAll(2027);
         verify(grants).grantForEmployee(20L, 2027);
+    }
+
+    @Test
+    void 시스템_관리자는_전_직원의_지금_연차_기간을_부여하고_실행_기록을_남긴다() throws Exception {
+        when(grants.grantCurrentPeriods()).thenReturn(20);
+        mvc.perform(post("/api/leave/admin/grant")).andExpect(status().isOk());
+        verify(grants).grantCurrentPeriods();
+    }
+
+    @Test
+    void 시스템_관리자는_자동화를_보고_촉진_자동_발송을_설정할_수_있다() throws Exception {
+        mvc.perform(get("/api/policy/automation")).andExpect(status().isOk());
+        mvc.perform(put("/api/policy/automation/promotion").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"promotionEnabled\":true,\"promotionMonths\":[6,2]}"))
+                .andExpect(status().isOk());
+        verify(automation).overview();
+        verify(automation).updatePromotion(true, java.util.List.of(6, 2));
     }
 }
