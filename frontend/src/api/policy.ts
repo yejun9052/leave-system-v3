@@ -74,7 +74,7 @@ export const policyRulesApi = {
   removeBlackout: (id: number) => unwrap<void>(api.delete(`/policy/blackouts/${id}`)),
 };
 
-/** 촉진 대상: 사용 기한이 N개월 안이고 사용 계획 없는 연차(남은 연차 − 결재 대기)가 있는 재직자 */
+/** 촉진 대상: 사용 기한이 N개월 안이고 남은 연차가 있는 재직자 */
 export interface PromotionTarget {
   employeeId: number;
   name: string;
@@ -88,9 +88,9 @@ export interface PromotionTarget {
   /** 부여(이월 포함) */
   granted: number;
   used: number;
+  /** 결재 대기 중인 차감 예정(남은 연차에서 아직 빼지 않음) */
   pending: number;
   remaining: number;
-  unplanned: number;
   /** 사용 기한까지 남은 날(기한 당일 0) */
   daysLeft: number;
   /** "2개월 29일" (서버 계산) */

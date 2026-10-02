@@ -36,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 연차 사용 촉진. 직원마다 지금 연차 기간의 사용 기한(입사일 기준이면 다음 입사 기념일 전날)이 다가오는데
- * 아직 사용 계획이 없는 연차(남은 연차 − 결재 대기)가 있으면 안내한다.
+ * 남은 연차가 있으면 안내한다. 결재 대기 중인 일수는 따로 보여 준다.
  * 관리자가 대상을 골라 보내면 앱 알림과 메일을 보내고 발송 이력(promotion_notices)을 남긴다.
  */
 @Service
@@ -78,7 +78,8 @@ public class LeavePromotionService {
      * 촉진 대상 한 명.
      *
      * @param granted        부여 연차(이월 포함)
-     * @param unplanned      사용 계획이 없는 연차 = 남은 연차 − 결재 대기
+     * @param remaining      남은 연차(승인된 휴가만 뺀 값)
+     * @param pending        결재 대기 중인 차감 예정(남은 연차에서 아직 빼지 않음)
      * @param daysLeft       사용 기한까지 남은 날(기한 당일 0)
      * @param timeLeft       사용 기한까지 남은 기간("2개월 29일")
      * @param noticeCount    이 연차 기간에 촉진 안내를 보낸 횟수
@@ -96,19 +97,18 @@ public class LeavePromotionService {
             BigDecimal used,
             BigDecimal pending,
             BigDecimal remaining,
-            BigDecimal unplanned,
             long daysLeft,
             String timeLeft,
             long noticeCount,
             Instant lastNotifiedAt) {
     }
 
-    /** 발송 결과. skipped: 대상이 아니어서 보내지 않은 직원 수(그 사이 휴가를 신청했거나 기한이 지난 경우 등). */
+    /** 발송 결과. skipped: 대상이 아니어서 보내지 않은 직원 수(그 사이 남은 연차를 다 썼거나 기한이 지난 경우 등). */
     public record SendResult(int sent, int mailed, int skipped) {
     }
 
     /**
-     * 사용 기한이 오늘부터 months 개월 안에 끝나고 사용 계획이 없는 연차가 있는 재직자(관리 전용 계정 제외).
+     * 사용 기한이 오늘부터 months 개월 안에 끝나고 남은 연차가 있는 재직자(관리 전용 계정 제외).
      * 사용 기한이 가까운 순.
      *
      * @param months 1~6 (범위를 벗어나면 가까운 값으로 맞춤)
@@ -134,16 +134,12 @@ public class LeavePromotionService {
             Employee e = pb.employee();
             LeaveBalance b = pb.balance();
             BigDecimal pending = requestRepository.sumPendingDeductedDays(e.getId(), b.getYear());
-            BigDecimal unplanned = b.remaining().subtract(pending);
-            if (unplanned.signum() <= 0) {
-                continue; // 남은 연차를 모두 신청해 둠
-            }
             LocalDate end = pb.period().end();
             PromotionNoticeSummary sent = notices.get(e.getId() + ":" + b.getYear());
             targets.add(new Target(e.getId(), e.getName(),
                     e.getDepartment() != null ? e.getDepartment().getName() : null,
                     hasMailbox(e), b.getYear(), pb.period().start(), end,
-                    b.getGranted().add(b.getCarriedOver()), b.getUsed(), pending, b.remaining(), unplanned,
+                    b.getGranted().add(b.getCarriedOver()), b.getUsed(), pending, b.remaining(),
                     ChronoUnit.DAYS.between(today, end), timeLeft(today, end),
                     sent != null ? sent.count() : 0, sent != null ? sent.lastSentAt() : null));
         }
@@ -153,7 +149,7 @@ public class LeavePromotionService {
 
     /**
      * 고른 직원에게 촉진 안내(앱 알림 + 메일)를 보내고 발송 이력을 남긴다. 메일은 커밋 뒤 한 사람씩 보낸다.
-     * 화면에서 고른 뒤 상황이 바뀌었을 수 있어 대상 여부(사용 기한 6개월 이내, 사용 계획 없는 연차 있음)를 다시 확인한다.
+     * 화면에서 고른 뒤 상황이 바뀌었을 수 있어 대상 여부(사용 기한 6개월 이내, 남은 연차 있음)를 다시 확인한다.
      *
      * @param actorId 보낸 관리자
      */
@@ -188,14 +184,13 @@ public class LeavePromotionService {
     /** @return 메일까지 보냈으면 true(메일 주소가 없으면 앱 알림만) */
     private boolean deliver(Target t, Employee e, Employee actor, boolean carryOver) {
         notificationService.notify(e.getId(), "LEAVE_PROMOTION", "연차 사용 촉진 안내",
-                "사용 계획이 없는 연차 " + plain(t.unplanned()) + "일, 사용 기한 " + t.periodEnd() + "("
-                        + t.timeLeft() + " 남음). 사용 계획을 세워 휴가를 신청해 주세요.",
+                notificationMessage(t.remaining(), t.pending(), t.periodEnd(), t.timeLeft()),
                 "/my-leaves");
         boolean mail = hasMailbox(e);
         if (mail) {
             PromotionMailTemplates.Mail m = PromotionMailTemplates.promotion(
                     new PromotionMailTemplates.Notice(t.name(), t.department(), t.periodStart(), t.periodEnd(),
-                            t.granted(), t.used(), t.remaining(), t.pending(), t.unplanned(), t.timeLeft(),
+                            t.granted(), t.used(), t.remaining(), t.pending(), t.timeLeft(),
                             t.daysLeft()),
                     actor != null ? LeaveMessenger.handler(actor) : null, carryOver, mailProperties.linkBaseUrl());
             MailLayout.Content content = m.content().withRecipient(e.getName());
@@ -208,7 +203,7 @@ public class LeavePromotionService {
     }
 
     /**
-     * 정기 알림(스케줄러 7/1·11/1, 정책의 촉진제도 사용이 켜져 있을 때): 지금 연차 기간에 사용 계획이 없는 연차가 있는
+     * 정기 알림(스케줄러 7/1·11/1, 정책의 촉진제도 사용이 켜져 있을 때): 지금 연차 기간에 남은 연차가 있는
      * 재직자 모두에게 앱 알림만 보낸다. 메일·발송 이력은 관리자가 고른 발송({@link #send})에서만 남긴다.
      */
     @Transactional
@@ -217,19 +212,24 @@ public class LeavePromotionService {
         int count = 0;
         for (LeaveBalanceService.PeriodBalance pb : balanceService.balancesAsOf(today, true)) {
             LeaveBalance b = pb.balance();
-            BigDecimal unplanned = b.remaining()
-                    .subtract(requestRepository.sumPendingDeductedDays(pb.employee().getId(), b.getYear()));
-            if (unplanned.signum() <= 0) {
+            if (b.remaining().signum() <= 0) {
                 continue;
             }
+            BigDecimal pending = requestRepository.sumPendingDeductedDays(pb.employee().getId(), b.getYear());
             notificationService.notify(pb.employee().getId(), "LEAVE_PROMOTION", "연차 사용 촉진 안내",
-                    "사용 계획이 없는 연차 " + plain(unplanned) + "일, 사용 기한 " + pb.period().end() + "("
-                            + timeLeft(today, pb.period().end()) + " 남음). 사용 계획을 세워 휴가를 신청해 주세요.",
+                    notificationMessage(b.remaining(), pending, pb.period().end(), timeLeft(today, pb.period().end())),
                     "/my-leaves");
             count++;
         }
         log.info("연차 촉진 정기 알림: {}명", count);
         return count;
+    }
+
+    /** 앱 알림 문구: "남은 연차 5일(결재 대기 2.125일), 사용 기한 2026-11-30(1개월 28일 남음). …" */
+    static String notificationMessage(BigDecimal remaining, BigDecimal pending, LocalDate end, String timeLeft) {
+        return "남은 연차 " + plain(remaining) + "일"
+                + (pending.signum() > 0 ? "(결재 대기 " + plain(pending) + "일)" : "")
+                + ", 사용 기한 " + end + "(" + timeLeft + " 남음). 기한 전에 휴가를 신청해 주세요.";
     }
 
     /** 오늘부터 사용 기한까지 남은 기간: "2개월 29일", "3개월", "12일", 기한 당일은 "오늘 하루". */

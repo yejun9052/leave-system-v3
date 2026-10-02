@@ -51,7 +51,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
- * 연차 사용 촉진: 사용 기한이 N개월 안에 끝나고 사용 계획 없는 연차가 있는 직원을 찾아, 고른 직원에게 알림·메일을 보내고
+ * 연차 사용 촉진: 사용 기한이 N개월 안에 끝나고 남은 연차가 있는 직원을 찾아, 고른 직원에게 알림·메일을 보내고
  * 발송 이력을 남긴다. 사용 기한은 오늘 기준 상대 날짜로 둔다.
  */
 @ExtendWith(MockitoExtension.class)
@@ -90,30 +90,31 @@ class LeavePromotionServiceTest {
     }
 
     @Test
-    void 사용_기한이_고른_개월_안이고_사용_계획_없는_연차가_있는_직원만_대상이다() {
+    void 사용_기한이_고른_개월_안이고_남은_연차가_있는_직원만_대상이다() {
         기간(직원(1L, "두달", "a@company.com"), TODAY.plusMonths(2), "15", "5");
         기간(직원(2L, "다씀", "b@company.com"), TODAY.plusMonths(1), "15", "15");
         기간(직원(3L, "일곱달", "c@company.com"), TODAY.plusMonths(7), "15", "0");
-        기간(직원(4L, "대기", "d@company.com"), TODAY.plusDays(20), "15", "13");
+        기간(직원(4L, "다신청", "d@company.com"), TODAY.plusDays(20), "15", "13");
         when(requestRepository.sumPendingDeductedDays(eq(4L), anyInt())).thenReturn(new BigDecimal("2"));
 
-        assertThat(service.targets(6)).extracting(LeavePromotionService.Target::name).containsExactly("두달");
-        assertThat(service.targets(3)).extracting(LeavePromotionService.Target::name).containsExactly("두달");
-        assertThat(service.targets(1)).isEmpty();
+        // 남은 연차를 모두 결재 대기로 신청해 둔 직원도 남은 연차가 있으면 대상(결재 대기 일수로 따로 보여 줌)
+        assertThat(service.targets(6)).extracting(LeavePromotionService.Target::name).containsExactly("다신청", "두달");
+        assertThat(service.targets(3)).extracting(LeavePromotionService.Target::name).containsExactly("다신청", "두달");
+        assertThat(service.targets(1)).extracting(LeavePromotionService.Target::name).containsExactly("다신청");
     }
 
     @Test
-    void 사용_기한이_가까운_순이고_사용_계획_없는_연차는_결재_대기를_뺀_값이다() {
+    void 사용_기한이_가까운_순이고_결재_대기_일수를_따로_보여준다() {
         기간(직원(1L, "나중", "a@company.com"), TODAY.plusMonths(5), "15", "5");
         기간(직원(2L, "먼저", "b@company.com"), TODAY.plusDays(10), "16", "4");
-        when(requestRepository.sumPendingDeductedDays(eq(2L), anyInt())).thenReturn(new BigDecimal("3"));
+        when(requestRepository.sumPendingDeductedDays(eq(2L), anyInt())).thenReturn(new BigDecimal("2.125"));
 
         List<LeavePromotionService.Target> targets = service.targets(6);
 
         assertThat(targets).extracting(LeavePromotionService.Target::name).containsExactly("먼저", "나중");
         LeavePromotionService.Target 먼저 = targets.get(0);
         assertThat(먼저.remaining()).isEqualByComparingTo("12");
-        assertThat(먼저.unplanned()).isEqualByComparingTo("9");
+        assertThat(먼저.pending()).isEqualByComparingTo("2.125");
         assertThat(먼저.daysLeft()).isEqualTo(10);
         assertThat(먼저.timeLeft()).isEqualTo("10일");
     }
@@ -145,17 +146,22 @@ class LeavePromotionServiceTest {
     @Test
     void 고른_직원에게_알림과_메일을_보내고_발송_이력을_남긴다() {
         LeaveBalanceService.PeriodBalance pb = 기간(직원(1L, "홍길동", "hong@company.com"), TODAY.plusMonths(2), "15", "5");
+        when(requestRepository.sumPendingDeductedDays(eq(1L), anyInt())).thenReturn(new BigDecimal("2.125"));
 
         LeavePromotionService.SendResult result = service.send(List.of(1L), 99L);
 
         assertThat(result).isEqualTo(new LeavePromotionService.SendResult(1, 1, 0));
-        verify(notificationService).notify(eq(1L), eq("LEAVE_PROMOTION"), eq("연차 사용 촉진 안내"), any(), eq("/my-leaves"));
+        verify(notificationService).notify(eq(1L), eq("LEAVE_PROMOTION"), eq("연차 사용 촉진 안내"),
+                eq("남은 연차 10일(결재 대기 2.125일), 사용 기한 " + pb.period().end() + "("
+                        + LeavePromotionService.timeLeft(TODAY, pb.period().end()) + " 남음). 기한 전에 휴가를 신청해 주세요."),
+                eq("/my-leaves"));
         ArgumentCaptor<LeaveMail> mail = ArgumentCaptor.forClass(LeaveMail.class);
         verify(eventPublisher).publishEvent(mail.capture());
         assertThat(mail.getValue().to()).containsExactly("hong@company.com");
-        assertThat(mail.getValue().subject()).isEqualTo("[연차관리] 연차 사용 촉진 안내 - 사용 계획 없는 연차 10일 (사용 기한 "
+        assertThat(mail.getValue().subject()).isEqualTo("[연차관리] 연차 사용 촉진 안내 - 남은 연차 10일 (사용 기한 "
                 + pb.period().end() + ")");
         assertThat(mail.getValue().text()).contains("수신자: 홍길동", "발송자: 김인사 (인사관리자)",
+                "사용하지 않은 연차가 10일 남아 있습니다. (결재 대기 중인 휴가 2.125일)", "결재 대기: 2.125일", "남은 연차: 10일",
                 "사용 기한: " + pb.period().end() + " (" + LeavePromotionService.timeLeft(TODAY, pb.period().end())
                         + " 남음, D-" + (pb.period().end().toEpochDay() - TODAY.toEpochDay()) + ")");
         ArgumentCaptor<PromotionNotice> notice = ArgumentCaptor.forClass(PromotionNotice.class);

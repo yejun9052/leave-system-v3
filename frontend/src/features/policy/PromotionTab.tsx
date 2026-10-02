@@ -33,7 +33,7 @@ function urgency(daysLeft: number): "destructive" | "warning" | "secondary" {
 }
 
 /**
- * 연차 사용 촉진: 사용 기한(직원별 연차 기간의 마지막 날)이 N개월 안이고 사용 계획 없는 연차가 있는 직원을 찾아
+ * 연차 사용 촉진: 사용 기한(직원별 연차 기간의 마지막 날)이 N개월 안이고 남은 연차가 있는 직원을 찾아
  * 골라서 안내(앱 알림 + 메일)를 보낸다. 남은 기간은 서버가 계산한다.
  */
 export default function PromotionTab() {
@@ -67,7 +67,7 @@ export default function PromotionTab() {
     granted: (t) => t.granted,
     used: (t) => t.used,
     pending: (t) => t.pending,
-    unplanned: (t) => t.unplanned,
+    remaining: (t) => t.remaining,
     last: (t) => t.lastNotifiedAt,
   });
 
@@ -118,8 +118,8 @@ export default function PromotionTab() {
       <CardHeader>
         <CardTitle className="text-base">연차 사용 촉진</CardTitle>
         <p className="text-sm text-muted-foreground">
-          사용 기한(직원별 연차 기간의 마지막 날)이 다가오는데 사용 계획이 없는 연차(남은 연차 − 결재 대기)가 있는
-          직원입니다. 골라서 안내를 보내면 남은 기간을 계산해 메일과 앱 알림으로 알립니다.
+          사용 기한(직원별 연차 기간의 마지막 날)이 다가오는데 남은 연차가 있는 직원입니다. 결재 대기는 신청만 해 두고
+          아직 승인되지 않은 일수입니다. 골라서 안내를 보내면 남은 기간을 계산해 메일과 앱 알림으로 알립니다.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -168,7 +168,7 @@ export default function PromotionTab() {
               <SortableTableHead sortKey="granted" sort={sort} onSort={toggle}>부여</SortableTableHead>
               <SortableTableHead sortKey="used" sort={sort} onSort={toggle}>사용</SortableTableHead>
               <SortableTableHead sortKey="pending" sort={sort} onSort={toggle}>결재 대기</SortableTableHead>
-              <SortableTableHead sortKey="unplanned" sort={sort} onSort={toggle}>사용 계획 없음</SortableTableHead>
+              <SortableTableHead sortKey="remaining" sort={sort} onSort={toggle}>남은 연차</SortableTableHead>
               <SortableTableHead sortKey="last" sort={sort} onSort={toggle}>최근 발송</SortableTableHead>
             </TableRow>
           </TableHeader>
@@ -220,11 +220,11 @@ function TargetRow({ t, checked, onToggle }: { t: PromotionTarget; checked: bool
           {t.timeLeft} 남음 · {t.daysLeft === 0 ? "D-day" : `D-${t.daysLeft}`}
         </Badge>
       </TableCell>
-      <TableCell>{formatDays(t.granted)}</TableCell>
-      <TableCell>{formatDays(t.used)}</TableCell>
-      <TableCell>{t.pending > 0 ? formatDays(t.pending) : "-"}</TableCell>
+      <TableCell>{formatDays(t.granted)}일</TableCell>
+      <TableCell>{formatDays(t.used)}일</TableCell>
+      <TableCell>{t.pending > 0 ? `${formatDays(t.pending)}일` : "-"}</TableCell>
       <TableCell>
-        <Badge variant="warning">{formatDays(t.unplanned)}일</Badge>
+        <Badge variant="warning">{formatDays(t.remaining)}일</Badge>
       </TableCell>
       <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
         {t.lastNotifiedAt ? (
