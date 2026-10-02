@@ -32,16 +32,16 @@ public final class PromotionMailTemplates {
     }
 
     /**
-     * @param by        보낸 관리자(자동 발송이면 null)
+     * @param sender    발송자 줄(예: "김인사 (인사관리자)", "자동 발송 (사용 기한 2개월 전 안내)"). null 이면 줄을 넣지 않음
      * @param carryOver 정책에서 이월을 허용하면 true(소멸 문구가 달라진다)
      */
-    public static Mail promotion(Notice n, LeaveMailTemplates.Handler by, boolean carryOver, String baseUrl) {
+    public static Mail promotion(Notice n, String sender, boolean carryOver, String baseUrl) {
         List<String> intro = new ArrayList<>();
         intro.add(n.name() + "님, 사용하지 않은 연차가 " + days(n.remaining()) + " 남아 있습니다."
                 + (n.pending().signum() > 0 ? " (결재 대기 중인 휴가 " + days(n.pending()) + ")" : ""));
         intro.add("사용 기한(" + n.periodEnd() + ")이 지나면 " + (carryOver ? "이월 한도를 넘는 연차는" : "남은 연차는")
                 + " 소멸됩니다. 사용 계획을 세워 휴가를 신청해 주세요.");
-        List<Row> head = by != null ? List.of(Row.of("발송자", by.display())) : List.of();
+        List<Row> head = sender != null ? List.of(Row.of("발송자", sender)) : List.of();
         List<Row> rows = new ArrayList<>();
         rows.add(Row.of("이름", n.name()));
         rows.add(Row.of("소속", n.departmentName() != null ? n.departmentName() : "-"));

@@ -205,18 +205,86 @@ class LeavePromotionServiceTest {
     }
 
     @Test
-    void 정기_알림은_사용_계획_없는_연차가_있는_모든_재직자에게_앱_알림만_보낸다() {
-        기간(직원(1L, "멀리", "a@company.com"), TODAY.plusMonths(9), "15", "5");
-        기간(직원(2L, "다씀", "b@company.com"), TODAY.plusMonths(2), "15", "15");
+    void 자동_발송은_발송_시기에_들어온_직원에게_가장_가까운_시기로_한_번씩_보낸다() {
+        자동_발송_켬(6, 2);
+        기간(직원(1L, "다섯달", "a@company.com"), TODAY.plusMonths(5), "15", "5");
+        기간(직원(2L, "한달", "b@company.com"), TODAY.plusMonths(1), "15", "5");
+        기간(직원(3L, "다씀", "c@company.com"), TODAY.plusMonths(1), "15", "15");
 
-        assertThat(service.notifyRemaining()).isEqualTo(1);
+        LeavePromotionService.AutoResult result = service.autoSend();
 
-        verify(notificationService).notify(eq(1L), eq("LEAVE_PROMOTION"), any(), any(), any());
-        verify(eventPublisher, never()).publishEvent(any());
+        assertThat(result).isEqualTo(new LeavePromotionService.AutoResult(2, 2, 0));
+        ArgumentCaptor<PromotionNotice> notices = ArgumentCaptor.forClass(PromotionNotice.class);
+        verify(noticeRepository, times(2)).save(notices.capture());
+        assertThat(notices.getAllValues()).extracting(PromotionNotice::getEmployeeId, PromotionNotice::getAutoMonths,
+                        PromotionNotice::getSentBy)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(2L, 2, null),
+                        org.assertj.core.groups.Tuple.tuple(1L, 6, null));
+        ArgumentCaptor<LeaveMail> mails = ArgumentCaptor.forClass(LeaveMail.class);
+        verify(eventPublisher, times(2)).publishEvent(mails.capture());
+        assertThat(mails.getAllValues().get(0).text()).contains("발송자: 자동 발송 (사용 기한 2개월 전 안내)");
+    }
+
+    @Test
+    void 같은_시기에_이미_보낸_직원은_관리자_수동_발송이어도_건너뛴다() {
+        자동_발송_켬(6, 2);
+        LeaveBalanceService.PeriodBalance pb = 기간(직원(1L, "한달", "a@company.com"), TODAY.plusMonths(1), "15", "5");
+        when(noticeRepository.findByEmployeeIdIn(any())).thenReturn(List.of(
+                발송_이력(1L, pb.balance().getYear(), TODAY.minusDays(10), null))); // 2개월 전 시기 안의 수동 발송
+
+        LeavePromotionService.AutoResult result = service.autoSend();
+
+        assertThat(result).isEqualTo(new LeavePromotionService.AutoResult(0, 0, 1));
         verify(noticeRepository, never()).save(any());
+        assertThat(service.autoPreview()).isEmpty();
+    }
+
+    @Test
+    void 앞_시기에_보낸_것은_다음_시기_발송을_막지_않는다() {
+        자동_발송_켬(6, 2);
+        LeaveBalanceService.PeriodBalance pb = 기간(직원(1L, "한달", "a@company.com"), TODAY.plusMonths(1), "15", "5");
+        when(noticeRepository.findByEmployeeIdIn(any())).thenReturn(List.of(
+                발송_이력(1L, pb.balance().getYear(), TODAY.minusMonths(4), 6), // 6개월 전 시기에 보냄
+                발송_이력(1L, pb.balance().getYear() - 1, TODAY.minusDays(3), null))); // 지난 연차 기간 발송은 무관
+
+        assertThat(service.autoPreview()).extracting(LeavePromotionService.AutoTarget::stageMonths).containsExactly(2);
+        assertThat(service.autoSend().sent()).isEqualTo(1);
+    }
+
+    @Test
+    void 발송_시기_밖의_직원은_자동으로_보내지_않는다() {
+        자동_발송_켬(2);
+        기간(직원(1L, "다섯달", "a@company.com"), TODAY.plusMonths(5), "15", "5");
+
+        assertThat(service.autoSend()).isEqualTo(new LeavePromotionService.AutoResult(0, 0, 0));
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void 미리보기는_보내지_않고_대상과_발송_시기만_알려준다() {
+        자동_발송_켬(6, 2);
+        기간(직원(1L, "다섯달", "a@company.com"), TODAY.plusMonths(5), "15", "5");
+
+        assertThat(service.autoPreview()).extracting(LeavePromotionService.AutoTarget::name,
+                LeavePromotionService.AutoTarget::stageMonths).containsExactly(org.assertj.core.groups.Tuple.tuple("다섯달", 6));
+        verify(noticeRepository, never()).save(any());
+        verify(notificationService, never()).notify(any(), any(), any(), any(), any());
     }
 
     // --- helpers ---
+
+    private void 자동_발송_켬(Integer... months) {
+        LeavePolicy policy = LeavePolicy.createDefault();
+        policy.applyAutomation(true, List.of(months));
+        lenient().when(policyService.getActivePolicy()).thenReturn(policy);
+    }
+
+    private static PromotionNotice 발송_이력(Long employeeId, int year, LocalDate sentOn, Integer autoMonths) {
+        PromotionNotice n = new PromotionNotice(employeeId, year, sentOn.plusMonths(1), BigDecimal.TEN, 30,
+                "a@company.com", autoMonths == null ? 99L : null, autoMonths);
+        ReflectionTestUtils.setField(n, "sentAt", sentOn.atStartOfDay(java.time.ZoneId.of("Asia/Seoul")).toInstant());
+        return n;
+    }
 
     private Employee 직원(Long id, String name, String email) {
         Employee e = Employee.builder().email(email).passwordHash("h").name(name)

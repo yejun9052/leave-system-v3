@@ -48,6 +48,10 @@ public class PromotionNotice {
     @Column(name = "sent_by")
     private Long sentBy;
 
+    /** 자동 발송이면 그때의 발송 시기(사용 기한 N개월 전), 수동 발송이면 null(V27). */
+    @Column(name = "auto_months")
+    private Integer autoMonths;
+
     @Column(name = "sent_at", nullable = false, updatable = false)
     private Instant sentAt = Instant.now();
 
@@ -55,7 +59,7 @@ public class PromotionNotice {
     }
 
     public PromotionNotice(Long employeeId, int balanceYear, LocalDate periodEnd, BigDecimal remainingDays,
-                           int daysLeft, String email, Long sentBy) {
+                           int daysLeft, String email, Long sentBy, Integer autoMonths) {
         this.employeeId = employeeId;
         this.balanceYear = balanceYear;
         this.periodEnd = periodEnd;
@@ -63,6 +67,7 @@ public class PromotionNotice {
         this.daysLeft = daysLeft;
         this.email = email;
         this.sentBy = sentBy;
+        this.autoMonths = autoMonths;
     }
 
     public Long getId() {
@@ -95,6 +100,10 @@ public class PromotionNotice {
 
     public Long getSentBy() {
         return sentBy;
+    }
+
+    public Integer getAutoMonths() {
+        return autoMonths;
     }
 
     public Instant getSentAt() {

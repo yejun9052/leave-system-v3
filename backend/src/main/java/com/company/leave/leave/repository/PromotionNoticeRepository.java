@@ -18,4 +18,6 @@ public interface PromotionNoticeRepository extends JpaRepository<PromotionNotice
             group by n.employeeId, n.balanceYear
             """)
     List<PromotionNoticeSummary> summarize(@Param("employeeIds") Collection<Long> employeeIds);
+
+    List<PromotionNotice> findByEmployeeIdIn(Collection<Long> employeeIds);
 }

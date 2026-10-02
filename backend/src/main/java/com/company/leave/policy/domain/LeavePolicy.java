@@ -11,6 +11,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * 전사 연차 운영 정책 (단일 활성 레코드).
@@ -79,8 +83,13 @@ public class LeavePolicy extends BaseTimeEntity {
     private int maxConsecutiveDays = 0;
 
     // --- 촉진 / 이월 ---
+    /** 연차 촉진 자동 발송 ON/OFF(V27). 자동화 탭에서 따로 저장한다({@link #applyAutomation}). */
     @Column(name = "promotion_enabled", nullable = false)
-    private boolean promotionEnabled = true;
+    private boolean promotionEnabled = false;
+
+    /** 자동 발송 시기: 사용 기한 몇 개월 전(1~6, 쉼표 구분, 예 "6,2"). */
+    @Column(name = "promotion_months", nullable = false, length = 20)
+    private String promotionMonths = "6,2";
 
     @Column(name = "carry_over_enabled", nullable = false)
     private boolean carryOverEnabled = false;
@@ -119,7 +128,6 @@ public class LeavePolicy extends BaseTimeEntity {
         this.maxConcurrentAbsence = s.maxConcurrentAbsence();
         this.minAdvanceDays = s.minAdvanceDays();
         this.maxConsecutiveDays = s.maxConsecutiveDays();
-        this.promotionEnabled = s.promotionEnabled();
         this.carryOverEnabled = s.carryOverEnabled();
         this.maxCarryOverDays = s.maxCarryOverDays() != null ? s.maxCarryOverDays() : BigDecimal.ZERO;
         this.nextPeriodReservationEnabled = s.nextPeriodReservationEnabled();
@@ -142,7 +150,6 @@ public class LeavePolicy extends BaseTimeEntity {
             int maxConcurrentAbsence,
             int minAdvanceDays,
             int maxConsecutiveDays,
-            boolean promotionEnabled,
             boolean carryOverEnabled,
             BigDecimal maxCarryOverDays,
             boolean nextPeriodReservationEnabled) {
@@ -224,6 +231,30 @@ public class LeavePolicy extends BaseTimeEntity {
 
     public boolean isPromotionEnabled() {
         return promotionEnabled;
+    }
+
+    /** 자동 발송 시기(사용 기한 몇 개월 전), 큰 값부터. */
+    public List<Integer> getPromotionMonths() {
+        return Arrays.stream(promotionMonths.split(",")).map(String::trim).filter(v -> !v.isEmpty())
+                .map(Integer::valueOf).sorted(Comparator.reverseOrder()).toList();
+    }
+
+    /**
+     * 자동화 설정 저장. 시기는 1~6개월, 겹치지 않게 정리한다. 켤 때는 시기가 하나 이상 있어야 한다.
+     *
+     * @throws IllegalArgumentException 시기가 범위를 벗어나거나 켰는데 시기가 없을 때
+     */
+    public void applyAutomation(boolean promotionEnabled, Collection<Integer> months) {
+        List<Integer> sorted = (months == null ? List.<Integer>of() : months).stream()
+                .distinct().sorted(Comparator.reverseOrder()).toList();
+        if (sorted.stream().anyMatch(m -> m == null || m < 1 || m > 6)) {
+            throw new IllegalArgumentException("발송 시기는 사용 기한 1~6개월 전 중에서 고를 수 있습니다.");
+        }
+        if (sorted.isEmpty()) {
+            throw new IllegalArgumentException("발송 시기를 하나 이상 골라 주세요.");
+        }
+        this.promotionEnabled = promotionEnabled;
+        this.promotionMonths = String.join(",", sorted.stream().map(String::valueOf).toList());
     }
 
     public boolean isCarryOverEnabled() {

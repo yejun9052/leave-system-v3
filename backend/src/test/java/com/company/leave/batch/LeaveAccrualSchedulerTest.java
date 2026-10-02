@@ -1,6 +1,11 @@
 package com.company.leave.batch;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -15,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DisplayNameGeneration;
@@ -41,12 +47,22 @@ class LeaveAccrualSchedulerTest {
     private PolicyService policyService;
     @Mock
     private LeavePolicy policy;
+    @Mock
+    private JobRunRecorder recorder;
 
     private LeaveAccrualScheduler scheduler;
 
     @BeforeEach
     void setUp() {
-        scheduler = new LeaveAccrualScheduler(leaveGrantService, promotionService, policyService);
+        scheduler = new LeaveAccrualScheduler(leaveGrantService, promotionService, policyService, recorder);
+        기록은_작업만_실행();
+    }
+
+    /** 실행 기록은 DB 대신 작업만 그대로 실행한다. */
+    @SuppressWarnings("unchecked")
+    private void 기록은_작업만_실행() {
+        lenient().doAnswer(inv -> ((Supplier<String>) inv.getArgument(1)).get())
+                .when(recorder).run(anyString(), any());
     }
 
     private static Scheduled schedule(String methodName) throws NoSuchMethodException {
@@ -74,10 +90,9 @@ class LeaveAccrualSchedulerTest {
     }
 
     @Test
-    void 촉진은_7월_1일과_11월_1일_9시에_실행된다() throws Exception {
-        assertThat(next("promotion", seoul(2026, 1, 1, 0, 0))).isEqualTo(seoul(2026, 7, 1, 9, 0));
-        assertThat(next("promotion", seoul(2026, 7, 1, 9, 0))).isEqualTo(seoul(2026, 11, 1, 9, 0));
-        assertThat(next("promotion", seoul(2026, 11, 1, 9, 0))).isEqualTo(seoul(2027, 7, 1, 9, 0));
+    void 촉진_자동_발송은_매일_9시에_실행된다() throws Exception {
+        assertThat(next("promotion", seoul(2026, 3, 5, 8, 59))).isEqualTo(seoul(2026, 3, 5, 9, 0));
+        assertThat(next("promotion", seoul(2026, 3, 5, 9, 0))).isEqualTo(seoul(2026, 3, 6, 9, 0));
     }
 
     @Test
@@ -97,28 +112,32 @@ class LeaveAccrualSchedulerTest {
         scheduler.dailyRecompute();
 
         verify(leaveGrantService, times(1)).grantCurrentPeriods();
+        verify(recorder).run(eq(JobRunRecorder.LEAVE_GRANT), any());
         verifyNoMoreInteractions(leaveGrantService);
         verifyNoInteractions(promotionService, policyService);
     }
 
     @Test
-    void 촉진_정책이_켜져_있으면_정기_촉진_알림을_보낸다() {
+    void 촉진_자동_발송이_켜져_있으면_자동_발송을_실행하고_기록한다() {
         when(policyService.getActivePolicy()).thenReturn(policy);
         when(policy.isPromotionEnabled()).thenReturn(true);
+        when(promotionService.autoSend()).thenReturn(new LeavePromotionService.AutoResult(2, 1, 3));
 
         scheduler.promotion();
 
-        verify(promotionService, times(1)).notifyRemaining();
+        verify(promotionService, times(1)).autoSend();
+        verify(recorder).run(eq(JobRunRecorder.PROMOTION_AUTO), any());
         verifyNoInteractions(leaveGrantService);
     }
 
     @Test
-    void 촉진_정책이_꺼져_있으면_촉진을_실행하지_않는다() {
+    void 촉진_자동_발송이_꺼져_있으면_보내지_않고_건너뜀으로_기록한다() {
         when(policyService.getActivePolicy()).thenReturn(policy);
         when(policy.isPromotionEnabled()).thenReturn(false);
 
         scheduler.promotion();
 
         verifyNoInteractions(promotionService, leaveGrantService);
+        verify(recorder).skipped(JobRunRecorder.PROMOTION_AUTO, "자동 발송이 꺼져 있어 보내지 않음");
     }
 }

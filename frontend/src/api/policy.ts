@@ -20,7 +20,10 @@ export interface Policy {
   maxConcurrentAbsence: number;
   minAdvanceDays: number;
   maxConsecutiveDays: number;
+  /** 연차 촉진 자동 발송 ON/OFF (자동화 탭에서 따로 저장, 연차 정책 저장에는 반영되지 않음) */
   promotionEnabled: boolean;
+  /** 자동 발송 시기: 사용 기한 몇 개월 전(큰 값부터) */
+  promotionMonths: number[];
   carryOverEnabled: boolean;
   maxCarryOverDays: number;
   /** 다음 연차 기간(다음 기산일 이후) 날짜의 연차 신청 허용 */
@@ -112,6 +115,47 @@ export const promotionApi = {
     unwrap<PromotionTarget[]>(api.get("/leave/promotion/targets", { params: { months } })),
   send: (employeeIds: number[]) =>
     unwrap<PromotionSendResult>(api.post("/leave/promotion/send", { employeeIds })),
+};
+
+/** 자동 작업 상태: 항상 실행 / 켜짐 / 꺼짐 / 설정 없음(실행해도 건너뜀) */
+export type AutomationJobState = "ALWAYS" | "ON" | "OFF" | "NOT_CONFIGURED";
+
+export interface AutomationJob {
+  key: string;
+  name: string;
+  description: string;
+  /** "매일 01:00" */
+  schedule: string;
+  state: AutomationJobState;
+  lastStartedAt: string | null;
+  lastFinishedAt: string | null;
+  /** 성공 true, 실패 false, 건너뜀 null */
+  lastSuccess: boolean | null;
+  lastMessage: string | null;
+}
+
+/** 지금 자동 발송을 돌리면 보낼 직원 */
+export interface AutoPromotionTarget {
+  employeeId: number;
+  name: string;
+  department: string | null;
+  periodEnd: string;
+  timeLeft: string;
+  /** 이번에 보낼 발송 시기(사용 기한 N개월 전) */
+  stageMonths: number;
+}
+
+export interface AutomationOverview {
+  promotionEnabled: boolean;
+  promotionMonths: number[];
+  promotionPreview: AutoPromotionTarget[];
+  jobs: AutomationJob[];
+}
+
+export const automationApi = {
+  get: () => unwrap<AutomationOverview>(api.get("/policy/automation")),
+  updatePromotion: (promotionEnabled: boolean, promotionMonths: number[]) =>
+    unwrap<AutomationOverview>(api.put("/policy/automation/promotion", { promotionEnabled, promotionMonths })),
 };
 
 export interface LeaveTypeInput {

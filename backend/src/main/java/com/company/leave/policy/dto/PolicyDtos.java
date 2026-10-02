@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
+import java.util.List;
 
 public final class PolicyDtos {
 
@@ -30,6 +31,7 @@ public final class PolicyDtos {
             int minAdvanceDays,
             int maxConsecutiveDays,
             boolean promotionEnabled,
+            List<Integer> promotionMonths,
             boolean carryOverEnabled,
             BigDecimal maxCarryOverDays,
             boolean nextPeriodReservationEnabled) {
@@ -41,7 +43,7 @@ public final class PolicyDtos {
                     p.getMonthlyAccrualMax(), p.isAllowNegative(), p.isHalfDayEnabled(),
                     p.isHourlyEnabled(),
                     p.getMaxConcurrentAbsence(), p.getMinAdvanceDays(), p.getMaxConsecutiveDays(),
-                    p.isPromotionEnabled(), p.isCarryOverEnabled(), p.getMaxCarryOverDays(),
+                    p.isPromotionEnabled(), p.getPromotionMonths(), p.isCarryOverEnabled(), p.getMaxCarryOverDays(),
                     p.isNextPeriodReservationEnabled());
         }
     }
@@ -62,7 +64,6 @@ public final class PolicyDtos {
             @Min(0) int maxConcurrentAbsence,
             @Min(0) int minAdvanceDays,
             @Min(0) int maxConsecutiveDays,
-            boolean promotionEnabled,
             boolean carryOverEnabled,
             @NotNull BigDecimal maxCarryOverDays,
             /** 다음 연차 기간 예약 허용. 보내지 않으면(이전 화면) 켜짐 */
@@ -74,7 +75,7 @@ public final class PolicyDtos {
                     monthlyAccrualEnabled, monthlyAccrualMax, allowNegative, halfDayEnabled,
                     hourlyEnabled,
                     maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
-                    promotionEnabled, carryOverEnabled, maxCarryOverDays,
+                    carryOverEnabled, maxCarryOverDays,
                     !Boolean.FALSE.equals(nextPeriodReservationEnabled));
         }
     }

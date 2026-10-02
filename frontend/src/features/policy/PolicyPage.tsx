@@ -41,6 +41,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import HolidayTab from "./HolidayTab";
 import PromotionTab from "./PromotionTab";
+import AutomationTab from "./AutomationTab";
 
 const PORTION_LABEL: Record<LeavePortion, string> = {
   FULL: "종일",
@@ -64,6 +65,7 @@ export default function PolicyPage() {
           <TabsTrigger value="blackout">블랙아웃</TabsTrigger>
           <TabsTrigger value="holidays">공휴일</TabsTrigger>
           <TabsTrigger value="promotion">촉진 · 미사용</TabsTrigger>
+          <TabsTrigger value="automation">자동화</TabsTrigger>
         </TabsList>
         <TabsContent value="policy">
           <PolicyTab />
@@ -82,6 +84,9 @@ export default function PolicyPage() {
         </TabsContent>
         <TabsContent value="promotion">
           <PromotionTab />
+        </TabsContent>
+        <TabsContent value="automation">
+          <AutomationTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -196,12 +201,6 @@ function PolicyTab() {
             desc="다음 기산일 이후 날짜도 신청(그 기간 예상 부여 일수 안에서, 다음 기간 끝까지)"
             checked={form.nextPeriodReservationEnabled}
             onChange={(v) => set("nextPeriodReservationEnabled", v)}
-          />
-          <ToggleRow
-            label="연차 촉진제도 사용"
-            desc="사용 기한 전 자동 안내"
-            checked={form.promotionEnabled}
-            onChange={(v) => set("promotionEnabled", v)}
           />
           <ToggleRow
             label="미사용 연차 이월"

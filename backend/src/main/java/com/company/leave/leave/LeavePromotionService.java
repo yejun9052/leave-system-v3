@@ -15,10 +15,12 @@ import com.company.leave.mail.MailLayout;
 import com.company.leave.mail.PromotionMailTemplates;
 import com.company.leave.notification.NotificationService;
 import com.company.leave.policy.PolicyService;
+import com.company.leave.policy.domain.LeavePolicy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Period;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -46,6 +48,7 @@ public class LeavePromotionService {
     public static final int MAX_MONTHS = 6;
 
     private static final Logger log = LoggerFactory.getLogger(LeavePromotionService.class);
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final LeaveBalanceService balanceService;
     private final LeaveRequestRepository requestRepository;
@@ -172,7 +175,7 @@ public class LeavePromotionService {
                 skipped++;
                 continue;
             }
-            if (deliver(t, e, actor, carryOver)) {
+            if (deliver(t, e, actor, null, carryOver)) {
                 mailed++;
             }
             sent++;
@@ -181,48 +184,110 @@ public class LeavePromotionService {
         return new SendResult(sent, mailed, skipped);
     }
 
-    /** @return 메일까지 보냈으면 true(메일 주소가 없으면 앱 알림만) */
-    private boolean deliver(Target t, Employee e, Employee actor, boolean carryOver) {
+    /** 자동 발송 대상 한 명. stageMonths: 이번에 보낼 발송 시기(사용 기한 N개월 전). */
+    public record AutoTarget(Long employeeId, String name, String department, LocalDate periodEnd, String timeLeft,
+                             int stageMonths) {
+    }
+
+    /** 자동 발송 결과. alreadySent: 같은 시기에 이미 보내(수동 포함) 건너뛴 인원. */
+    public record AutoResult(int sent, int mailed, int alreadySent) {
+    }
+
+    private record AutoPlan(List<AutoTarget> targets, Map<Long, Target> byEmployee, int alreadySent) {
+    }
+
+    /**
+     * 자동 발송(스케줄러, 매일 09:00, 정책에서 켰을 때). 정책의 발송 시기(예: 사용 기한 6개월 전·2개월 전)마다
+     * 그 시기에 들어온 직원에게 남은 연차가 있으면 수동 발송과 같은 알림·메일을 보내고 이력을 남긴다.
+     * <ul>
+     *   <li>같은 시기에 이미 보낸 직원(관리자 수동 발송 포함)은 건너뛴다. 다음 시기에는 다시 보낸다</li>
+     *   <li>여러 시기에 한꺼번에 들어와 있으면(시기를 늦게 켠 경우 등) 가장 가까운 시기로 한 번만 보낸다</li>
+     * </ul>
+     */
+    @Transactional
+    public AutoResult autoSend() {
+        LeavePolicy policy = policyService.getActivePolicy();
+        AutoPlan plan = autoPlan(policy, LocalDate.now());
+        int mailed = 0;
+        int sent = 0;
+        for (AutoTarget a : plan.targets()) {
+            Employee e = employeeRepository.findById(a.employeeId()).orElse(null);
+            if (e == null) {
+                continue;
+            }
+            if (deliver(plan.byEmployee().get(a.employeeId()), e, null, a.stageMonths(), policy.isCarryOverEnabled())) {
+                mailed++;
+            }
+            sent++;
+        }
+        log.info("연차 촉진 자동 발송: {}명(메일 {}명), 같은 시기 발송 이력으로 건너뜀 {}명", sent, mailed, plan.alreadySent());
+        return new AutoResult(sent, mailed, plan.alreadySent());
+    }
+
+    /** 지금 자동 발송을 돌리면 보낼 직원(보내지 않음). 자동화 탭 미리보기용. */
+    @Transactional(readOnly = true)
+    public List<AutoTarget> autoPreview() {
+        return autoPlan(policyService.getActivePolicy(), LocalDate.now()).targets();
+    }
+
+    private AutoPlan autoPlan(LeavePolicy policy, LocalDate today) {
+        List<Integer> months = policy.getPromotionMonths(); // 큰 값부터
+        if (months.isEmpty()) {
+            return new AutoPlan(List.of(), Map.of(), 0);
+        }
+        List<Target> candidates = targets(months.get(0));
+        if (candidates.isEmpty()) {
+            return new AutoPlan(List.of(), Map.of(), 0);
+        }
+        Map<String, List<LocalDate>> sentDates = noticeRepository
+                .findByEmployeeIdIn(candidates.stream().map(Target::employeeId).toList()).stream()
+                .collect(Collectors.groupingBy(n -> n.getEmployeeId() + ":" + n.getBalanceYear(),
+                        Collectors.mapping(n -> LocalDate.ofInstant(n.getSentAt(), SEOUL), Collectors.toList())));
+        List<AutoTarget> planned = new ArrayList<>();
+        int already = 0;
+        for (Target t : candidates) {
+            // 들어와 있는 시기 중 가장 가까운 것(가장 작은 개월 수)
+            int stage = months.stream().filter(m -> !t.periodEnd().isAfter(today.plusMonths(m)))
+                    .min(Integer::compare).orElse(months.get(0));
+            LocalDate windowStart = t.periodEnd().minusMonths(stage);
+            boolean sentInWindow = sentDates.getOrDefault(t.employeeId() + ":" + t.year(), List.of()).stream()
+                    .anyMatch(d -> !d.isBefore(windowStart));
+            if (sentInWindow) {
+                already++;
+                continue;
+            }
+            planned.add(new AutoTarget(t.employeeId(), t.name(), t.department(), t.periodEnd(), t.timeLeft(), stage));
+        }
+        return new AutoPlan(planned, candidates.stream().collect(Collectors.toMap(Target::employeeId, Function.identity())),
+                already);
+    }
+
+    /**
+     * 알림·메일을 보내고 이력을 남긴다.
+     *
+     * @param actor      보낸 관리자(자동 발송이면 null)
+     * @param autoMonths 자동 발송이면 발송 시기(사용 기한 N개월 전), 수동이면 null
+     * @return 메일까지 보냈으면 true(메일 주소가 없으면 앱 알림만)
+     */
+    private boolean deliver(Target t, Employee e, Employee actor, Integer autoMonths, boolean carryOver) {
         notificationService.notify(e.getId(), "LEAVE_PROMOTION", "연차 사용 촉진 안내",
                 notificationMessage(t.remaining(), t.pending(), t.periodEnd(), t.timeLeft()),
                 "/my-leaves");
         boolean mail = hasMailbox(e);
         if (mail) {
+            String sender = actor != null ? LeaveMessenger.handler(actor).display()
+                    : "자동 발송 (사용 기한 " + autoMonths + "개월 전 안내)";
             PromotionMailTemplates.Mail m = PromotionMailTemplates.promotion(
                     new PromotionMailTemplates.Notice(t.name(), t.department(), t.periodStart(), t.periodEnd(),
-                            t.granted(), t.used(), t.remaining(), t.pending(), t.timeLeft(),
-                            t.daysLeft()),
-                    actor != null ? LeaveMessenger.handler(actor) : null, carryOver, mailProperties.linkBaseUrl());
+                            t.granted(), t.used(), t.remaining(), t.pending(), t.timeLeft(), t.daysLeft()),
+                    sender, carryOver, mailProperties.linkBaseUrl());
             MailLayout.Content content = m.content().withRecipient(e.getName());
             eventPublisher.publishEvent(new LeaveMail(List.of(e.getEmail()), m.subject(), content.text(),
                     content.html(), null, null));
         }
         noticeRepository.save(new PromotionNotice(e.getId(), t.year(), t.periodEnd(), t.remaining(),
-                (int) t.daysLeft(), mail ? e.getEmail() : null, actor != null ? actor.getId() : null));
+                (int) t.daysLeft(), mail ? e.getEmail() : null, actor != null ? actor.getId() : null, autoMonths));
         return mail;
-    }
-
-    /**
-     * 정기 알림(스케줄러 7/1·11/1, 정책의 촉진제도 사용이 켜져 있을 때): 지금 연차 기간에 남은 연차가 있는
-     * 재직자 모두에게 앱 알림만 보낸다. 메일·발송 이력은 관리자가 고른 발송({@link #send})에서만 남긴다.
-     */
-    @Transactional
-    public int notifyRemaining() {
-        LocalDate today = LocalDate.now();
-        int count = 0;
-        for (LeaveBalanceService.PeriodBalance pb : balanceService.balancesAsOf(today, true)) {
-            LeaveBalance b = pb.balance();
-            if (b.remaining().signum() <= 0) {
-                continue;
-            }
-            BigDecimal pending = requestRepository.sumPendingDeductedDays(pb.employee().getId(), b.getYear());
-            notificationService.notify(pb.employee().getId(), "LEAVE_PROMOTION", "연차 사용 촉진 안내",
-                    notificationMessage(b.remaining(), pending, pb.period().end(), timeLeft(today, pb.period().end())),
-                    "/my-leaves");
-            count++;
-        }
-        log.info("연차 촉진 정기 알림: {}명", count);
-        return count;
     }
 
     /** 앱 알림 문구: "남은 연차 5일(결재 대기 2.125일), 사용 기한 2026-11-30(1개월 28일 남음). …" */
