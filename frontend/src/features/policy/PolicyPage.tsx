@@ -6,7 +6,6 @@ import {
   leaveTypeApi,
   leaveAdminApi,
   policyRulesApi,
-  promotionApi,
   type Policy,
   type GrantBasis,
   type LeaveTypeInput,
@@ -41,6 +40,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import HolidayTab from "./HolidayTab";
+import PromotionTab from "./PromotionTab";
 
 const PORTION_LABEL: Record<LeavePortion, string> = {
   FULL: "종일",
@@ -740,79 +740,6 @@ function BlackoutTab() {
             const ok = await confirm({ title: "사용 금지 기간을 삭제할까요?", confirmText: "삭제", destructive: true });
             if (ok) del.mutate(id);
           }} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function PromotionTab() {
-  const { toast } = useToast();
-  const confirm = useConfirm();
-  const [year, setYear] = useState(new Date().getFullYear());
-  const { data: targets = [], refetch } = useQuery({
-    queryKey: ["promotionTargets", year],
-    queryFn: () => promotionApi.targets(year),
-  });
-  const { sorted, sort, toggle } = useTableSort(targets, {
-    name: (t) => t.name,
-    department: (t) => t.department,
-    granted: (t) => t.granted,
-    used: (t) => t.used,
-    remaining: (t) => t.remaining,
-  });
-  const run = useMutation({
-    mutationFn: () => promotionApi.run(year),
-    onSuccess: (r) => toast({ title: `${r.notified}명에게 촉진 알림을 보냈습니다.`, variant: "success" }),
-    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
-  });
-
-  return (
-    <Card>
-      <CardHeader><CardTitle className="text-base">연차 촉진 · 미사용 현황</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1"><Label className="text-xs">연도</Label>
-            <Input type="number" className="w-28" value={year} onChange={(e) => setYear(Number(e.target.value))} /></div>
-          <Button size="sm" variant="secondary" onClick={() => refetch()}>조회</Button>
-          <Button
-            size="sm"
-            onClick={async () => {
-              const ok = await confirm({
-                title: `${year}년 연차 촉진 알림을 발송할까요?`,
-                description: "대상 직원에게 알림이 발송되며 되돌릴 수 없습니다.",
-                confirmText: "발송",
-              });
-              if (ok) run.mutate();
-            }}
-            disabled={run.isPending || targets.length === 0}
-          >
-            <PlayCircle className="h-4 w-4" /> 촉진 알림 발송 ({targets.length})
-          </Button>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <SortableTableHead sortKey="name" sort={sort} onSort={toggle}>이름</SortableTableHead>
-              <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
-              <SortableTableHead sortKey="granted" sort={sort} onSort={toggle}>부여</SortableTableHead>
-              <SortableTableHead sortKey="used" sort={sort} onSort={toggle}>사용</SortableTableHead>
-              <SortableTableHead sortKey="remaining" sort={sort} onSort={toggle}>잔여</SortableTableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.length > 0 ? sorted.map((t) => (
-              <TableRow key={t.employeeId}>
-                <TableCell className="font-medium">{t.name}</TableCell>
-                <TableCell>{t.department ?? "-"}</TableCell>
-                <TableCell>{t.granted}</TableCell>
-                <TableCell>{t.used}</TableCell>
-                <TableCell><Badge variant="warning">{t.remaining}일</Badge></TableCell>
-              </TableRow>
-            )) : (
-              <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">잔여 연차가 있는 대상이 없습니다.</TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
       </CardContent>
     </Card>
   );

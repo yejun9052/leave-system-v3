@@ -74,22 +74,44 @@ export const policyRulesApi = {
   removeBlackout: (id: number) => unwrap<void>(api.delete(`/policy/blackouts/${id}`)),
 };
 
+/** 촉진 대상: 사용 기한이 N개월 안이고 사용 계획 없는 연차(남은 연차 − 결재 대기)가 있는 재직자 */
 export interface PromotionTarget {
   employeeId: number;
   name: string;
   department: string | null;
+  hasEmail: boolean;
+  /** 연차 기간(그 해에 시작한 기간) */
+  year: number;
+  periodStart: string;
+  /** 사용 기한 */
+  periodEnd: string;
+  /** 부여(이월 포함) */
   granted: number;
   used: number;
+  pending: number;
   remaining: number;
+  unplanned: number;
+  /** 사용 기한까지 남은 날(기한 당일 0) */
+  daysLeft: number;
+  /** "2개월 29일" (서버 계산) */
+  timeLeft: string;
+  /** 이번 연차 기간에 보낸 횟수 */
+  noticeCount: number;
+  lastNotifiedAt: string | null;
+}
+
+export interface PromotionSendResult {
+  sent: number;
+  mailed: number;
+  /** 그 사이 대상이 아니게 돼 건너뛴 인원 */
+  skipped: number;
 }
 
 export const promotionApi = {
-  targets: (year?: number) =>
-    unwrap<PromotionTarget[]>(api.get("/leave/promotion/targets", { params: { year } })),
-  run: (year?: number) =>
-    unwrap<{ year: number; notified: number }>(
-      api.post("/leave/promotion/run", null, { params: { year } }),
-    ),
+  targets: (months: number) =>
+    unwrap<PromotionTarget[]>(api.get("/leave/promotion/targets", { params: { months } })),
+  send: (employeeIds: number[]) =>
+    unwrap<PromotionSendResult>(api.post("/leave/promotion/send", { employeeIds })),
 };
 
 export interface LeaveTypeInput {

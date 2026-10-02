@@ -102,14 +102,13 @@ class LeaveAccrualSchedulerTest {
     }
 
     @Test
-    void 촉진_정책이_켜져_있으면_올해_연도와_기준_0일로_촉진을_실행한다() {
-        int year = LocalDate.now().getYear();
+    void 촉진_정책이_켜져_있으면_정기_촉진_알림을_보낸다() {
         when(policyService.getActivePolicy()).thenReturn(policy);
         when(policy.isPromotionEnabled()).thenReturn(true);
 
         scheduler.promotion();
 
-        verify(promotionService, times(1)).runPromotion(year, BigDecimal.ZERO);
+        verify(promotionService, times(1)).notifyRemaining();
         verifyNoInteractions(leaveGrantService);
     }
 

@@ -3,8 +3,6 @@ package com.company.leave.batch;
 import com.company.leave.leave.LeaveGrantService;
 import com.company.leave.leave.LeavePromotionService;
 import com.company.leave.policy.PolicyService;
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -45,14 +43,16 @@ public class LeaveAccrualScheduler {
         leaveGrantService.grantCurrentPeriods();
     }
 
-    /** 연차 촉진 1차(7/1), 2차(11/1) - 정책이 켜져 있을 때만 발송 */
+    /**
+     * 연차 촉진 정기 알림 7/1·11/1 - 정책이 켜져 있을 때만. 지금 연차 기간에 사용 계획이 없는 연차가 있는 직원에게 앱 알림만.
+     * (메일 촉진은 관리자가 대상을 골라 보낸다. 직원별 사용 기한에 맞춘 자동 발송은 정책으로 따로 붙일 예정)
+     */
     @Scheduled(cron = "0 0 9 1 7,11 *", zone = "Asia/Seoul")
     public void promotion() {
         if (!policyService.getActivePolicy().isPromotionEnabled()) {
             return;
         }
-        int year = LocalDate.now().getYear();
-        log.info("[스케줄러] 연차 촉진 알림 발송 시작 ({}년)", year);
-        promotionService.runPromotion(year, BigDecimal.ZERO);
+        log.info("[스케줄러] 연차 촉진 정기 알림 발송 시작");
+        promotionService.notifyRemaining();
     }
 }
