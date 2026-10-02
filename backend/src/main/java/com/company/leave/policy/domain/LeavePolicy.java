@@ -88,6 +88,10 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "max_carry_over_days", nullable = false)
     private BigDecimal maxCarryOverDays = BigDecimal.ZERO;
 
+    /** 다음 연차 기간(다음 기산일 이후) 날짜의 연차 신청 허용. 끄면 지금 기간 안에서만 신청(V25). */
+    @Column(name = "next_period_reservation_enabled", nullable = false)
+    private boolean nextPeriodReservationEnabled = true;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -118,6 +122,7 @@ public class LeavePolicy extends BaseTimeEntity {
         this.promotionEnabled = s.promotionEnabled();
         this.carryOverEnabled = s.carryOverEnabled();
         this.maxCarryOverDays = s.maxCarryOverDays() != null ? s.maxCarryOverDays() : BigDecimal.ZERO;
+        this.nextPeriodReservationEnabled = s.nextPeriodReservationEnabled();
     }
 
     /** 정책 설정 값 캐리어. */
@@ -139,7 +144,8 @@ public class LeavePolicy extends BaseTimeEntity {
             int maxConsecutiveDays,
             boolean promotionEnabled,
             boolean carryOverEnabled,
-            BigDecimal maxCarryOverDays) {
+            BigDecimal maxCarryOverDays,
+            boolean nextPeriodReservationEnabled) {
     }
 
     public Long getId() {
@@ -226,6 +232,10 @@ public class LeavePolicy extends BaseTimeEntity {
 
     public BigDecimal getMaxCarryOverDays() {
         return maxCarryOverDays;
+    }
+
+    public boolean isNextPeriodReservationEnabled() {
+        return nextPeriodReservationEnabled;
     }
 
     public boolean isActive() {

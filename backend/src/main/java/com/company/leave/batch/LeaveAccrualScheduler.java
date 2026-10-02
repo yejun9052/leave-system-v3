@@ -35,20 +35,14 @@ public class LeaveAccrualScheduler {
         this.policyService = policyService;
     }
 
-    /** 매일 01:00 - 당해 연도 연차 재계산 */
+    /**
+     * 매일 01:00 - 직원마다 지금 연차 기간 부여·재계산. 입사 기념일(회계연도 기준이면 회계연도 시작일)이 지나
+     * 새 기간이 시작된 직원은 이때 지난 기간 잔여가 이월·소멸된다. 그래서 1월 1일 일괄 부여는 따로 없다.
+     */
     @Scheduled(cron = "0 0 1 * * *", zone = "Asia/Seoul")
     public void dailyRecompute() {
-        int year = LocalDate.now().getYear();
-        log.info("[스케줄러] 당해({}) 연차 재계산 시작", year);
-        leaveGrantService.grantAll(year);
-    }
-
-    /** 매년 1월 1일 00:30 - 새해 연차 부여 및 이월 (00:10 공휴일 동기화 이후) */
-    @Scheduled(cron = "0 30 0 1 1 *", zone = "Asia/Seoul")
-    public void yearlyGrant() {
-        int year = LocalDate.now().getYear();
-        log.info("[스케줄러] 신년({}) 연차 부여/이월 시작", year);
-        leaveGrantService.grantAll(year);
+        log.info("[스케줄러] 직원별 지금 연차 기간 부여·재계산 시작");
+        leaveGrantService.grantCurrentPeriods();
     }
 
     /** 연차 촉진 1차(7/1), 2차(11/1) - 정책이 켜져 있을 때만 발송 */

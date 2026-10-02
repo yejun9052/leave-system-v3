@@ -100,13 +100,19 @@ export interface LeaveType {
 }
 
 export interface LeaveBalance {
+  /** 그 해에 시작한 연차 기간(입사일 기준이면 입사 기념일부터 1년) */
   year: number;
+  periodStart: string;
+  /** 사용 기한(기간 마지막 날) */
+  periodEnd: string;
   granted: number;
   used: number;
   pending: number;
   carriedOver: number;
   expired: number;
   remaining: number;
+  /** 다음 기간에서 뺄 예약분(승인 + 결재 대기). 지금 기간에만 채워짐 */
+  nextPeriodReserved: number;
 }
 
 export interface LeaveRequest {

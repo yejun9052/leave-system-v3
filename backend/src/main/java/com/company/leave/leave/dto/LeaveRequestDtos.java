@@ -79,12 +79,18 @@ public final class LeaveRequestDtos {
      * @param pendingDays   미리보기: 결재 대기 중인 다른 신청의 차감 예정액 합계
      * @param remainingAfter 미리보기: 신청 후 잔여(잔여 − 결재 대기 − 이번 차감 − 소멸 예정)
      */
+    /**
+     * @param remainingDays       시작일이 속한 연차 기간에서 쓸 수 있는 연차(다음 기간이면 예상 부여 − 예약분)
+     * @param periodStart         시작일이 속한 연차 기간(미리보기만)
+     * @param nextPeriodDeduction 차감 중 다음 연차 기간(periodEnd 다음 날부터)에서 뺄 몫(미리보기만)
+     */
     public record Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays,
                               Integer workdays, BigDecimal deduction, BigDecimal pendingDays,
-                              BigDecimal remainingAfter) {
+                              BigDecimal remainingAfter, LocalDate periodStart, LocalDate periodEnd,
+                              BigDecimal nextPeriodDeduction) {
 
         public Eligibility(boolean allowed, String reason, BigDecimal remainingDays, BigDecimal forfeitDays) {
-            this(allowed, reason, remainingDays, forfeitDays, null, null, null, null);
+            this(allowed, reason, remainingDays, forfeitDays, null, null, null, null, null, null, null);
         }
     }
 

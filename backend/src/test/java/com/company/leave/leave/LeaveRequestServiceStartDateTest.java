@@ -19,6 +19,7 @@ import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.EmployeeService;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.leave.accrual.LeaveAccrualCalculator;
+import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
@@ -101,7 +102,8 @@ class LeaveRequestServiceStartDateTest {
     @BeforeEach
     void setUp() {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
-                holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
+                holidayRepository, new WorkdayCalculator(), policyService,
+                new LeavePeriodCalculator(new LeaveAccrualCalculator(), new WorkdayCalculator()),
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
                 eventPublisher,
                 new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
@@ -122,6 +124,7 @@ class LeaveRequestServiceStartDateTest {
         // 사용 정책은 모두 통과(잔액 부족 허용, 제한 없음)
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
         lenient().when(policy.isAllowNegative()).thenReturn(true);
+        lenient().when(policy.isNextPeriodReservationEnabled()).thenReturn(true);
         lenient().when(policy.allows(any())).thenReturn(true);
         lenient().when(balanceService.getOrCreate(anyLong(), anyInt())).thenReturn(new LeaveBalance(10L, 2027));
         lenient().when(requestRepository.sumPendingDeductedDays(anyLong(), anyInt())).thenReturn(BigDecimal.ZERO);

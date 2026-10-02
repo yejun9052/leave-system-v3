@@ -344,26 +344,47 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
   );
 }
 
-/** 차감 요약: "연차 차감 2일 · 잔여 15일 (대기 1일) → 신청 후 12일" */
+/**
+ * 차감 요약: "연차 차감 2일 · 2026-07-05 ~ 2027-07-04 기간 잔여 15일 (대기 1일) → 신청 후 12일".
+ * 휴가가 기산일을 걸치면 기산일부터의 날짜분은 다음 연차 기간에서 빠진다고 따로 알려 준다.
+ */
 function DeductionSummary({ form }: { form: LeaveRequestFormState }) {
   const { eligibility, selectedType, isPartial } = form;
   if (!eligibility || !selectedType) return null;
   const deduction = eligibility.deduction ?? 0;
   const pending = eligibility.pendingDays ?? 0;
   const after = eligibility.remainingAfter ?? 0;
+  const nextPart = eligibility.nextPeriodDeduction ?? 0;
+  const period = eligibility.periodStart && eligibility.periodEnd
+    ? `${eligibility.periodStart} ~ ${eligibility.periodEnd} 기간 `
+    : "";
   return (
     <div className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm">
       <p>
         {!isPartial && eligibility.workdays != null && <>근무일 {eligibility.workdays}일 · </>}
         {deduction > 0 ? `연차 ${formatDays(deduction)}일 차감` : "연차 차감 없음"}
       </p>
-      <p className="text-muted-foreground">
-        잔여 {formatDays(eligibility.remainingDays)}일
-        {pending > 0 && ` (대기 ${formatDays(pending)}일)`} → 신청 후{" "}
-        <span className={cn("font-semibold", after < 0 ? "text-destructive" : "text-foreground")}>
-          {formatDays(after)}일
-        </span>
-      </p>
+      {deduction > 0 && (
+        <p className="text-muted-foreground">
+          {period}잔여 {formatDays(eligibility.remainingDays)}일
+          {pending > 0 && ` (대기 ${formatDays(pending)}일)`} → 신청 후{" "}
+          <span className={cn("font-semibold", after < 0 ? "text-destructive" : "text-foreground")}>
+            {formatDays(after)}일
+          </span>
+        </p>
+      )}
+      {nextPart > 0 && eligibility.periodEnd && (
+        <p className="text-muted-foreground">
+          그중 {formatDays(nextPart)}일은 다음 연차 기간({nextDay(eligibility.periodEnd)}부터)에서 차감됩니다.
+        </p>
+      )}
     </div>
   );
+}
+
+/** "2027-07-04" → "2027-07-05" */
+function nextDay(isoDate: string): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
 }

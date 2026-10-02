@@ -68,6 +68,13 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "applied_year", nullable = false)
     private int appliedYear;
 
+    /**
+     * deductedDays 중 다음 연차 기간(applied_year + 1)에서 빼는 몫. 휴가가 기산일을 걸치면 기산일부터의 날짜분(V25).
+     * 나머지(deductedDays − 이 값)는 applied_year 기간에서 뺀다.
+     */
+    @Column(name = "next_period_deducted_days", nullable = false)
+    private BigDecimal nextPeriodDeductedDays = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private LeaveRequestStatus status = LeaveRequestStatus.PENDING;
@@ -134,6 +141,12 @@ public class LeaveRequest extends BaseTimeEntity {
     public void adjustDays(BigDecimal days, BigDecimal deductedDays) {
         this.days = days;
         this.deductedDays = deductedDays;
+    }
+
+    /** 연차 기간 배정: 시작일이 속한 기간과, 그중 다음 기간에서 뺄 몫(공휴일 재계산·기간 전환 때 다시 정함). */
+    public void assignPeriods(int appliedYear, BigDecimal nextPeriodDeductedDays) {
+        this.appliedYear = appliedYear;
+        this.nextPeriodDeductedDays = nextPeriodDeductedDays != null ? nextPeriodDeductedDays : BigDecimal.ZERO;
     }
 
     /** 경조사 규정 연결(신청 당시 이름·일수를 함께 기록). */
@@ -242,6 +255,15 @@ public class LeaveRequest extends BaseTimeEntity {
 
     public int getAppliedYear() {
         return appliedYear;
+    }
+
+    public BigDecimal getNextPeriodDeductedDays() {
+        return nextPeriodDeductedDays;
+    }
+
+    /** applied_year 기간에서 빼는 몫. */
+    public BigDecimal getCurrentPeriodDeductedDays() {
+        return deductedDays.subtract(nextPeriodDeductedDays);
     }
 
     public LeaveRequestStatus getStatus() {

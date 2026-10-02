@@ -53,6 +53,7 @@ public enum ErrorCode {
     INSUFFICIENT_LEAVE_BALANCE(HttpStatus.CONFLICT, "잔여 연차가 부족합니다."),
     LEAVE_DATE_OVERLAP(HttpStatus.CONFLICT, "이미 신청된 기간과 겹칩니다."),
     LEAVE_INVALID_PERIOD(HttpStatus.BAD_REQUEST, "휴가 기간이 올바르지 않습니다."),
+    LEAVE_DATE_TOO_FAR(HttpStatus.BAD_REQUEST, "신청할 수 있는 연차 기간을 넘었습니다."),
     LEAVE_NOT_PENDING(HttpStatus.CONFLICT, "대기 상태의 신청만 처리할 수 있습니다."),
     LEAVE_ALREADY_STARTED(HttpStatus.CONFLICT, "이미 시작된 휴가는 취소할 수 없습니다."),
     LEAVE_NO_APPROVAL_PERMISSION(HttpStatus.FORBIDDEN, "해당 신청을 결재할 권한이 없습니다."),

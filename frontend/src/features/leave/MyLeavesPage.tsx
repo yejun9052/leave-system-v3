@@ -99,6 +99,12 @@ export default function MyLeavesPage() {
         <StatCard label="사용" value={balance?.used ?? 0} />
         <StatCard label="대기중" value={balance?.pending ?? 0} />
       </div>
+      {balance?.periodStart && (
+        <p className="-mt-2 text-sm text-muted-foreground">
+          연차 사용 기간 {balance.periodStart} ~ {balance.periodEnd}
+          {balance.nextPeriodReserved > 0 && ` · 다음 기간 예약 ${formatDays(balance.nextPeriodReserved)}일`}
+        </p>
+      )}
 
       <Card>
         <CardHeader>

@@ -15,6 +15,8 @@ import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
 import com.company.leave.employee.domain.Employee;
+import com.company.leave.leave.accrual.LeaveAccrualCalculator;
+import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
@@ -22,6 +24,8 @@ import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.repository.LeaveRequestRepository;
 import com.company.leave.notification.NotificationService;
+import com.company.leave.policy.PolicyService;
+import com.company.leave.policy.domain.LeavePolicy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -65,6 +69,8 @@ class HolidayImpactServiceTest {
     private NotificationService notificationService;
     @Mock
     private AuditService auditService;
+    @Mock
+    private PolicyService policyService;
 
     private final List<LeaveRequest> requests = new ArrayList<>();
     private final LeaveBalance balance = new LeaveBalance(1L, 2027);
@@ -77,7 +83,9 @@ class HolidayImpactServiceTest {
     @BeforeEach
     void setUp() {
         service = new HolidayImpactService(requestRepository, holidayRepository, new WorkdayCalculator(),
-                balanceService, calendarEventRepository, notificationService, auditService);
+                balanceService, calendarEventRepository, notificationService, auditService, policyService,
+                new LeavePeriodCalculator(new LeaveAccrualCalculator(), new WorkdayCalculator()));
+        lenient().when(policyService.getActivePolicy()).thenReturn(LeavePolicy.createDefault());
         // 새 공휴일은 이미 holidays 에 저장된 상태(같은 트랜잭션)
         lenient().when(holidayRepository.findByDateBetweenOrderByDateAsc(any(), any()))
                 .thenReturn(List.of(new Holiday(MON, "대체공휴일(노동절)")));

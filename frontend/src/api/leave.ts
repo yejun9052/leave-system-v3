@@ -38,8 +38,13 @@ export interface LeaveEligibility {
   deduction: number | null;
   /** 미리보기: 결재 대기 중인 다른 신청의 차감 예정 합계 */
   pendingDays: number | null;
-  /** 미리보기: 신청 후 잔여(잔여 − 대기 − 이번 차감 − 소멸 예정) */
+  /** 미리보기: 신청 후 잔여(잔여 − 대기 − 이번 차감(시작일 기간 몫) − 소멸 예정) */
   remainingAfter: number | null;
+  /** 미리보기: 시작일이 속한 연차 기간 */
+  periodStart: string | null;
+  periodEnd: string | null;
+  /** 미리보기: 차감 중 다음 연차 기간(periodEnd 다음 날부터)에서 뺄 몫 */
+  nextPeriodDeduction: number | null;
 }
 
 export interface LeavePreviewParams {

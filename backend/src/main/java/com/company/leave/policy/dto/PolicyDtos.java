@@ -31,7 +31,8 @@ public final class PolicyDtos {
             int maxConsecutiveDays,
             boolean promotionEnabled,
             boolean carryOverEnabled,
-            BigDecimal maxCarryOverDays) {
+            BigDecimal maxCarryOverDays,
+            boolean nextPeriodReservationEnabled) {
 
         public static Response from(LeavePolicy p) {
             return new Response(p.getId(), p.getGrantBasis(), p.getFiscalStartMonth(),
@@ -40,7 +41,8 @@ public final class PolicyDtos {
                     p.getMonthlyAccrualMax(), p.isAllowNegative(), p.isHalfDayEnabled(),
                     p.isHourlyEnabled(),
                     p.getMaxConcurrentAbsence(), p.getMinAdvanceDays(), p.getMaxConsecutiveDays(),
-                    p.isPromotionEnabled(), p.isCarryOverEnabled(), p.getMaxCarryOverDays());
+                    p.isPromotionEnabled(), p.isCarryOverEnabled(), p.getMaxCarryOverDays(),
+                    p.isNextPeriodReservationEnabled());
         }
     }
 
@@ -62,7 +64,9 @@ public final class PolicyDtos {
             @Min(0) int maxConsecutiveDays,
             boolean promotionEnabled,
             boolean carryOverEnabled,
-            @NotNull BigDecimal maxCarryOverDays) {
+            @NotNull BigDecimal maxCarryOverDays,
+            /** 다음 연차 기간 예약 허용. 보내지 않으면(이전 화면) 켜짐 */
+            Boolean nextPeriodReservationEnabled) {
 
         public LeavePolicy.Settings toSettings() {
             return new LeavePolicy.Settings(grantBasis, fiscalStartMonth, fiscalStartDay,
@@ -70,7 +74,8 @@ public final class PolicyDtos {
                     monthlyAccrualEnabled, monthlyAccrualMax, allowNegative, halfDayEnabled,
                     hourlyEnabled,
                     maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
-                    promotionEnabled, carryOverEnabled, maxCarryOverDays);
+                    promotionEnabled, carryOverEnabled, maxCarryOverDays,
+                    !Boolean.FALSE.equals(nextPeriodReservationEnabled));
         }
     }
 }

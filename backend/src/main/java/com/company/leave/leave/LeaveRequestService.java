@@ -16,7 +16,7 @@ import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.EmployeeService;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
-import com.company.leave.leave.accrual.LeaveAccrualCalculator;
+import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveBalance;
@@ -28,7 +28,6 @@ import com.company.leave.leave.repository.LeaveRequestRepository;
 import com.company.leave.mail.AccountMailEvents;
 import com.company.leave.notification.NotificationService;
 import com.company.leave.policy.PolicyService;
-import com.company.leave.policy.domain.GrantBasis;
 import com.company.leave.policy.domain.LeavePolicy;
 import com.company.leave.policy.domain.SpecialLeaveRule;
 import com.company.leave.policy.repository.BlackoutPeriodRepository;
@@ -65,7 +64,7 @@ public class LeaveRequestService {
     private final HolidayRepository holidayRepository;
     private final WorkdayCalculator workdayCalculator;
     private final PolicyService policyService;
-    private final LeaveAccrualCalculator accrualCalculator;
+    private final LeavePeriodCalculator periods;
     private final CalendarEventRepository calendarEventRepository;
     private final NotificationService notificationService;
     private final DepartmentRepository departmentRepository;
@@ -81,7 +80,7 @@ public class LeaveRequestService {
                                HolidayRepository holidayRepository,
                                WorkdayCalculator workdayCalculator,
                                PolicyService policyService,
-                               LeaveAccrualCalculator accrualCalculator,
+                               LeavePeriodCalculator periods,
                                CalendarEventRepository calendarEventRepository,
                                NotificationService notificationService,
                                DepartmentRepository departmentRepository,
@@ -96,7 +95,7 @@ public class LeaveRequestService {
         this.holidayRepository = holidayRepository;
         this.workdayCalculator = workdayCalculator;
         this.policyService = policyService;
-        this.accrualCalculator = accrualCalculator;
+        this.periods = periods;
         this.calendarEventRepository = calendarEventRepository;
         this.notificationService = notificationService;
         this.departmentRepository = departmentRepository;
@@ -134,6 +133,7 @@ public class LeaveRequestService {
 
         LeaveRequest request = new LeaveRequest(
                 employee, type, start, end, plan.days(), plan.deduction(), plan.appliedYear(), req.reason());
+        request.assignPeriods(plan.appliedYear(), plan.nextPeriodDeduction());
         SpecialLeaveRule specialRule = plan.specialRule();
         if (specialRule != null) {
             request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
@@ -174,15 +174,14 @@ public class LeaveRequestService {
 
         LeaveRequest request = new LeaveRequest(employee, type, req.startDate(), req.endDate(), plan.days(),
                 plan.deduction(), plan.appliedYear(), req.reason());
+        request.assignPeriods(plan.appliedYear(), plan.nextPeriodDeduction());
         SpecialLeaveRule specialRule = plan.specialRule();
         if (specialRule != null) {
             request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
         }
         requestRepository.save(request);
 
-        if (type.isDeductFromAnnual()) {
-            balanceService.getOrCreate(employee.getId(), plan.appliedYear()).addUsed(plan.deduction());
-        }
+        LeaveCharges.charge(balanceService, request);
         if (plan.forfeit().signum() > 0) {
             balanceService.getOrCreate(employee.getId(), plan.appliedYear()).forfeit(plan.forfeit());
             request.recordForfeit(plan.forfeit());
@@ -202,11 +201,13 @@ public class LeaveRequestService {
      * @param days        기록 일수(종일=근무일 수, 반차 0.5 …)
      * @param workdays    기간 내 근무일 수(주말·공휴일 제외)
      * @param deduction   연차 차감액(비차감 종류는 0)
+     * @param appliedYear 시작일이 속한 연차 기간
+     * @param nextPeriodDeduction 차감액 중 다음 연차 기간에서 뺄 몫(기산일을 걸친 휴가)
      * @param specialRule 고른 경조사 규정(없으면 null)
      * @param forfeit     승인 시 소멸될 남은 연차(병가·공가, 그 외 0)
      */
     private record Plan(BigDecimal days, int workdays, BigDecimal deduction, int appliedYear,
-                        SpecialLeaveRule specialRule, BigDecimal forfeit) {
+                        BigDecimal nextPeriodDeduction, SpecialLeaveRule specialRule, BigDecimal forfeit) {
     }
 
     /**
@@ -241,7 +242,9 @@ public class LeaveRequestService {
         if (!forced) {
             validateUsagePolicy(employee, type, start, end, days, policy);
         }
-        int appliedYear = appliedYear(start, policy);
+        validateReservationRange(employee, type, end, policy, forced);
+        // 시작일이 속한 연차 기간. 기산일을 걸치면 기산일부터의 날짜분은 다음 기간에서 뺀다(nextPeriodDeduction)
+        int appliedYear = periods.yearOf(employee.getHireDate(), start, policy);
 
         BigDecimal forfeit = type.isRequiresAnnualExhausted()
                 ? requireAnnualExhausted(employeeId, appliedYear, type, false)
@@ -249,18 +252,29 @@ public class LeaveRequestService {
 
         // 실제 차감액 = 근무일수 × 휴가유형 deductDays (반차는 deductDays, 비차감 유형은 0)
         BigDecimal deduction = workdayCalculator.deductionFor(type, days);
+        BigDecimal nextPart = periods.nextPeriodDeduction(employee.getHireDate(), appliedYear, type, start, end,
+                holidays, hours, policy);
+        BigDecimal currentPart = deduction.subtract(nextPart);
 
         if (type.isDeductFromAnnual()) {
-            LeaveBalance balance = balanceService.getOrCreate(employeeId, appliedYear);
-            BigDecimal pending = requestRepository.sumPendingDeductedDays(employeeId, appliedYear);
-            BigDecimal available = balance.remaining().subtract(pending);
-            if (!policy.isAllowNegative() && deduction.compareTo(available) > 0) {
-                throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
-                        "잔여 연차가 부족합니다. (차감 " + deduction + "일 / 사용가능 " + available + "일)");
+            BigDecimal available = available(employee, appliedYear, policy)
+                    .subtract(requestRepository.sumPendingDeductedDays(employeeId, appliedYear));
+            if (!policy.isAllowNegative()) {
+                if (isFuturePeriod(employee, appliedYear, policy)) {
+                    requireNextPeriodAvailable(employee, appliedYear, currentPart, available, policy, false);
+                } else if (currentPart.compareTo(available) > 0) {
+                    throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
+                            "잔여 연차가 부족합니다. (차감 " + currentPart + "일 / 사용가능 " + available + "일)");
+                }
+                if (nextPart.signum() > 0) {
+                    BigDecimal nextAvailable = available(employee, appliedYear + 1, policy)
+                            .subtract(requestRepository.sumPendingDeductedDays(employeeId, appliedYear + 1));
+                    requireNextPeriodAvailable(employee, appliedYear + 1, nextPart, nextAvailable, policy, false);
+                }
             }
         }
         int workdays = workdayCalculator.countWorkdays(start, end, holidays);
-        return new Plan(days, workdays, deduction, appliedYear, specialRule, forfeit);
+        return new Plan(days, workdays, deduction, appliedYear, nextPart, specialRule, forfeit);
     }
 
     /**
@@ -305,10 +319,11 @@ public class LeaveRequestService {
             return new LeaveRequestDtos.Eligibility(false, "현재 정책에서 사용할 수 없는 휴가 종류입니다.",
                     null, BigDecimal.ZERO);
         }
-        int year = appliedYear(startDate != null ? startDate : LocalDate.now(), policy);
-        BigDecimal remaining = balanceService.getOrCreate(employeeId, year).remaining();
+        Employee employee = employeeService.getEntity(employeeId);
+        int year = periods.yearOf(employee.getHireDate(), startDate != null ? startDate : LocalDate.now(), policy);
+        BigDecimal remaining = available(employee, year, policy);
         if (startDate != null && endDate != null) {
-            return preview(employeeId, type, policy, startDate, endDate, hours, specialRuleId, remaining);
+            return preview(employee, type, policy, startDate, endDate, hours, specialRuleId, remaining);
         }
         if (!type.isRequiresAnnualExhausted()) {
             return new LeaveRequestDtos.Eligibility(true, null, remaining, BigDecimal.ZERO);
@@ -321,11 +336,14 @@ public class LeaveRequestService {
         }
     }
 
-    /** 신청 미리보기. 신청 후 잔여 = 잔여 − 결재 대기 차감 − 이번 차감 − 소멸 예정. */
-    private LeaveRequestDtos.Eligibility preview(Long employeeId, LeaveType type, LeavePolicy policy,
+    /**
+     * 신청 미리보기. 신청 후 잔여 = 잔여 − 결재 대기 차감 − 이번 차감(시작일 기간 몫) − 소멸 예정.
+     * 기산일을 걸치면 다음 기간 몫은 따로 알려 준다(nextPeriodDeduction).
+     */
+    private LeaveRequestDtos.Eligibility preview(Employee employee, LeaveType type, LeavePolicy policy,
                                                  LocalDate start, LocalDate end, Integer hours,
                                                  Long specialRuleId, BigDecimal remaining) {
-        Employee employee = employeeService.getEntity(employeeId);
+        Long employeeId = employee.getId();
         if (employee.isSystemAccount()) {
             return new LeaveRequestDtos.Eligibility(false, "관리 전용 계정은 휴가를 신청할 수 없습니다.",
                     remaining, BigDecimal.ZERO);
@@ -337,9 +355,12 @@ public class LeaveRequestService {
             return new LeaveRequestDtos.Eligibility(false, ex.getMessage(), remaining, BigDecimal.ZERO);
         }
         BigDecimal pending = requestRepository.sumPendingDeductedDays(employeeId, plan.appliedYear());
-        BigDecimal remainingAfter = remaining.subtract(pending).subtract(plan.deduction()).subtract(plan.forfeit());
+        BigDecimal currentPart = plan.deduction().subtract(plan.nextPeriodDeduction());
+        BigDecimal remainingAfter = remaining.subtract(pending).subtract(currentPart).subtract(plan.forfeit());
+        LeavePeriodCalculator.Period period = periods.period(employee.getHireDate(), plan.appliedYear(), policy);
         return new LeaveRequestDtos.Eligibility(true, null, remaining, plan.forfeit(),
-                plan.workdays(), plan.deduction(), pending, remainingAfter);
+                plan.workdays(), plan.deduction(), pending, remainingAfter,
+                period.start(), period.end(), plan.nextPeriodDeduction());
     }
 
     @Transactional(readOnly = true)
@@ -453,17 +474,27 @@ public class LeaveRequestService {
         requireApprover(approver, request);
 
         if (request.getLeaveType().isDeductFromAnnual()) {
-            LeaveBalance balance = balanceService.getOrCreate(
-                    request.getEmployee().getId(), request.getAppliedYear());
-            BigDecimal deduction = request.getDeductedDays();
+            LeavePolicy policy = policyService.getActivePolicy();
+            Employee applicant = request.getEmployee();
+            int year = request.getAppliedYear();
+            BigDecimal deduction = request.getCurrentPeriodDeductedDays();
+            BigDecimal nextPart = request.getNextPeriodDeductedDays();
             // 승인 시점 재검증: 그 사이 잔액이 줄어 초과되면 차단(동시 승인 over-spend 방지, @Version 과 병행)
-            if (!policyService.getActivePolicy().isAllowNegative()
-                    && deduction.compareTo(balance.remaining()) > 0) {
-                throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
-                        "승인 시점 잔여 연차가 부족합니다. (차감 " + deduction
-                                + "일 / 잔여 " + balance.remaining() + "일)");
+            if (!policy.isAllowNegative()) {
+                BigDecimal available = available(applicant, year, policy);
+                if (isFuturePeriod(applicant, year, policy)) {
+                    requireNextPeriodAvailable(applicant, year, deduction, available, policy, true);
+                } else if (deduction.compareTo(available) > 0) {
+                    throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
+                            "승인 시점 잔여 연차가 부족합니다. (차감 " + deduction
+                                    + "일 / 잔여 " + available + "일)");
+                }
+                if (nextPart.signum() > 0) {
+                    requireNextPeriodAvailable(applicant, year + 1, nextPart,
+                            available(applicant, year + 1, policy), policy, true);
+                }
             }
-            balance.addUsed(deduction);
+            LeaveCharges.charge(balanceService, request);
         }
         BigDecimal forfeited = BigDecimal.ZERO;
         if (request.getLeaveType().isRequiresAnnualExhausted()) {
@@ -617,11 +648,7 @@ public class LeaveRequestService {
 
     /** 승인 때 반영한 것 되돌리기: 연차 차감 환원, 병가·공가 소멸분 환원, 캘린더 일정 삭제. */
     private void restoreAndClearCalendar(LeaveRequest request) {
-        if (request.getLeaveType().isDeductFromAnnual()) {
-            LeaveBalance balance = balanceService.getOrCreate(
-                    request.getEmployee().getId(), request.getAppliedYear());
-            balance.restoreUsed(request.getDeductedDays());
-        }
+        LeaveCharges.restore(balanceService, request);
         // 병가·공가 승인으로 소멸시켰던 남은 연차 되돌림
         BigDecimal forfeited = request.takeForfeitForRestore();
         if (forfeited.signum() > 0) {
@@ -906,11 +933,61 @@ public class LeaveRequestService {
                 .map(Holiday::getDate).collect(Collectors.toSet());
     }
 
-    private int appliedYear(LocalDate start, LeavePolicy policy) {
-        if (policy.getGrantBasis() == GrantBasis.FISCAL_YEAR) {
-            return accrualCalculator.currentFiscalStart(start, policy).getYear();
+    /**
+     * year 연차 기간에서 쓸 수 있는 연차(결재 대기는 빼지 않음). 지난·지금 기간은 잔액,
+     * 아직 시작 전인 다음 기간은 예상 부여 일수(이월 제외)에서 이미 승인된 예약분을 뺀 값.
+     * 입사일이 없으면 기간을 예측할 수 없어 잔액으로 본다.
+     */
+    private BigDecimal available(Employee employee, int year, LeavePolicy policy) {
+        LocalDate hireDate = employee.getHireDate();
+        if (hireDate == null || year <= periods.currentYear(hireDate, policy)) {
+            return balanceService.getOrCreate(employee.getId(), year).remaining();
         }
-        return start.getYear();
+        BigDecimal expected = periods.entitlement(hireDate, year, policy);
+        return balanceService.find(employee.getId(), year)
+                .map(b -> expected.subtract(b.getUsed()).subtract(b.getExpired()))
+                .orElse(expected);
+    }
+
+    /** 아직 시작 전인 기간인지(다음 기간 예약). */
+    private boolean isFuturePeriod(Employee employee, int year, LeavePolicy policy) {
+        return employee.getHireDate() != null && year > periods.currentYear(employee.getHireDate(), policy);
+    }
+
+    /**
+     * 다음 기간 예약분의 한도 확인. 지금 기간 몫은 기존 문구로 따로 확인한다.
+     *
+     * @param available 그 기간에 쓸 수 있는 연차(신청 때는 결재 대기를 뺀 값)
+     */
+    private void requireNextPeriodAvailable(Employee employee, int year, BigDecimal amount, BigDecimal available,
+                                            LeavePolicy policy, boolean approving) {
+        if (amount.compareTo(available) > 0) {
+            LocalDate start = periods.startOf(employee.getHireDate(), year, policy);
+            throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
+                    (approving ? "승인 시점 " : "") + "다음 연차 기간(" + start + "부터) 예약 가능한 연차가 부족합니다. (차감 "
+                            + plain(amount) + "일 / 예약 가능 " + plain(available.max(BigDecimal.ZERO)) + "일)");
+        }
+    }
+
+    /**
+     * 연차 신청 가능 범위: 다음 연차 기간 끝까지(정책에서 다음 기간 예약을 끄면 지금 기간 끝까지).
+     * 잔액을 지금·다음 두 기간으로만 나눠 관리하기 위한 제한이라 연차를 차감하는 종류에만 적용한다.
+     * 인사관리자 강제 등록은 예약 스위치와 상관없이 다음 기간까지 등록할 수 있다.
+     */
+    private void validateReservationRange(Employee employee, LeaveType type, LocalDate end, LeavePolicy policy,
+                                          boolean forced) {
+        if (!type.isDeductFromAnnual()) {
+            return;
+        }
+        LocalDate hireDate = employee.getHireDate();
+        int current = periods.currentYear(hireDate, policy);
+        boolean nextAllowed = forced || policy.isNextPeriodReservationEnabled();
+        LocalDate last = periods.startOf(hireDate, current + (nextAllowed ? 2 : 1), policy).minusDays(1);
+        if (end.isAfter(last)) {
+            throw new BusinessException(ErrorCode.LEAVE_DATE_TOO_FAR, nextAllowed
+                    ? "연차는 다음 연차 기간이 끝나는 " + last + "까지 신청할 수 있습니다."
+                    : "연차는 지금 연차 기간이 끝나는 " + last + "까지 신청할 수 있습니다.");
+        }
     }
 
     private void createCalendarEvent(LeaveRequest request) {

@@ -13,6 +13,7 @@ import com.company.leave.employee.EmployeeService;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.LeaveAccrualCalculator;
+import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
@@ -90,7 +91,8 @@ class LeaveRequestServiceDayLeavesTest {
     @BeforeEach
     void setUp() {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
-                holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
+                holidayRepository, new WorkdayCalculator(), policyService,
+                new LeavePeriodCalculator(new LeaveAccrualCalculator(), new WorkdayCalculator()),
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
                 eventPublisher,
                 new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(

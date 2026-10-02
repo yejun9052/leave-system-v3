@@ -64,7 +64,6 @@ class LeaveAccrualSchedulerTest {
     @Test
     void 모든_스케줄은_서울_시간대_기준으로_실행된다() throws Exception {
         assertThat(schedule("dailyRecompute").zone()).isEqualTo("Asia/Seoul");
-        assertThat(schedule("yearlyGrant").zone()).isEqualTo("Asia/Seoul");
         assertThat(schedule("promotion").zone()).isEqualTo("Asia/Seoul");
     }
 
@@ -75,16 +74,6 @@ class LeaveAccrualSchedulerTest {
     }
 
     @Test
-    void 새해_부여는_2026년_12월_31일_이후_첫_실행이_2027년_1월_1일_0시_30분이다() throws Exception {
-        assertThat(next("yearlyGrant", seoul(2026, 12, 31, 12, 0))).isEqualTo(seoul(2027, 1, 1, 0, 30));
-    }
-
-    @Test
-    void 새해_부여는_한_해에_한_번만_실행된다() throws Exception {
-        assertThat(next("yearlyGrant", seoul(2027, 1, 1, 0, 30))).isEqualTo(seoul(2028, 1, 1, 0, 30));
-    }
-
-    @Test
     void 촉진은_7월_1일과_11월_1일_9시에_실행된다() throws Exception {
         assertThat(next("promotion", seoul(2026, 1, 1, 0, 0))).isEqualTo(seoul(2026, 7, 1, 9, 0));
         assertThat(next("promotion", seoul(2026, 7, 1, 9, 0))).isEqualTo(seoul(2026, 11, 1, 9, 0));
@@ -92,35 +81,22 @@ class LeaveAccrualSchedulerTest {
     }
 
     @Test
-    void 새해_부여는_같은_날_공휴일_동기화보다_늦게_실행된다() throws Exception {
+    void 재계산은_같은_날_공휴일_동기화보다_늦게_실행된다() throws Exception {
         ZonedDateTime newYear = seoul(2027, 1, 1, 0, 0);
         Scheduled holidaySync = HolidaySyncScheduler.class.getMethod("dailySync").getAnnotation(Scheduled.class);
 
         ZonedDateTime holidaySyncAt = CronExpression.parse(holidaySync.cron()).next(newYear);
-        ZonedDateTime yearlyGrantAt = next("yearlyGrant", newYear);
+        ZonedDateTime recomputeAt = next("dailyRecompute", newYear);
 
-        assertThat(yearlyGrantAt.toLocalDate()).isEqualTo(holidaySyncAt.toLocalDate());
-        assertThat(yearlyGrantAt).isAfter(holidaySyncAt);
+        assertThat(recomputeAt.toLocalDate()).isEqualTo(holidaySyncAt.toLocalDate());
+        assertThat(recomputeAt).isAfter(holidaySyncAt);
     }
 
     @Test
-    void 재계산은_올해_연도로_전체_부여를_호출한다() {
-        int year = LocalDate.now().getYear();
-
+    void 재계산은_직원별_지금_연차_기간_부여를_호출한다() {
         scheduler.dailyRecompute();
 
-        verify(leaveGrantService, times(1)).grantAll(year);
-        verifyNoMoreInteractions(leaveGrantService);
-        verifyNoInteractions(promotionService, policyService);
-    }
-
-    @Test
-    void 새해_부여는_올해_연도로_전체_부여를_호출한다() {
-        int year = LocalDate.now().getYear();
-
-        scheduler.yearlyGrant();
-
-        verify(leaveGrantService, times(1)).grantAll(year);
+        verify(leaveGrantService, times(1)).grantCurrentPeriods();
         verifyNoMoreInteractions(leaveGrantService);
         verifyNoInteractions(promotionService, policyService);
     }

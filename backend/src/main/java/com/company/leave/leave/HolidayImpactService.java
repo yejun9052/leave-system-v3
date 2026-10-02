@@ -4,6 +4,7 @@ import com.company.leave.audit.AuditService;
 import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
+import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveRequest;
@@ -11,6 +12,7 @@ import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.repository.LeaveRequestRepository;
 import com.company.leave.notification.NotificationService;
+import com.company.leave.policy.PolicyService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -51,6 +53,8 @@ public class HolidayImpactService {
     private final CalendarEventRepository calendarEventRepository;
     private final NotificationService notificationService;
     private final AuditService auditService;
+    private final PolicyService policyService;
+    private final LeavePeriodCalculator periods;
 
     public HolidayImpactService(LeaveRequestRepository requestRepository,
                                 HolidayRepository holidayRepository,
@@ -58,7 +62,9 @@ public class HolidayImpactService {
                                 LeaveBalanceService balanceService,
                                 CalendarEventRepository calendarEventRepository,
                                 NotificationService notificationService,
-                                AuditService auditService) {
+                                AuditService auditService,
+                                PolicyService policyService,
+                                LeavePeriodCalculator periods) {
         this.requestRepository = requestRepository;
         this.holidayRepository = holidayRepository;
         this.workdayCalculator = workdayCalculator;
@@ -66,6 +72,8 @@ public class HolidayImpactService {
         this.calendarEventRepository = calendarEventRepository;
         this.notificationService = notificationService;
         this.auditService = auditService;
+        this.policyService = policyService;
+        this.periods = periods;
     }
 
     /** 조정 결과 요약. */
@@ -127,7 +135,9 @@ public class HolidayImpactService {
 
         if (workdayCalculator.countWorkdays(request.getStartDate(), request.getEndDate(), holidays) == 0) {
             BigDecimal restored = chargedBalance ? oldDeducted : BigDecimal.ZERO;
-            restore(request, restored);
+            if (chargedBalance) {
+                LeaveCharges.restore(balanceService, request);
+            }
             restoreForfeit(request); // 병가·공가 승인으로 소멸시켰던 연차도 되돌림
             calendarEventRepository.deleteByLeaveRequestId(request.getId());
             request.autoCancel(AUTO_CANCEL_REASON);
@@ -141,22 +151,28 @@ public class HolidayImpactService {
         BigDecimal newDays = workdayCalculator.computeLeaveDays(
                 request.getStartDate(), request.getEndDate(), type, holidays, hours);
         BigDecimal newDeducted = workdayCalculator.deductionFor(type, newDays);
-        if (newDays.compareTo(oldDays) == 0 && newDeducted.compareTo(oldDeducted) == 0) {
+        // 기산일을 걸친 휴가는 다음 기간 몫도 다시 나눈다
+        BigDecimal oldNext = request.getNextPeriodDeductedDays();
+        BigDecimal newNext = periods.nextPeriodDeduction(request.getEmployee().getHireDate(), request.getAppliedYear(),
+                type, request.getStartDate(), request.getEndDate(), holidays, hours, policyService.getActivePolicy());
+        if (newDays.compareTo(oldDays) == 0 && newDeducted.compareTo(oldDeducted) == 0
+                && newNext.compareTo(oldNext) == 0) {
             return null;
         }
+        BigDecimal oldCurrent = request.getCurrentPeriodDeductedDays();
         request.adjustDays(newDays, newDeducted);
-        BigDecimal restored = chargedBalance ? oldDeducted.subtract(newDeducted).max(BigDecimal.ZERO) : BigDecimal.ZERO;
-        restore(request, restored);
+        request.assignPeriods(request.getAppliedYear(), newNext);
+        BigDecimal restored = BigDecimal.ZERO;
+        if (chargedBalance) {
+            BigDecimal currentBack = oldCurrent.subtract(request.getCurrentPeriodDeductedDays()).max(BigDecimal.ZERO);
+            BigDecimal nextBack = oldNext.subtract(newNext).max(BigDecimal.ZERO);
+            LeaveCharges.restore(balanceService, request, currentBack, nextBack);
+            restored = currentBack.add(nextBack);
+        }
         String message = period + ": " + holidayText + " 지정으로 일수 " + plain(oldDays) + "일 → " + plain(newDays)
                 + "일, 차감 " + plain(oldDeducted) + "일 → " + plain(newDeducted) + "일"
                 + (restored.signum() > 0 ? " (" + plain(restored) + "일 환원)" : "");
         return new Adjustment(false, restored, message);
-    }
-
-    private void restore(LeaveRequest request, BigDecimal days) {
-        if (days.signum() > 0) {
-            balanceService.getOrCreate(request.getEmployee().getId(), request.getAppliedYear()).restoreUsed(days);
-        }
     }
 
     private void restoreForfeit(LeaveRequest request) {

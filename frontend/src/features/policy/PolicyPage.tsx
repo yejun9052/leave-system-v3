@@ -192,6 +192,12 @@ function PolicyTab() {
             onChange={(v) => set("allowNegative", v)}
           />
           <ToggleRow
+            label="다음 연차 기간 예약 허용"
+            desc="다음 기산일 이후 날짜도 신청(그 기간 예상 부여 일수 안에서, 다음 기간 끝까지)"
+            checked={form.nextPeriodReservationEnabled}
+            onChange={(v) => set("nextPeriodReservationEnabled", v)}
+          />
+          <ToggleRow
             label="연차 촉진제도 사용"
             desc="사용 기한 전 자동 안내"
             checked={form.promotionEnabled}

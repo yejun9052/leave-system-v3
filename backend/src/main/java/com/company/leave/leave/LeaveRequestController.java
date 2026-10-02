@@ -155,7 +155,7 @@ public class LeaveRequestController {
     @Operation(summary = "내 연차 잔액 (연도별)")
     @GetMapping("/balances/me")
     public ApiResponse<LeaveBalanceResponse> myBalance(@RequestParam(required = false) Integer year) {
-        int y = year != null ? year : leaveBalanceService.currentYear();
+        int y = year != null ? year : leaveBalanceService.currentYear(SecurityUtils.currentEmployeeId());
         return ApiResponse.ok(leaveBalanceService.getResponse(SecurityUtils.currentEmployeeId(), y));
     }
 
@@ -172,7 +172,7 @@ public class LeaveRequestController {
             @PathVariable Long employeeId, @RequestParam(required = false) Integer year) {
         // 팀장은 본인 팀원만 조회 가능(IDOR 방지). 관리자는 전체 허용.
         leaveRequestService.assertCanViewEmployeeData(SecurityUtils.currentEmployeeId(), employeeId);
-        int y = year != null ? year : leaveBalanceService.currentYear();
+        int y = year != null ? year : leaveBalanceService.currentYear(employeeId);
         return ApiResponse.ok(leaveBalanceService.getResponse(employeeId, y));
     }
 }

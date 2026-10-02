@@ -42,7 +42,7 @@ function PersonalSection() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat icon={CalendarClock} label="잔여 연차" value={`${formatDays(b?.remaining)}일`} accent />
-        <Stat icon={TrendingUp} label="올해 사용" value={`${formatDays(b?.used)}일`} />
+        <Stat icon={TrendingUp} label="이번 기간 사용" value={`${formatDays(b?.used)}일`} />
         <Stat icon={Inbox} label="결재 대기중" value={`${data?.pendingCount ?? 0}건`} />
         <Stat icon={Users} label="오늘 팀 부재" value={`${data?.teamOnLeaveToday ?? 0}명`} />
       </div>

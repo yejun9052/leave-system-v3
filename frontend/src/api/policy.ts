@@ -23,6 +23,8 @@ export interface Policy {
   promotionEnabled: boolean;
   carryOverEnabled: boolean;
   maxCarryOverDays: number;
+  /** 다음 연차 기간(다음 기산일 이후) 날짜의 연차 신청 허용 */
+  nextPeriodReservationEnabled: boolean;
 }
 
 export const policyApi = {

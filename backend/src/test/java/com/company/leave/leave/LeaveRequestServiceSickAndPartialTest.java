@@ -21,6 +21,7 @@ import com.company.leave.employee.EmployeeService;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.LeaveAccrualCalculator;
+import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveBalance;
@@ -113,7 +114,8 @@ class LeaveRequestServiceSickAndPartialTest {
     @BeforeEach
     void setUp() {
         service = new LeaveRequestService(requestRepository, leaveTypeService, employeeService, balanceService,
-                holidayRepository, new WorkdayCalculator(), policyService, accrualCalculator,
+                holidayRepository, new WorkdayCalculator(), policyService,
+                new LeavePeriodCalculator(new LeaveAccrualCalculator(), new WorkdayCalculator()),
                 calendarEventRepository, notificationService, departmentRepository, blackoutPeriodRepository,
                 eventPublisher,
                 new LeaveMessenger(notificationService, eventPublisher, new com.company.leave.mail.AccountMailProperties(
@@ -133,6 +135,7 @@ class LeaveRequestServiceSickAndPartialTest {
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
         lenient().when(policy.allows(any())).thenReturn(true);
         lenient().when(policy.isAllowNegative()).thenReturn(true);
+        lenient().when(policy.isNextPeriodReservationEnabled()).thenReturn(true);
         lenient().when(balanceService.getOrCreate(anyLong(), anyInt())).thenReturn(balance);
         lenient().when(requestRepository.sumPendingDeductedDays(anyLong(), anyInt())).thenReturn(BigDecimal.ZERO);
         lenient().when(requestRepository.save(any(LeaveRequest.class))).thenAnswer(inv -> {

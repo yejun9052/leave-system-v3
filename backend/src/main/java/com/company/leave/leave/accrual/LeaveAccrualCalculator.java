@@ -37,7 +37,7 @@ public class LeaveAccrualCalculator {
 
     /** 입사일 기준. */
     private BigDecimal hireDateEntitlement(LocalDate hireDate, LocalDate asOf, LeavePolicy policy) {
-        int completedYears = Period.between(hireDate, asOf).getYears();
+        int completedYears = completedYears(hireDate, asOf);
         if (completedYears < 1) {
             if (!policy.isMonthlyAccrualEnabled()) {
                 return BigDecimal.ZERO;
@@ -65,7 +65,7 @@ public class LeaveAccrualCalculator {
                     .divide(BigDecimal.valueOf(totalDays), 1, RoundingMode.HALF_UP);
         }
 
-        int yearsAtFiscalStart = Period.between(hireDate, fiscalStart).getYears();
+        int yearsAtFiscalStart = completedYears(hireDate, fiscalStart);
         return serviceEntitlement(Math.max(1, yearsAtFiscalStart), policy);
     }
 
@@ -76,6 +76,21 @@ public class LeaveAccrualCalculator {
         BigDecimal additional = policy.getSeniorityIncrementDays().multiply(BigDecimal.valueOf(steps));
         BigDecimal total = policy.getBaseAnnualDays().add(additional);
         return total.min(policy.getMaxAnnualDays());
+    }
+
+    /**
+     * asOf 시점까지 채운 근속 연수. 그 해 입사 기념일({@link #anniversary})이 지났으면 한 해를 채운 것으로 본다.
+     * {@code Period.between} 은 2월 29일 입사자가 평년 2월 28일에 근속이 1년 모자라게 나와 쓰지 않는다.
+     */
+    public static int completedYears(LocalDate hireDate, LocalDate asOf) {
+        int years = asOf.getYear() - hireDate.getYear();
+        return asOf.isBefore(anniversary(hireDate, asOf.getYear())) ? years - 1 : years;
+    }
+
+    /** year 의 입사 기념일. 2월 29일 입사자는 평년에 2월 28일. */
+    public static LocalDate anniversary(LocalDate hireDate, int year) {
+        LocalDate firstOfMonth = LocalDate.of(year, hireDate.getMonth(), 1);
+        return firstOfMonth.withDayOfMonth(Math.min(hireDate.getDayOfMonth(), firstOfMonth.lengthOfMonth()));
     }
 
     private int monthsCompleted(LocalDate from, LocalDate to) {

@@ -9,7 +9,6 @@ import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.dto.LeaveRequestDtos;
-import com.company.leave.leave.repository.LeaveBalanceRepository;
 import com.company.leave.leave.repository.LeaveRequestRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -27,16 +26,13 @@ public class DashboardService {
 
     private final EmployeeRepository employeeRepository;
     private final LeaveRequestRepository requestRepository;
-    private final LeaveBalanceRepository balanceRepository;
     private final LeaveBalanceService balanceService;
 
     public DashboardService(EmployeeRepository employeeRepository,
                             LeaveRequestRepository requestRepository,
-                            LeaveBalanceRepository balanceRepository,
                             LeaveBalanceService balanceService) {
         this.employeeRepository = employeeRepository;
         this.requestRepository = requestRepository;
-        this.balanceRepository = balanceRepository;
         this.balanceService = balanceService;
     }
 
@@ -50,7 +46,9 @@ public class DashboardService {
         long pending = requestRepository.countByStatusIn(java.util.EnumSet.of(
                 LeaveRequestStatus.PENDING, LeaveRequestStatus.CANCEL_REQUESTED));
 
-        List<LeaveBalance> balances = balanceRepository.findByYearExcludingSystemAccounts(year);
+        // 직원마다 지금 쓰고 있는 연차 기간(입사일 기준이면 기간이 서로 다르다)
+        List<LeaveBalance> balances = balanceService.balancesAsOf(today, true).stream()
+                .map(LeaveBalanceService.PeriodBalance::balance).toList();
         BigDecimal totalGranted = balances.stream()
                 .map(LeaveBalance::getGranted).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalUsed = balances.stream()
@@ -70,8 +68,7 @@ public class DashboardService {
 
     @Transactional
     public DashboardDtos.PersonalDashboard personal(Long employeeId) {
-        int year = LocalDate.now().getYear();
-        var balance = balanceService.getResponse(employeeId, year);
+        var balance = balanceService.getResponse(employeeId, balanceService.currentYear(employeeId));
         long pendingCount = requestRepository
                 .findByEmployeeIdAndStatusOrderByStartDateDesc(employeeId, LeaveRequestStatus.PENDING)
                 .size();
