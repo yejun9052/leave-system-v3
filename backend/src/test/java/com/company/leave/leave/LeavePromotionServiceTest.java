@@ -15,6 +15,7 @@ import static org.mockito.Mockito.when;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.department.domain.Department;
+import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.employee.repository.EmployeeRepository;
@@ -68,6 +69,7 @@ class LeavePromotionServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private PolicyService policyService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private DepartmentRepository departmentRepository;
 
     private LeavePromotionService service;
     private final List<LeaveBalanceService.PeriodBalance> balances = new ArrayList<>();
@@ -78,7 +80,7 @@ class LeavePromotionServiceTest {
     void setUp() {
         service = new LeavePromotionService(balanceService, requestRepository, noticeRepository, employeeRepository,
                 notificationService, policyService, eventPublisher,
-                new AccountMailProperties("noreply@company.com", "http://localhost:5173"));
+                new AccountMailProperties("noreply@company.com", "http://localhost:5173"), departmentRepository);
         인사관리자 = 직원(99L, "김인사", "hr@company.com");
         인사관리자.replaceRoles(Set.of(Role.EMPLOYEE, Role.HR_ADMIN));
         lenient().when(balanceService.balancesAsOf(any(), eq(true))).thenReturn(balances);
@@ -131,6 +133,25 @@ class LeavePromotionServiceTest {
 
         assertThat(t.noticeCount()).isEqualTo(2);
         assertThat(t.lastNotifiedAt()).isEqualTo(last);
+    }
+
+    @Test
+    void 이름이나_부서로_찾고_상위_부서로_찾으면_하위_부서도_나온다() {
+        Department 연구소 = 부서(1L, "연구소", null);
+        Department 개발팀 = 부서(2L, "개발팀", 연구소);
+        Department 영업팀 = 부서(3L, "영업팀", null);
+        when(departmentRepository.findAll()).thenReturn(List.of(연구소, 개발팀, 영업팀));
+        기간(소속(직원(1L, "김개발", "a@company.com"), 개발팀), TODAY.plusMonths(2), "15", "5");
+        기간(소속(직원(2L, "박영업", "b@company.com"), 영업팀), TODAY.plusMonths(3), "15", "5");
+        기간(소속(직원(3L, "이소장", "c@company.com"), 연구소), TODAY.plusMonths(4), "15", "5");
+
+        assertThat(service.targets(6, "박영")).extracting(LeavePromotionService.Target::name).containsExactly("박영업");
+        assertThat(service.targets(6, "개발팀")).extracting(LeavePromotionService.Target::name).containsExactly("김개발");
+        assertThat(service.targets(6, "연구소")).extracting(LeavePromotionService.Target::name)
+                .containsExactly("김개발", "이소장");
+        assertThat(service.targets(6, "연구소 김")).extracting(LeavePromotionService.Target::name).containsExactly("김개발");
+        assertThat(service.targets(6, "  ")).hasSize(3);
+        assertThat(service.targets(2, "연구소")).extracting(LeavePromotionService.Target::name).containsExactly("김개발");
     }
 
     @Test
@@ -272,6 +293,17 @@ class LeavePromotionServiceTest {
     }
 
     // --- helpers ---
+
+    private static Department 부서(Long id, String name, Department parent) {
+        Department d = new Department(name, parent, 0);
+        ReflectionTestUtils.setField(d, "id", id);
+        return d;
+    }
+
+    private static Employee 소속(Employee e, Department d) {
+        ReflectionTestUtils.setField(e, "department", d);
+        return e;
+    }
 
     private void 자동_발송_켬(Integer... months) {
         LeavePolicy policy = LeavePolicy.createDefault();

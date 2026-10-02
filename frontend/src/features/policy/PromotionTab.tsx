@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MailWarning, Send } from "lucide-react";
+import { MailWarning, Search, Send } from "lucide-react";
 import { promotionApi, type PromotionTarget } from "@/api/policy";
 import { extractErrorMessage } from "@/api/client";
 import { formatDays } from "@/lib/leaveFormat";
@@ -9,6 +9,7 @@ import { useTableSort } from "@/lib/useTableSort";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -41,16 +42,23 @@ export default function PromotionTab() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const [months, setMonths] = useState(6);
+  const [keyword, setKeyword] = useState("");
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   // 조회 범위를 바꾸는 동안에는 이전 목록을 보여 준다(새 목록이 오기 전에 선택이 풀리지 않게)
   const { data: targets = [], isLoading, isPlaceholderData } = useQuery({
-    queryKey: ["promotionTargets", months],
-    queryFn: () => promotionApi.targets(months),
+    queryKey: ["promotionTargets", months, search],
+    queryFn: () => promotionApi.targets(months, search),
     placeholderData: keepPreviousData,
   });
 
-  // 조회 범위가 바뀌어 목록에서 빠진 직원은 선택에서도 뺀다
+  const onSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearch(keyword.trim());
+  };
+
+  // 조회 범위·검색어가 바뀌어 목록에서 빠진 직원은 선택에서도 뺀다(보이지 않는 사람에게 보내지 않게)
   useEffect(() => {
     if (isPlaceholderData) return;
     const visible = new Set(targets.map((t) => t.employeeId));
@@ -139,6 +147,20 @@ export default function PromotionTab() {
               </SelectContent>
             </Select>
           </div>
+          <form onSubmit={onSearch} className="flex min-w-[240px] max-w-sm flex-1 gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="이름·부서 검색"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+            </div>
+            <Button type="submit" variant="secondary">
+              검색
+            </Button>
+          </form>
           <span className="pb-2 text-sm text-muted-foreground">
             대상 {targets.length}명 · 선택 {selected.size}명
           </span>
@@ -182,7 +204,9 @@ export default function PromotionTab() {
             ) : (
               <TableRow>
                 <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                  사용 기한이 {months}개월 안에 끝나는 촉진 대상이 없습니다.
+                  {search
+                    ? `"${search}"에 맞는 촉진 대상이 없습니다. (사용 기한 ${months}개월 이하)`
+                    : `사용 기한이 ${months}개월 안에 끝나는 촉진 대상이 없습니다.`}
                 </TableCell>
               </TableRow>
             )}

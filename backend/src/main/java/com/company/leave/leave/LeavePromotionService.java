@@ -2,6 +2,8 @@ package com.company.leave.leave;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.common.search.SearchKeywords;
+import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.repository.EmployeeRepository;
 import com.company.leave.leave.domain.LeaveBalance;
@@ -27,7 +29,10 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -58,6 +63,7 @@ public class LeavePromotionService {
     private final PolicyService policyService;
     private final ApplicationEventPublisher eventPublisher;
     private final AccountMailProperties mailProperties;
+    private final DepartmentRepository departmentRepository;
 
     public LeavePromotionService(LeaveBalanceService balanceService,
                                  LeaveRequestRepository requestRepository,
@@ -66,7 +72,8 @@ public class LeavePromotionService {
                                  NotificationService notificationService,
                                  PolicyService policyService,
                                  ApplicationEventPublisher eventPublisher,
-                                 AccountMailProperties mailProperties) {
+                                 AccountMailProperties mailProperties,
+                                 DepartmentRepository departmentRepository) {
         this.balanceService = balanceService;
         this.requestRepository = requestRepository;
         this.noticeRepository = noticeRepository;
@@ -75,6 +82,7 @@ public class LeavePromotionService {
         this.policyService = policyService;
         this.eventPublisher = eventPublisher;
         this.mailProperties = mailProperties;
+        this.departmentRepository = departmentRepository;
     }
 
     /**
@@ -118,12 +126,23 @@ public class LeavePromotionService {
      */
     @Transactional(readOnly = true)
     public List<Target> targets(int months) {
+        return targets(months, null);
+    }
+
+    /**
+     * {@link #targets(int)} 중 검색어에 맞는 직원. 검색어는 공백으로 나눈 단어가 모두 이름이나 부서에 맞아야 하고,
+     * 상위 부서 이름으로 찾으면 하위 부서 직원도 나온다(다른 목록 검색과 같은 규칙).
+     */
+    @Transactional(readOnly = true)
+    public List<Target> targets(int months, String keyword) {
         int m = Math.max(1, Math.min(MAX_MONTHS, months));
         LocalDate today = LocalDate.now();
         LocalDate limit = today.plusMonths(m);
+        Predicate<Employee> matches = keywordFilter(keyword);
         List<LeaveBalanceService.PeriodBalance> candidates = balanceService.balancesAsOf(today, true).stream()
                 .filter(pb -> !pb.period().end().isAfter(limit))
                 .filter(pb -> pb.balance().remaining().signum() > 0)
+                .filter(pb -> matches.test(pb.employee()))
                 .toList();
         if (candidates.isEmpty()) {
             return List.of();
@@ -288,6 +307,31 @@ public class LeavePromotionService {
         noticeRepository.save(new PromotionNotice(e.getId(), t.year(), t.periodEnd(), t.remaining(),
                 (int) t.daysLeft(), mail ? e.getEmail() : null, actor != null ? actor.getId() : null, autoMonths));
         return mail;
+    }
+
+    /** 검색어 조건: 단어마다 이름에 포함되거나 그 단어로 찾은 부서(하위 포함) 소속. 검색어가 없으면 모두. */
+    private Predicate<Employee> keywordFilter(String keyword) {
+        List<String> tokens = SearchKeywords.tokens(keyword);
+        if (tokens.isEmpty()) {
+            return e -> true;
+        }
+        List<SearchKeywords.DepartmentNode> departments = departmentRepository.findAll().stream()
+                .map(d -> new SearchKeywords.DepartmentNode(d.getId(),
+                        d.getParent() != null ? d.getParent().getId() : null, d.getName()))
+                .toList();
+        List<Set<Long>> deptIdsByToken = tokens.stream()
+                .map(t -> SearchKeywords.departmentSubtrees(departments, t)).toList();
+        return e -> {
+            String name = e.getName() != null ? e.getName().toLowerCase(Locale.ROOT) : "";
+            for (int i = 0; i < tokens.size(); i++) {
+                boolean byName = name.contains(tokens.get(i));
+                boolean byDept = e.getDepartment() != null && deptIdsByToken.get(i).contains(e.getDepartment().getId());
+                if (!byName && !byDept) {
+                    return false;
+                }
+            }
+            return true;
+        };
     }
 
     /** 앱 알림 문구: "남은 연차 5일(결재 대기 2.125일), 사용 기한 2026-11-30(1개월 28일 남음). …" */

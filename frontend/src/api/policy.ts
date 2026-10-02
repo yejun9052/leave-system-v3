@@ -111,8 +111,11 @@ export interface PromotionSendResult {
 }
 
 export const promotionApi = {
-  targets: (months: number) =>
-    unwrap<PromotionTarget[]>(api.get("/leave/promotion/targets", { params: { months } })),
+  /** keyword: 이름·부서 검색(공백으로 나눈 단어 모두, 상위 부서로 찾으면 하위 부서 포함) */
+  targets: (months: number, keyword?: string) =>
+    unwrap<PromotionTarget[]>(
+      api.get("/leave/promotion/targets", { params: { months, keyword: keyword || undefined } }),
+    ),
   send: (employeeIds: number[]) =>
     unwrap<PromotionSendResult>(api.post("/leave/promotion/send", { employeeIds })),
 };
