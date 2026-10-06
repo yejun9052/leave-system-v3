@@ -21,12 +21,16 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByStartDateDesc(
             Long employeeId, LeaveRequestStatus status);
 
-    /** 기간이 겹치는 본인의 대기/승인 신청 목록 (부분 휴가 같은 날 합계 검사용) */
+    /**
+     * 기간이 겹치는 본인의 대기/승인/취소 요청 중 신청 목록 (겹침·부분 휴가 같은 날 합계 검사용).
+     * 취소 요청 중인 휴가는 취소가 반려되면 승인 상태로 돌아가므로 아직 날짜를 차지한 것으로 본다.
+     */
     @Query("""
             select r from LeaveRequest r
             where r.employee.id = :employeeId
               and r.status in (com.company.leave.leave.domain.LeaveRequestStatus.PENDING,
-                               com.company.leave.leave.domain.LeaveRequestStatus.APPROVED)
+                               com.company.leave.leave.domain.LeaveRequestStatus.APPROVED,
+                               com.company.leave.leave.domain.LeaveRequestStatus.CANCEL_REQUESTED)
               and r.startDate <= :end and r.endDate >= :start
             """)
     List<LeaveRequest> findActiveOverlapping(@Param("employeeId") Long employeeId,
