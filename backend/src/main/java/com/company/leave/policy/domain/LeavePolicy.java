@@ -15,12 +15,14 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import lombok.Getter;
 
 /**
  * 전사 연차 운영 정책 (단일 활성 레코드).
  */
 @Entity
 @Table(name = "leave_policy")
+@Getter
 public class LeavePolicy extends BaseTimeEntity {
 
     @Id
@@ -155,58 +157,6 @@ public class LeavePolicy extends BaseTimeEntity {
             boolean nextPeriodReservationEnabled) {
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public GrantBasis getGrantBasis() {
-        return grantBasis;
-    }
-
-    public int getFiscalStartMonth() {
-        return fiscalStartMonth;
-    }
-
-    public int getFiscalStartDay() {
-        return fiscalStartDay;
-    }
-
-    public BigDecimal getBaseAnnualDays() {
-        return baseAnnualDays;
-    }
-
-    public int getSeniorityStepYears() {
-        return seniorityStepYears;
-    }
-
-    public BigDecimal getSeniorityIncrementDays() {
-        return seniorityIncrementDays;
-    }
-
-    public BigDecimal getMaxAnnualDays() {
-        return maxAnnualDays;
-    }
-
-    public boolean isMonthlyAccrualEnabled() {
-        return monthlyAccrualEnabled;
-    }
-
-    public int getMonthlyAccrualMax() {
-        return monthlyAccrualMax;
-    }
-
-    public boolean isAllowNegative() {
-        return allowNegative;
-    }
-
-    public boolean isHalfDayEnabled() {
-        return halfDayEnabled;
-    }
-
-    public boolean isHourlyEnabled() {
-        return hourlyEnabled;
-    }
-
     /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능, 반반차는 시간차로 대체되어 항상 불가. */
     public boolean allows(DayPortion portion) {
         return switch (portion) {
@@ -215,22 +165,6 @@ public class LeavePolicy extends BaseTimeEntity {
             case QUARTER -> false;
             case HOURLY -> hourlyEnabled;
         };
-    }
-
-    public int getMaxConcurrentAbsence() {
-        return maxConcurrentAbsence;
-    }
-
-    public int getMinAdvanceDays() {
-        return minAdvanceDays;
-    }
-
-    public int getMaxConsecutiveDays() {
-        return maxConsecutiveDays;
-    }
-
-    public boolean isPromotionEnabled() {
-        return promotionEnabled;
     }
 
     /** 자동 발송 시기(사용 기한 몇 개월 전), 큰 값부터. */
@@ -255,21 +189,5 @@ public class LeavePolicy extends BaseTimeEntity {
         }
         this.promotionEnabled = promotionEnabled;
         this.promotionMonths = String.join(",", sorted.stream().map(String::valueOf).toList());
-    }
-
-    public boolean isCarryOverEnabled() {
-        return carryOverEnabled;
-    }
-
-    public BigDecimal getMaxCarryOverDays() {
-        return maxCarryOverDays;
-    }
-
-    public boolean isNextPeriodReservationEnabled() {
-        return nextPeriodReservationEnabled;
-    }
-
-    public boolean isActive() {
-        return active;
     }
 }

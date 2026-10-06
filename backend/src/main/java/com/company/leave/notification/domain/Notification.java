@@ -7,9 +7,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import lombok.Getter;
 
 @Entity
 @Table(name = "notifications")
+@Getter
 public class Notification {
 
     @Id
@@ -50,37 +52,5 @@ public class Notification {
 
     public void markRead() {
         this.read = true;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getEmployeeId() {
-        return employeeId;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public String getLink() {
-        return link;
-    }
-
-    public boolean isRead() {
-        return read;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 }

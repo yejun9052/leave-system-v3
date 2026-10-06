@@ -17,12 +17,15 @@ import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import lombok.AccessLevel;
+import lombok.Getter;
 
 /**
  * 휴가 신청/결재 건.
  */
 @Entity
 @Table(name = "leave_requests")
+@Getter
 public class LeaveRequest extends BaseTimeEntity {
 
     @Id
@@ -101,6 +104,7 @@ public class LeaveRequest extends BaseTimeEntity {
     private String rejectReason;
 
     /** 낙관적 락: 두 결재자가 같은 신청을 동시에 처리하면 한쪽만 반영된다. */
+    @Getter(AccessLevel.NONE)
     @Version
     @Column(nullable = false)
     private long version;
@@ -166,10 +170,6 @@ public class LeaveRequest extends BaseTimeEntity {
         this.halfDayPart = part;
     }
 
-    public HalfDayPart getHalfDayPart() {
-        return halfDayPart;
-    }
-
     /** 이 신청의 실제 단위: 종일 종류를 반차로 신청했으면 HALF, 아니면 휴가 종류의 단위. */
     public DayPortion getPortion() {
         return halfDayPart != null ? DayPortion.HALF : leaveType.getPortion();
@@ -233,84 +233,8 @@ public class LeaveRequest extends BaseTimeEntity {
         return status == LeaveRequestStatus.APPROVED;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public Employee getEmployee() {
-        return employee;
-    }
-
-    public LeaveType getLeaveType() {
-        return leaveType;
-    }
-
-    public LocalDate getStartDate() {
-        return startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return endDate;
-    }
-
-    public BigDecimal getDays() {
-        return days;
-    }
-
-    public BigDecimal getDeductedDays() {
-        return deductedDays;
-    }
-
-    public Long getSpecialRuleId() {
-        return specialRuleId;
-    }
-
-    public String getSpecialRuleName() {
-        return specialRuleName;
-    }
-
-    public BigDecimal getSpecialRuleDays() {
-        return specialRuleDays;
-    }
-
-    public BigDecimal getForfeitedDays() {
-        return forfeitedDays;
-    }
-
-    public int getAppliedYear() {
-        return appliedYear;
-    }
-
-    public BigDecimal getNextPeriodDeductedDays() {
-        return nextPeriodDeductedDays;
-    }
-
     /** applied_year 기간에서 빼는 몫. */
     public BigDecimal getCurrentPeriodDeductedDays() {
         return deductedDays.subtract(nextPeriodDeductedDays);
-    }
-
-    public LeaveRequestStatus getStatus() {
-        return status;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public Employee getApprover() {
-        return approver;
-    }
-
-    public Instant getApprovedAt() {
-        return approvedAt;
-    }
-
-    public String getRejectReason() {
-        return rejectReason;
-    }
-
-    public String getCancelReason() {
-        return cancelReason;
     }
 }

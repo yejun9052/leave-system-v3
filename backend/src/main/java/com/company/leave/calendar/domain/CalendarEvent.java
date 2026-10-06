@@ -10,12 +10,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
+import lombok.Getter;
 
 /**
  * 캘린더 일정. 승인된 휴가(LEAVE_REQUEST), 관리자 등록(ADMIN_EVENT), 공휴일(HOLIDAY)을 표현.
  */
 @Entity
 @Table(name = "calendar_events")
+@Getter
 public class CalendarEvent extends BaseTimeEntity {
 
     @Id
@@ -87,54 +89,6 @@ public class CalendarEvent extends BaseTimeEntity {
         this.scope = scope;
         this.colorHex = colorHex;
         this.departmentId = departmentId;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public LocalDate getStartDate() {
-        return startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return endDate;
-    }
-
-    public boolean isAllDay() {
-        return allDay;
-    }
-
-    public CalendarEventScope getScope() {
-        return scope;
-    }
-
-    public CalendarEventSource getSource() {
-        return source;
-    }
-
-    public String getColorHex() {
-        return colorHex;
-    }
-
-    public Long getDepartmentId() {
-        return departmentId;
-    }
-
-    public Long getEmployeeId() {
-        return employeeId;
-    }
-
-    public Long getLeaveRequestId() {
-        return leaveRequestId;
-    }
-
-    public Long getCreatedBy() {
-        return createdBy;
     }
 
     public static final class Builder {

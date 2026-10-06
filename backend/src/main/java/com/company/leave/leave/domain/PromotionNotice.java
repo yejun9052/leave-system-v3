@@ -9,12 +9,14 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import lombok.Getter;
 
 /**
  * 연차 사용 촉진 안내 발송 이력 한 건. 사용 기한 전에 남은 연차를 알린 통보 증빙.
  */
 @Entity
 @Table(name = "promotion_notices")
+@Getter
 public class PromotionNotice {
 
     @Id
@@ -68,45 +70,5 @@ public class PromotionNotice {
         this.email = email;
         this.sentBy = sentBy;
         this.autoMonths = autoMonths;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getEmployeeId() {
-        return employeeId;
-    }
-
-    public int getBalanceYear() {
-        return balanceYear;
-    }
-
-    public LocalDate getPeriodEnd() {
-        return periodEnd;
-    }
-
-    public BigDecimal getRemainingDays() {
-        return remainingDays;
-    }
-
-    public int getDaysLeft() {
-        return daysLeft;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public Long getSentBy() {
-        return sentBy;
-    }
-
-    public Integer getAutoMonths() {
-        return autoMonths;
-    }
-
-    public Instant getSentAt() {
-        return sentAt;
     }
 }

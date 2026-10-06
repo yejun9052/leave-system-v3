@@ -9,6 +9,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
+import lombok.AccessLevel;
+import lombok.Getter;
 
 /**
  * 사용자의 연도별 연차 잔액.
@@ -16,6 +18,7 @@ import java.math.BigDecimal;
  */
 @Entity
 @Table(name = "leave_balances")
+@Getter
 public class LeaveBalance extends BaseTimeEntity {
 
     @Id
@@ -41,6 +44,7 @@ public class LeaveBalance extends BaseTimeEntity {
     private BigDecimal expired = BigDecimal.ZERO;
 
     /** 낙관적 락: 동시 승인/차감 시 갱신 유실(lost update) 방지. */
+    @Getter(AccessLevel.NONE)
     @Version
     @Column(nullable = false)
     private long version;
@@ -99,33 +103,5 @@ public class LeaveBalance extends BaseTimeEntity {
         if (this.expired.signum() < 0) {
             this.expired = BigDecimal.ZERO;
         }
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getEmployeeId() {
-        return employeeId;
-    }
-
-    public int getYear() {
-        return year;
-    }
-
-    public BigDecimal getGranted() {
-        return granted;
-    }
-
-    public BigDecimal getUsed() {
-        return used;
-    }
-
-    public BigDecimal getCarriedOver() {
-        return carriedOver;
-    }
-
-    public BigDecimal getExpired() {
-        return expired;
     }
 }

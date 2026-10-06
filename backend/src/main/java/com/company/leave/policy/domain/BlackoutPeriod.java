@@ -7,12 +7,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
+import lombok.Getter;
 
 /**
  * 연차 사용 금지(블랙아웃) 기간. 이 기간과 겹치는 신청은 차단된다.
  */
 @Entity
 @Table(name = "blackout_periods")
+@Getter
 public class BlackoutPeriod {
 
     @Id
@@ -41,21 +43,5 @@ public class BlackoutPeriod {
         this.startDate = startDate;
         this.endDate = endDate;
         this.name = name;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public LocalDate getStartDate() {
-        return startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return endDate;
-    }
-
-    public String getName() {
-        return name;
     }
 }

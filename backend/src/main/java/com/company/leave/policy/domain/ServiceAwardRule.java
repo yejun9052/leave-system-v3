@@ -7,12 +7,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import lombok.Getter;
 
 /**
  * 장기근속 포상 규칙: 근속 {@code years}년 도달 시 해당 연도에 {@code bonusDays} 만큼 연차를 가산 부여.
  */
 @Entity
 @Table(name = "service_award_rules")
+@Getter
 public class ServiceAwardRule {
 
     @Id
@@ -41,21 +43,5 @@ public class ServiceAwardRule {
         this.years = years;
         this.bonusDays = bonusDays;
         this.name = name;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public int getYears() {
-        return years;
-    }
-
-    public BigDecimal getBonusDays() {
-        return bonusDays;
-    }
-
-    public String getName() {
-        return name;
     }
 }

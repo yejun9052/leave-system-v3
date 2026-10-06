@@ -7,9 +7,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import lombok.Getter;
 
 @Entity
 @Table(name = "audit_logs")
+@Getter
 public class AuditLog {
 
     @Id
@@ -52,41 +54,5 @@ public class AuditLog {
         this.entityId = entityId;
         this.detail = detail;
         this.success = success;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getActorId() {
-        return actorId;
-    }
-
-    public String getActorName() {
-        return actorName;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public String getEntityType() {
-        return entityType;
-    }
-
-    public String getEntityId() {
-        return entityId;
-    }
-
-    public String getDetail() {
-        return detail;
-    }
-
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 }

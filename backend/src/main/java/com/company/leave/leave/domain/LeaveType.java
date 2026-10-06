@@ -10,12 +10,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import lombok.Getter;
 
 /**
  * 휴가 종류 (연차, 오전/오후 반차, 경조사, 병가 등).
  */
 @Entity
 @Table(name = "leave_types")
+@Getter
 public class LeaveType extends BaseTimeEntity {
 
     @Id
@@ -118,30 +120,6 @@ public class LeaveType extends BaseTimeEntity {
         this.requiresAnnualExhausted = annualDeductionMode == AnnualDeductionMode.EXHAUST_FIRST;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public BigDecimal getDeductDays() {
-        return deductDays;
-    }
-
-    public boolean isPaid() {
-        return paid;
-    }
-
-    public DayPortion getPortion() {
-        return portion;
-    }
-
     public boolean isHalfDay() {
         return portion == DayPortion.HALF;
     }
@@ -149,10 +127,6 @@ public class LeaveType extends BaseTimeEntity {
     /** 반차·반반차·시간차(하루만, 1일 미만). */
     public boolean isPartialDay() {
         return portion.isPartial();
-    }
-
-    public AnnualDeductionMode getAnnualDeductionMode() {
-        return annualDeductionMode;
     }
 
     /** 연차처럼 차감(DEDUCT). */
@@ -166,21 +140,5 @@ public class LeaveType extends BaseTimeEntity {
      */
     public boolean isRequiresAnnualExhausted() {
         return annualDeductionMode == AnnualDeductionMode.EXHAUST_FIRST;
-    }
-
-    public boolean isAllowedDuringBlackout() {
-        return allowedDuringBlackout;
-    }
-
-    public String getColorHex() {
-        return colorHex;
-    }
-
-    public int getSortOrder() {
-        return sortOrder;
-    }
-
-    public boolean isActive() {
-        return active;
     }
 }

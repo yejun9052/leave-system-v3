@@ -7,12 +7,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
+import lombok.Getter;
 
 /**
  * 공휴일. 연차 일수 계산 시 제외되며 캘린더에도 표시된다.
  */
 @Entity
 @Table(name = "holidays")
+@Getter
 public class Holiday {
 
     @Id
@@ -35,17 +37,5 @@ public class Holiday {
 
     public void rename(String name) {
         this.name = name;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public LocalDate getDate() {
-        return date;
-    }
-
-    public String getName() {
-        return name;
     }
 }

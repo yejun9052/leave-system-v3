@@ -18,12 +18,14 @@ import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.Set;
+import lombok.Getter;
 
 /**
  * 사용자(직원).
  */
 @Entity
 @Table(name = "employees")
+@Getter
 public class Employee extends BaseTimeEntity {
 
     @Id
@@ -156,60 +158,8 @@ public class Employee extends BaseTimeEntity {
 
     // --- getters ---
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public Department getDepartment() {
-        return department;
-    }
-
     public Long getDepartmentId() {
         return department != null ? department.getId() : null;
-    }
-
-    public String getPosition() {
-        return position;
-    }
-
-    public String getPhone() {
-        return phone;
-    }
-
-    public LocalDate getHireDate() {
-        return hireDate;
-    }
-
-    public EmployeeStatus getStatus() {
-        return status;
-    }
-
-    public LocalDate getResignedDate() {
-        return resignedDate;
-    }
-
-    public Set<Role> getRoles() {
-        return roles;
-    }
-
-    public boolean isSystemAccount() {
-        return systemAccount;
-    }
-
-    public boolean isPasswordChangeRequired() {
-        return passwordChangeRequired;
     }
 
     public static final class Builder {

@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import lombok.Getter;
 
 /**
  * 경조사 등 사유별 휴가 규칙 (관계/사유별 부여 일수).
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
  */
 @Entity
 @Table(name = "special_leave_rules")
+@Getter
 public class SpecialLeaveRule {
 
     @Id
@@ -48,25 +50,5 @@ public class SpecialLeaveRule {
         this.days = days;
         this.leaveTypeCode = leaveTypeCode;
         this.sortOrder = sortOrder;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public BigDecimal getDays() {
-        return days;
-    }
-
-    public String getLeaveTypeCode() {
-        return leaveTypeCode;
-    }
-
-    public int getSortOrder() {
-        return sortOrder;
     }
 }

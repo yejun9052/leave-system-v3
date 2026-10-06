@@ -11,12 +11,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import lombok.Getter;
 
 /**
  * 부서. 자기참조(parent)로 계층 구조를 이룬다.
  */
 @Entity
 @Table(name = "departments")
+@Getter
 public class Department extends BaseTimeEntity {
 
     @Id
@@ -63,31 +65,11 @@ public class Department extends BaseTimeEntity {
         this.lead = lead;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public Department getParent() {
-        return parent;
-    }
-
     public Long getParentId() {
         return parent != null ? parent.getId() : null;
     }
 
-    public Employee getLead() {
-        return lead;
-    }
-
     public Long getLeadId() {
         return lead != null ? lead.getId() : null;
-    }
-
-    public int getSortOrder() {
-        return sortOrder;
     }
 }

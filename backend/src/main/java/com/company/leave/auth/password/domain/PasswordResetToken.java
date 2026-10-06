@@ -7,12 +7,15 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import lombok.AccessLevel;
+import lombok.Getter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /** 비밀번호 재설정 1회용 토큰. 원문은 메일로만 나가고 DB 에는 SHA-256 hex 만 저장한다. */
 @Entity
 @Table(name = "password_reset_tokens")
+@Getter
 public class PasswordResetToken {
 
     @Id
@@ -32,6 +35,7 @@ public class PasswordResetToken {
     @Column(name = "used_at")
     private Instant usedAt;
 
+    @Getter(AccessLevel.NONE)
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -47,25 +51,5 @@ public class PasswordResetToken {
 
     public boolean isUsable(Instant now) {
         return usedAt == null && now.isBefore(expiresAt);
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getEmployeeId() {
-        return employeeId;
-    }
-
-    public String getTokenHash() {
-        return tokenHash;
-    }
-
-    public Instant getExpiresAt() {
-        return expiresAt;
-    }
-
-    public Instant getUsedAt() {
-        return usedAt;
     }
 }
