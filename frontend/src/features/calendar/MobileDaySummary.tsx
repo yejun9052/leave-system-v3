@@ -2,10 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { calendarApi, type DayLeaveDto } from "@/api/calendar";
 import { cn } from "@/lib/utils";
+import { HALF_DAY_LABEL } from "@/types";
 import { weekdayLabel } from "./useDateSelection";
 
 function leaveLabel(l: DayLeaveDto): string {
   if (l.portion === "HOURLY") return l.hours != null ? `${l.leaveTypeName} ${l.hours}시간` : l.leaveTypeName;
+  if (l.halfDayPart) return `${l.leaveTypeName} · ${HALF_DAY_LABEL[l.halfDayPart]} 반차`;
   return l.portion === "FULL" ? `${l.leaveTypeName} · 종일` : l.leaveTypeName;
 }
 

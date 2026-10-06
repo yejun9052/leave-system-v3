@@ -80,6 +80,11 @@ export interface LeaveTypeSpecialRule {
 
 export type LeavePortion = "FULL" | "HALF" | "QUARTER" | "HOURLY";
 
+/** 종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정, 예: 생일 반차) */
+export type HalfDayPart = "AM" | "PM";
+
+export const HALF_DAY_LABEL: Record<HalfDayPart, string> = { AM: "오전", PM: "오후" };
+
 /** 연차 차감 방식: 연차처럼 차감 / 회사 규정(연차 먼저 소진) / 법정 기준(연차와 무관) */
 export type AnnualDeductionMode = "DEDUCT" | "EXHAUST_FIRST" | "NONE";
 
@@ -141,6 +146,8 @@ export interface LeaveRequest {
   portion: LeavePortion;
   /** 시간차만 숫자, 그 외 null */
   hours: number | null;
+  /** 종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정), 그 외 null */
+  halfDayPart: HalfDayPart | null;
   /** 승인으로 소멸되는 연차(병가·공가) */
   forfeitedDays: number;
   /** 경조사 규정으로 신청한 경우의 규정 이름·일수 */

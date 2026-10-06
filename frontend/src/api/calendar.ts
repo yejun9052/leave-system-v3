@@ -1,5 +1,5 @@
 import { api, unwrap } from "./client";
-import type { LeavePortion, LeaveRequestStatus } from "@/types";
+import type { HalfDayPart, LeavePortion, LeaveRequestStatus } from "@/types";
 
 export interface CalendarEventDto {
   id: string;
@@ -39,6 +39,8 @@ export interface DayLeaveDto {
   endDate: string;
   status: LeaveRequestStatus;
   mine: boolean;
+  /** 종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정), 그 외 null */
+  halfDayPart: HalfDayPart | null;
 }
 
 export interface DayEventDto {

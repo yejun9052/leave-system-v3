@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { leaveApi, type ApprovalRoute, type LeaveRequestCreate } from "@/api/leave";
-import type { LeaveType } from "@/types";
+import { HALF_DAY_LABEL, type HalfDayPart, type LeaveType } from "@/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -55,6 +55,33 @@ function approvalRouteText(route: ApprovalRoute): string {
   }
 }
 
+/** 0.5일 경조사 규정(예: 생일)의 오전·오후 선택. 휴가 직접 등록 창도 같이 쓴다. */
+export function HalfDayPartSelect({
+  value,
+  onChange,
+}: {
+  value: HalfDayPart | "";
+  onChange: (v: HalfDayPart) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>오전·오후</Label>
+      <Select value={value} onValueChange={(v) => onChange(v as HalfDayPart)}>
+        <SelectTrigger>
+          <SelectValue placeholder="오전·오후 선택" />
+        </SelectTrigger>
+        <SelectContent>
+          {(["AM", "PM"] as HalfDayPart[]).map((p) => (
+            <SelectItem key={p} value={p}>
+              {HALF_DAY_LABEL[p]} 반차
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export interface LeaveRequestFormOptions {
   start: string;
   end: string;
@@ -79,6 +106,7 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
   const [hours, setHours] = useState<string>("");
   const [forfeitAck, setForfeitAck] = useState(false);
   const [specialRuleId, setSpecialRuleId] = useState<string>("");
+  const [halfDayPart, setHalfDayPart] = useState<HalfDayPart | "">("");
 
   const setTypeId = (id: string) => {
     setTypeIdState(id);
@@ -92,13 +120,17 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     () => usableTypes.find((t) => String(t.id) === typeId),
     [usableTypes, typeId],
   );
-  // 종일이 아닌 종류(반차·시간차)는 하루만 신청할 수 있다
-  const isPartial = !!selectedType && selectedType.portion !== "FULL";
-  const isHourly = selectedType?.portion === "HOURLY";
-  const endDate = isPartial ? start : end;
   // 경조사 규정이 연결된 종류는 규정 하나를 반드시 선택해야 한다
   const specialRules = selectedType?.specialRules ?? [];
   const needsRule = specialRules.length > 0;
+  // 1일 미만 규정(예: 생일 0.5일)은 오전·오후 반차로만 신청한다
+  const selectedRule = specialRules.find((r) => String(r.id) === specialRuleId);
+  const halfDayRule = !!selectedRule && selectedRule.days < 1;
+  // 종일이 아닌 종류(반차·시간차)와 반일 규정은 하루만 신청할 수 있다
+  const isPartial = (!!selectedType && selectedType.portion !== "FULL") || halfDayRule;
+  const isHourly = selectedType?.portion === "HOURLY";
+  const endDate = isPartial ? start : end;
+  const sentHalfDay = halfDayRule && halfDayPart ? halfDayPart : undefined;
 
   // 기억해 둔 종류가 더 이상 쓸 수 없는 종류면(정책 변경 등) 선택하지 않은 상태로 둔다
   useEffect(() => {
@@ -136,9 +168,10 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
   })();
 
   // 신청 미리보기: 신청과 같은 계산으로 근무일·차감·신청 후 잔여와 불가 사유를 받는다
-  const previewEnabled = !!selectedType && !!start && !!endDate && (!isHourly || !!hours);
+  const previewEnabled =
+    !!selectedType && !!start && !!endDate && (!isHourly || !!hours) && (!halfDayRule || !!halfDayPart);
   const { data: preview, isFetching: previewLoading } = useQuery({
-    queryKey: ["leavePreview", typeId, start, endDate, hours, specialRuleId],
+    queryKey: ["leavePreview", typeId, start, endDate, hours, specialRuleId, sentHalfDay],
     queryFn: () =>
       leaveApi.preview({
         leaveTypeId: Number(typeId),
@@ -146,6 +179,7 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
         endDate,
         hours: isHourly ? Number(hours) : undefined,
         specialRuleId: specialRuleId ? Number(specialRuleId) : undefined,
+        halfDayPart: sentHalfDay,
       }),
     enabled: previewEnabled,
     placeholderData: (prev) => prev,
@@ -160,10 +194,13 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     if (selectedBlocked) setTypeIdState("");
   }, [selectedBlocked]);
 
-  // 종류를 바꾸면 규정 선택을 초기화한다
+  // 종류를 바꾸면 규정 선택을, 규정을 바꾸면 오전·오후 선택을 초기화한다
   useEffect(() => {
     setSpecialRuleId("");
   }, [typeId]);
+  useEffect(() => {
+    setHalfDayPart("");
+  }, [typeId, specialRuleId]);
 
   // 종류·날짜가 바뀌면 소멸 안내 확인을 다시 받는다
   useEffect(() => {
@@ -180,6 +217,7 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
         hours: isHourly ? Number(hours) : undefined,
         forfeitAcknowledged: forfeitDays > 0 ? true : undefined,
         specialRuleId: needsRule ? Number(specialRuleId) : undefined,
+        halfDayPart: sentHalfDay,
       };
       return leaveApi.create(body);
     },
@@ -201,6 +239,7 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     !notAllowed &&
     (!isHourly || !!hours) &&
     (!needsRule || !!specialRuleId) &&
+    (!halfDayRule || !!halfDayPart) &&
     (forfeitDays <= 0 || forfeitAck);
 
   return {
@@ -216,6 +255,9 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     needsRule,
     specialRuleId,
     setSpecialRuleId,
+    halfDayRule,
+    halfDayPart,
+    setHalfDayPart,
     hours,
     setHours,
     reason,
@@ -246,6 +288,9 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
     specialRules,
     specialRuleId,
     setSpecialRuleId,
+    halfDayRule,
+    halfDayPart,
+    setHalfDayPart,
     isHourly,
     hours,
     setHours,
@@ -294,12 +339,15 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {specialRuleId
-              ? `근무일 기준(주말·공휴일 제외) 최대 ${formatDays(specialRules.find((r) => String(r.id) === specialRuleId)?.days)}일까지 신청할 수 있습니다.`
-              : "근무일 기준(주말·공휴일 제외) 규정 일수까지 신청할 수 있습니다."}
+            {halfDayRule
+              ? "반차(0.5일)로 신청합니다. 오전·오후를 골라 주세요."
+              : specialRuleId
+                ? `근무일 기준(주말·공휴일 제외) 최대 ${formatDays(specialRules.find((r) => String(r.id) === specialRuleId)?.days)}일까지 신청할 수 있습니다.`
+                : "근무일 기준(주말·공휴일 제외) 규정 일수까지 신청할 수 있습니다."}
           </p>
         </div>
       )}
+      {halfDayRule && <HalfDayPartSelect value={halfDayPart} onChange={setHalfDayPart} />}
       {dates}
       {isHourly && (
         <div className="space-y-2">

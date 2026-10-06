@@ -1,5 +1,5 @@
 import { api, unwrap } from "./client";
-import type { LeaveBalance, LeaveRequest, LeaveRequestStatus, LeaveType, Page } from "@/types";
+import type { HalfDayPart, LeaveBalance, LeaveRequest, LeaveRequestStatus, LeaveType, Page } from "@/types";
 
 export interface LeaveRequestCreate {
   leaveTypeId: number;
@@ -12,6 +12,8 @@ export interface LeaveRequestCreate {
   forfeitAcknowledged?: boolean;
   /** 종류에 경조사 규정이 있으면 필수 */
   specialRuleId?: number;
+  /** 0.5일 경조사 규정(예: 생일)이면 필수인 오전·오후 */
+  halfDayPart?: HalfDayPart;
 }
 
 /** 인사관리자·시스템 관리자의 강제 등록: 바로 승인 상태로 등록(지난 날짜 가능, 시작일은 근무일만) */
@@ -25,6 +27,8 @@ export interface LeaveRegister {
   hours?: number;
   /** 종류에 경조사 규정이 있으면 필수 */
   specialRuleId?: number;
+  /** 0.5일 경조사 규정(예: 생일)이면 필수인 오전·오후 */
+  halfDayPart?: HalfDayPart;
 }
 
 export interface LeaveEligibility {
@@ -53,6 +57,7 @@ export interface LeavePreviewParams {
   endDate: string;
   hours?: number;
   specialRuleId?: number;
+  halfDayPart?: HalfDayPart;
 }
 
 /**

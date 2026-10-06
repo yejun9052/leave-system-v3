@@ -6,6 +6,7 @@ import { policyRulesApi } from "@/api/policy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth";
+import { HALF_DAY_LABEL } from "@/types";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ function portionLabel(l: DayLeaveDto): string {
     case "FULL":
       return "종일";
     case "HALF":
+      if (l.halfDayPart) return `${l.leaveTypeName} · ${HALF_DAY_LABEL[l.halfDayPart]} 반차`;
       return l.leaveTypeName.includes("반차") ? l.leaveTypeName : "반차";
     case "QUARTER":
       return "반반차";

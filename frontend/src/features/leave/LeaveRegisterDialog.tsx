@@ -25,7 +25,8 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { formatDays } from "@/lib/leaveFormat";
-import type { Employee } from "@/types";
+import { HALF_DAY_LABEL, type Employee, type HalfDayPart } from "@/types";
+import { HalfDayPartSelect } from "./LeaveRequestForm";
 
 /**
  * 인사관리자·시스템 관리자의 휴가 직접 등록: 다른 직원의 휴가를 바로 승인 상태로 등록한다.
@@ -41,6 +42,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
   const [search, setSearch] = useState("");
   const [typeId, setTypeId] = useState("");
   const [specialRuleId, setSpecialRuleId] = useState("");
+  const [halfDayPart, setHalfDayPart] = useState<HalfDayPart | "">("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [hours, setHours] = useState("");
@@ -62,17 +64,23 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
   const { data: types = [] } = useQuery({ queryKey: ["leaveTypes", "active"], queryFn: leaveApi.activeTypes });
   const usableTypes = useMemo(() => types.filter((t) => t.policyEnabled), [types]);
   const selectedType = usableTypes.find((t) => String(t.id) === typeId);
-  // 종일이 아닌 종류(반차·시간차)는 하루만 등록한다
-  const isPartial = !!selectedType && selectedType.portion !== "FULL";
-  const isHourly = selectedType?.portion === "HOURLY";
   const specialRules = selectedType?.specialRules ?? [];
   const needsRule = specialRules.length > 0;
+  // 1일 미만 규정(예: 생일 0.5일)은 오전·오후 반차로만 등록한다
+  const selectedRule = specialRules.find((r) => String(r.id) === specialRuleId);
+  const halfDayRule = !!selectedRule && selectedRule.days < 1;
+  // 종일이 아닌 종류(반차·시간차)와 반일 규정은 하루만 등록한다
+  const isPartial = (!!selectedType && selectedType.portion !== "FULL") || halfDayRule;
+  const isHourly = selectedType?.portion === "HOURLY";
   const endDate = isPartial ? start : end;
 
   useEffect(() => {
     setSpecialRuleId("");
     setHours("");
   }, [typeId]);
+  useEffect(() => {
+    setHalfDayPart("");
+  }, [typeId, specialRuleId]);
 
   const register = useMutation({
     mutationFn: () =>
@@ -84,6 +92,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
         reason: reason.trim() || undefined,
         hours: isHourly ? Number(hours) : undefined,
         specialRuleId: needsRule ? Number(specialRuleId) : undefined,
+        halfDayPart: halfDayRule && halfDayPart ? halfDayPart : undefined,
       }),
     onSuccess: () => {
       toast({ title: "휴가를 등록했습니다. 바로 승인 상태입니다.", variant: "success" });
@@ -104,6 +113,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
     endDate >= start &&
     (!isHourly || !!hours) &&
     (!needsRule || !!specialRuleId) &&
+    (!halfDayRule || !!halfDayPart) &&
     !register.isPending;
 
   const onSubmit = async () => {
@@ -115,6 +125,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
       description:
         `${employee.name} · ${selectedType.name}${rule ? ` (${rule})` : ""} ${period}` +
         (isHourly ? ` ${hours}시간` : "") +
+        (halfDayRule && halfDayPart ? ` ${HALF_DAY_LABEL[halfDayPart]} 반차` : "") +
         "\n결재 없이 바로 승인되고, 본인과 담당 팀장에게 알림이 갑니다.",
       confirmText: "등록",
     });
@@ -230,6 +241,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
               </Select>
             </div>
           )}
+          {halfDayRule && <HalfDayPartSelect value={halfDayPart} onChange={setHalfDayPart} />}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
