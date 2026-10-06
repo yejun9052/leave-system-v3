@@ -212,7 +212,7 @@ public class LeaveMessenger {
     private Info info(LeaveRequest r) {
         Employee e = r.getEmployee();
         String label = r.getLeaveType().getName()
-                + (r.getSpecialRuleName() != null ? "(" + r.getSpecialRuleName() + ")" : "");
+                + (r.getSpecialRuleName() != null ? " (" + r.getSpecialRuleName() + ")" : "");
         long created = r.getCreatedAt() != null ? r.getCreatedAt().toEpochMilli() : 0L;
         return new Info(r.getId() != null ? r.getId() : 0L, created, e.getName(),
                 e.getDepartment() != null ? e.getDepartment().getName() : null,

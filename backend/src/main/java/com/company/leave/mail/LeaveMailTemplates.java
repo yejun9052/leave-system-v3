@@ -38,7 +38,7 @@ public final class LeaveMailTemplates {
      * 메일에 쓰는 신청 정보.
      *
      * @param createdEpochMillis 신청 시각. 신청 번호와 함께 Message-ID 에 넣어 DB 를 초기화해도 대화가 섞이지 않게 한다
-     * @param leaveLabel         휴가 종류(경조사 규정 포함, 예: "경조사(본인 결혼)")
+     * @param leaveLabel         휴가 구분(경조사 규정 포함, 예: "경조사 휴가 (생일)")
      * @param period             기간(예: "2026-10-14 ~ 2026-10-15", 하루면 날짜 하나)
      * @param amount             일수·시간(예: "2일", "0.5일", "2시간")
      */
@@ -91,11 +91,12 @@ public final class LeaveMailTemplates {
     /**
      * 인사관리자가 대신 등록(바로 승인됨). 신청 접수 대신 이 메일이 대화의 첫 메일이 된다.
      * 담당 팀장이 참조로 함께 받을 수 있어 문장은 신청자 이름으로 쓴다(이하 결과 메일 모두 같음).
+     * 직원이 신청한 것이 아니므로 표의 신청자는 "없음"(휴가 주인은 안내 문장과 수신자 줄에 나온다).
      */
     public static Mail registered(Info info, String domain, String baseUrl, Handler by) {
         Content content = content("휴가 등록 안내",
                 List.of(by.honorific() + "이 " + info.applicantName() + "님의 휴가를 등록했습니다.", DONE),
-                by, info, List.of(), "승인 완료", MY_LEAVES, baseUrl, "/my-leaves");
+                by, info, "없음", List.of(), "승인 완료", MY_LEAVES, baseUrl, "/my-leaves");
         return root(info, Thread.APPLICANT, domain, content);
     }
 
@@ -213,13 +214,19 @@ public final class LeaveMailTemplates {
                 content(title, intro, by, info, extra, status, MY_LEAVES, baseUrl, "/my-leaves"));
     }
 
-    /** 표: [처리자] | 신청자·소속·휴가 종류·기간·사유 + 추가 줄(반려 사유 등) + 처리 상태. */
+    /** 표: [처리자] | 신청자·소속·휴가 구분·기간·사유 + 추가 줄(반려 사유 등) + 처리 상태. */
     private static Content content(String title, List<String> intro, Handler by, Info info, List<Row> extra,
                                    String status, String linkLabel, String baseUrl, String path) {
+        return content(title, intro, by, info, info.applicantName(), extra, status, linkLabel, baseUrl, path);
+    }
+
+    /** @param applicant 표의 신청자 칸(인사관리자 직접 등록은 "없음") */
+    private static Content content(String title, List<String> intro, Handler by, Info info, String applicant,
+                                   List<Row> extra, String status, String linkLabel, String baseUrl, String path) {
         List<Row> rows = new ArrayList<>();
-        rows.add(Row.of("신청자", info.applicantName()));
+        rows.add(Row.of("신청자", applicant));
         rows.add(Row.of("소속", info.departmentName() != null ? info.departmentName() : "-"));
-        rows.add(Row.of("휴가 종류", info.leaveLabel()));
+        rows.add(Row.of("휴가 구분", info.leaveLabel()));
         rows.add(Row.of("휴가 기간", info.period() + " (" + info.amount() + ")"));
         rows.add(Row.of("신청 사유", orNone(info.reason())));
         rows.addAll(extra);
