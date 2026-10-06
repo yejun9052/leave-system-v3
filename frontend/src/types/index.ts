@@ -80,6 +80,15 @@ export interface LeaveTypeSpecialRule {
 
 export type LeavePortion = "FULL" | "HALF" | "QUARTER" | "HOURLY";
 
+/** 연차 차감 방식: 연차처럼 차감 / 회사 규정(연차 먼저 소진) / 법정 기준(연차와 무관) */
+export type AnnualDeductionMode = "DEDUCT" | "EXHAUST_FIRST" | "NONE";
+
+export const ANNUAL_DEDUCTION_LABEL: Record<AnnualDeductionMode, string> = {
+  DEDUCT: "연차처럼 차감",
+  EXHAUST_FIRST: "회사 규정: 연차 먼저 소진",
+  NONE: "법정 기준: 연차와 무관",
+};
+
 export interface LeaveType {
   id: number;
   code: string;
@@ -89,6 +98,9 @@ export interface LeaveType {
   halfDay: boolean;
   portion: LeavePortion;
   requiresAnnualExhausted: boolean;
+  annualDeductionMode: AnnualDeductionMode;
+  /** 연차 사용 금지 기간에도 신청 가능(경조사·공가) */
+  allowedDuringBlackout: boolean;
   /** 현재 정책에서 사용 가능한 종류인지 */
   policyEnabled: boolean;
   /** 연결된 경조사 규정(없으면 빈 배열). 있으면 신청 때 하나를 반드시 선택 */

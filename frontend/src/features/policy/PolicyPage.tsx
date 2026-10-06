@@ -10,7 +10,7 @@ import {
   type GrantBasis,
   type LeaveTypeInput,
 } from "@/api/policy";
-import type { LeavePortion, LeaveType } from "@/types";
+import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
 import { useTableSort, type SortValue } from "@/lib/useTableSort";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,14 @@ const PORTION_LABEL: Record<LeavePortion, string> = {
   HALF: "반차",
   QUARTER: "반반차(폐지)", // 시간차 2시간으로 대체. 과거 종류 표시용
   HOURLY: "시간차",
+};
+
+const DEDUCTION_MODES: AnnualDeductionMode[] = ["DEDUCT", "EXHAUST_FIRST", "NONE"];
+
+const DEDUCTION_MODE_DESC: Record<AnnualDeductionMode, string> = {
+  DEDUCT: "일반 연차처럼 쓴 일수만큼 연차에서 뺍니다.",
+  EXHAUST_FIRST: "사용 가능한 연차가 1일 미만일 때만 신청할 수 있고, 승인되면 남은 연차는 소멸됩니다(병가·공가).",
+  NONE: "연차와 상관없이 신청하고 연차에서 빼지 않습니다(경조사).",
 };
 
 export default function PolicyPage() {
@@ -355,8 +363,9 @@ function LeaveTypeTab() {
     name: (t) => t.name,
     code: (t) => t.code,
     deduct: (t) => t.deductDays,
-    portion: (t) => `${PORTION_LABEL[t.portion]}${t.requiresAnnualExhausted ? " (연차 소진 후)" : ""}`,
-    annual: (t) => t.deductFromAnnual,
+    portion: (t) => PORTION_LABEL[t.portion],
+    annual: (t) => DEDUCTION_MODES.indexOf(t.annualDeductionMode),
+    blackout: (t) => t.allowedDuringBlackout,
     active: (t) => t.active,
   });
 
@@ -387,7 +396,8 @@ function LeaveTypeTab() {
                 <SortableTableHead sortKey="code" sort={sort} onSort={toggle}>코드</SortableTableHead>
                 <SortableTableHead sortKey="deduct" sort={sort} onSort={toggle}>차감</SortableTableHead>
                 <SortableTableHead sortKey="portion" sort={sort} onSort={toggle}>단위</SortableTableHead>
-                <SortableTableHead sortKey="annual" sort={sort} onSort={toggle}>연차차감</SortableTableHead>
+                <SortableTableHead sortKey="annual" sort={sort} onSort={toggle}>연차 차감 방식</SortableTableHead>
+                <SortableTableHead sortKey="blackout" sort={sort} onSort={toggle}>금지 기간 신청</SortableTableHead>
                 <SortableTableHead sortKey="active" sort={sort} onSort={toggle}>상태</SortableTableHead>
                 <TableHead className="text-right">관리</TableHead>
               </TableRow>
@@ -406,13 +416,9 @@ function LeaveTypeTab() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{t.code}</TableCell>
                   <TableCell>{formatDays(t.deductDays)}</TableCell>
-                  <TableCell>
-                    {PORTION_LABEL[t.portion] ?? "-"}
-                    {t.requiresAnnualExhausted && (
-                      <span className="ml-1 text-xs text-muted-foreground">(연차 소진 후)</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{t.deductFromAnnual ? "예" : "-"}</TableCell>
+                  <TableCell>{PORTION_LABEL[t.portion] ?? "-"}</TableCell>
+                  <TableCell>{ANNUAL_DEDUCTION_LABEL[t.annualDeductionMode] ?? "-"}</TableCell>
+                  <TableCell>{t.allowedDuringBlackout ? "가능" : "-"}</TableCell>
                   <TableCell>
                     <Badge variant={t.active ? "success" : "outline"}>
                       {t.active ? "사용" : "미사용"}
@@ -481,8 +487,8 @@ function LeaveTypeDialog({
     deductDays: type?.deductDays ?? 1,
     paid: type?.paid ?? true,
     portion: type?.portion ?? "FULL",
-    requiresAnnualExhausted: type?.requiresAnnualExhausted ?? false,
-    deductFromAnnual: type?.deductFromAnnual ?? true,
+    annualDeductionMode: type?.annualDeductionMode ?? "DEDUCT",
+    allowedDuringBlackout: type?.allowedDuringBlackout ?? false,
     colorHex: type?.colorHex ?? "#4f46e5",
     sortOrder: type?.sortOrder ?? 0,
     active: type?.active ?? true,
@@ -552,16 +558,31 @@ function LeaveTypeDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>연차 차감 방식</Label>
+            <div className="space-y-2" role="radiogroup" aria-label="연차 차감 방식">
+              {DEDUCTION_MODES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={form.annualDeductionMode === m}
+                  onClick={() => set("annualDeductionMode", m)}
+                  className={`w-full rounded-md border p-3 text-left transition-colors ${
+                    form.annualDeductionMode === m ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                  }`}
+                >
+                  <p className="text-sm font-medium">{ANNUAL_DEDUCTION_LABEL[m]}</p>
+                  <p className="text-xs text-muted-foreground">{DEDUCTION_MODE_DESC[m]}</p>
+                </button>
+              ))}
+            </div>
+          </div>
           <ToggleRow
-            label="잔여 연차 소진 후 사용(병가·공가)"
-            desc="잔여 연차 1일 미만·결재 대기 연차 없음일 때만 신청 가능, 승인 시 남은 연차 소멸"
-            checked={form.requiresAnnualExhausted}
-            onChange={(v) => set("requiresAnnualExhausted", v)}
-          />
-          <ToggleRow
-            label="연차 잔액에서 차감"
-            checked={form.deductFromAnnual}
-            onChange={(v) => set("deductFromAnnual", v)}
+            label="연차 사용 금지 기간에도 신청 가능"
+            desc="켜면 금지 기간에도 신청할 수 있습니다(예: 경조사·공가)."
+            checked={form.allowedDuringBlackout}
+            onChange={(v) => set("allowedDuringBlackout", v)}
           />
           {isEdit && (
             <ToggleRow label="사용" checked={form.active ?? true} onChange={(v) => set("active", v)} />

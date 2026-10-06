@@ -1,5 +1,5 @@
 import { api, unwrap } from "./client";
-import type { LeavePortion, LeaveType } from "@/types";
+import type { AnnualDeductionMode, LeavePortion, LeaveType } from "@/types";
 
 export type GrantBasis = "HIRE_DATE" | "FISCAL_YEAR";
 
@@ -167,8 +167,8 @@ export interface LeaveTypeInput {
   deductDays: number;
   paid: boolean;
   portion: LeavePortion;
-  requiresAnnualExhausted: boolean;
-  deductFromAnnual: boolean;
+  annualDeductionMode: AnnualDeductionMode;
+  allowedDuringBlackout: boolean;
   colorHex: string;
   sortOrder?: number;
   active?: boolean;
