@@ -44,7 +44,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
- * 연차 기간 전환(V25) 뒤 한 번만 도는 재계산: 작업 선점, 휴가의 기간 배정·기산일 분할 재계산,
+ * 연차 기간 전환 뒤 한 번만 도는 재계산: 작업 선점, 휴가의 기간 배정·기산일 분할 재계산,
  * 잔액 초기화 뒤 승인된 휴가만 다시 차감, 병가·공가 소멸 재반영, 관리 전용 계정을 뺀 직원 재부여.
  * 직원은 2022-03-14 입사(기념일 3/14). 휴가 날짜는 2025~2026 년의 고정 날짜다.
  */

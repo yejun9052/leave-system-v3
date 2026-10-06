@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 /**
- * 연차 사용 촉진 안내 발송 이력 한 건(V26). 사용 기한 전에 남은 연차를 알린 통보 증빙.
+ * 연차 사용 촉진 안내 발송 이력 한 건. 사용 기한 전에 남은 연차를 알린 통보 증빙.
  */
 @Entity
 @Table(name = "promotion_notices")
@@ -48,7 +48,7 @@ public class PromotionNotice {
     @Column(name = "sent_by")
     private Long sentBy;
 
-    /** 자동 발송이면 그때의 발송 시기(사용 기한 N개월 전), 수동 발송이면 null(V27). */
+    /** 자동 발송이면 그때의 발송 시기(사용 기한 N개월 전), 수동 발송이면 null. */
     @Column(name = "auto_months")
     private Integer autoMonths;
 

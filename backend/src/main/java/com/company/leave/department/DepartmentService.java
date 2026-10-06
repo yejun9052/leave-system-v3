@@ -124,7 +124,7 @@ public class DepartmentService {
         if (employeeRepository.countByDepartmentId(id) > 0) {
             throw new BusinessException(ErrorCode.DEPARTMENT_HAS_MEMBERS);
         }
-        // 그 부서 전용 일정만 지운다. 휴가 일정은 남기고 부서 칸만 비워진다(FK ON DELETE SET NULL, V24).
+        // 그 부서 전용 일정만 지운다. 휴가 일정은 남기고 부서 칸만 비워진다(FK ON DELETE SET NULL).
         calendarEventRepository.deleteDepartmentEvents(id);
         departmentRepository.delete(dept);
     }

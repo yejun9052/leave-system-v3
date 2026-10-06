@@ -64,7 +64,7 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "half_day_enabled", nullable = false)
     private boolean halfDayEnabled = true;
 
-    // lead_approval_required 열(2단계 결재 스위치, V17)은 단일 결재로 바뀌어 읽지 않는다. 열은 DB 에 남긴다(기본값 TRUE).
+    // lead_approval_required 열(예전 2단계 결재 스위치)은 단일 결재로 바뀌어 읽지 않는다. 열은 DB 에 남긴다(기본값 TRUE).
 
     /** 시간차(1시간 = 0.125일) 사용 여부. */
     @Column(name = "hourly_enabled", nullable = false)
@@ -83,7 +83,7 @@ public class LeavePolicy extends BaseTimeEntity {
     private int maxConsecutiveDays = 0;
 
     // --- 촉진 / 이월 ---
-    /** 연차 촉진 자동 발송 ON/OFF(V27). 자동화 탭에서 따로 저장한다({@link #applyAutomation}). */
+    /** 연차 촉진 자동 발송 ON/OFF. 자동화 탭에서 따로 저장한다({@link #applyAutomation}). */
     @Column(name = "promotion_enabled", nullable = false)
     private boolean promotionEnabled = false;
 
@@ -97,7 +97,7 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "max_carry_over_days", nullable = false)
     private BigDecimal maxCarryOverDays = BigDecimal.ZERO;
 
-    /** 다음 연차 기간(다음 기산일 이후) 날짜의 연차 신청 허용. 끄면 지금 기간 안에서만 신청(V25). */
+    /** 다음 연차 기간(다음 기산일 이후) 날짜의 연차 신청 허용. 끄면 지금 기간 안에서만 신청. */
     @Column(name = "next_period_reservation_enabled", nullable = false)
     private boolean nextPeriodReservationEnabled = true;
 
@@ -207,7 +207,7 @@ public class LeavePolicy extends BaseTimeEntity {
         return hourlyEnabled;
     }
 
-    /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능, 반반차는 시간차로 대체되어 항상 불가(V19). */
+    /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능, 반반차는 시간차로 대체되어 항상 불가. */
     public boolean allows(DayPortion portion) {
         return switch (portion) {
             case FULL -> true;

@@ -12,7 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * 자동 작업(스케줄러)의 마지막 실행 결과를 scheduled_job_runs 에 남긴다(V27). 자동화 탭에서 보여 준다.
+ * 자동 작업(스케줄러)의 마지막 실행 결과를 scheduled_job_runs 에 남긴다. 자동화 탭에서 보여 준다.
  * 기록에 실패해도 작업 자체는 막지 않는다(로그만 남김).
  */
 @Component

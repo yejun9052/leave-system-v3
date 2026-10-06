@@ -30,7 +30,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 연차 기간 기준 전환(V25) 뒤 한 번만: 기존 휴가와 잔액을 새 기준(입사일 기준이면 입사 기념일부터 1년)으로 다시 계산한다.
+ * 연차 기간 기준 전환(입사일 기준 기간, 2026-10) 뒤 한 번만: 기존 휴가와 잔액을 새 기준(입사일 기준이면 입사 기념일부터 1년)으로 다시 계산한다.
  * <ol>
  *   <li>휴가마다 시작일이 속한 기간과 기산일을 걸친 다음 기간 몫을 다시 정한다</li>
  *   <li>잔액의 사용·이월·소멸을 0으로 돌리고, 승인된 휴가(취소 요청 중 포함)의 차감과 병가·공가 소멸을 다시 쌓는다</li>

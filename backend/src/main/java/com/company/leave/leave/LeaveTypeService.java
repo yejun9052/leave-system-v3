@@ -89,7 +89,7 @@ public class LeaveTypeService {
         return specialRuleRepository.findByLeaveTypeCodeOrderBySortOrderAscIdAsc(type.getCode());
     }
 
-    /** 반반차는 시간차(2시간)로 대체되어 새로 만들거나 다시 켤 수 없다(V19). */
+    /** 반반차는 시간차(2시간)로 대체되어 새로 만들거나 다시 켤 수 없다. */
     private static void rejectQuarter(DayPortion portion) {
         if (portion == DayPortion.QUARTER) {
             throw new BusinessException(ErrorCode.INVALID_INPUT,

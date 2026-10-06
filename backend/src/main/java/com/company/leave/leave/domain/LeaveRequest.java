@@ -69,7 +69,7 @@ public class LeaveRequest extends BaseTimeEntity {
     private int appliedYear;
 
     /**
-     * deductedDays 중 다음 연차 기간(applied_year + 1)에서 빼는 몫. 휴가가 기산일을 걸치면 기산일부터의 날짜분(V25).
+     * deductedDays 중 다음 연차 기간(applied_year + 1)에서 빼는 몫. 휴가가 기산일을 걸치면 기산일부터의 날짜분.
      * 나머지(deductedDays − 이 값)는 applied_year 기간에서 뺀다.
      */
     @Column(name = "next_period_deducted_days", nullable = false)
@@ -89,13 +89,13 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "approved_at")
     private Instant approvedAt;
 
-    // lead_approver_id·lead_approved_at·hr_direct_reason 열은 2단계 결재(V17) 기록으로 DB 에 남아 있지만
+    // lead_approver_id·lead_approved_at·hr_direct_reason 열은 예전 2단계 결재 기록으로 DB 에 남아 있지만
     // 단일 결재에서는 쓰지 않아 매핑하지 않는다.
 
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
 
-    /** 낙관적 락: 두 결재자가 같은 신청을 동시에 처리하면 한쪽만 반영된다(V22). */
+    /** 낙관적 락: 두 결재자가 같은 신청을 동시에 처리하면 한쪽만 반영된다. */
     @Version
     @Column(nullable = false)
     private long version;

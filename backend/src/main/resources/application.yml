@@ -32,7 +32,7 @@ spring:
     # 미사용 만료 시간 (예: 2h, 30m). 환경변수 SESSION_TIMEOUT 으로 변경 가능
     timeout: ${SESSION_TIMEOUT:2h}
     jdbc:
-      # 세션 테이블은 Flyway(V11)가 관리 → 자동 생성 끔
+      # 세션 테이블은 Flyway(V1__baseline)가 관리 → 자동 생성 끔
       initialize-schema: never
   flyway:
     enabled: true

@@ -53,7 +53,7 @@ dependencies {
     // API documentation
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
 
-    // 서버 세션: PostgreSQL 저장(Spring Session JDBC). 스키마는 Flyway(V11)가 관리
+    // 서버 세션: PostgreSQL 저장(Spring Session JDBC). 스키마는 Flyway(V1__baseline)가 관리
     implementation("org.springframework.boot:spring-boot-starter-session-jdbc")
 
     // QueryDSL — OpenFeign 유지보수 포크(패키지 com.querydsl.* 호환, jakarta 기본)

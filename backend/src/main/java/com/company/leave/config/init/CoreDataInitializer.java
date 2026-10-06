@@ -94,7 +94,7 @@ public class CoreDataInitializer implements ApplicationRunner {
 
     /**
      * 로컬/테스트(app.admin.initial-password 지정) 초기 관리자는 비밀번호 변경을 강제하지 않는다.
-     * V12 가 기존 계정 전부를 변경 대상으로 표시하므로, 이미 있던 로컬 관리자는 여기서 해제한다.
+     * 예전 마이그레이션(비밀번호 정책 도입)이 기존 계정 전부를 변경 대상으로 표시하므로, 이미 있던 로컬 관리자는 여기서 해제한다.
      */
     private void releaseLocalAdminPasswordChange() {
         if (!StringUtils.hasText(environment.getProperty("app.admin.initial-password"))) {

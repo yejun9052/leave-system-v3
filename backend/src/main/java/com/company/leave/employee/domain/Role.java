@@ -6,7 +6,7 @@ package com.company.leave.employee.domain;
  */
 public enum Role {
     /**
-     * 시스템 관리자 — 관리 전용 계정(admin, system_account)에만 부여. 일반 직원에게는 줄 수 없다(V18).
+     * 시스템 관리자 — 관리 전용 계정(admin, system_account)에만 부여. 일반 직원에게는 줄 수 없다.
      * 관리 기능 전부와, 휴가 결재는 인사관리자와 같은 권한(회사 합의): 모든 신청 결재·강제 취소·강제 등록.
      * 직원이 아니므로 본인 휴가 신청은 없다.
      */

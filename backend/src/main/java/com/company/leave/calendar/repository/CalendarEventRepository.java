@@ -17,7 +17,7 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, Lo
 
     /**
      * 관리자·팀장이 등록한 그 부서 전용 일정(부서 범위)을 지운다. 부서 삭제 때 사용.
-     * 휴가 일정은 지우지 않는다(부서가 지워지면 department_id 만 비워진다, V24).
+     * 휴가 일정은 지우지 않는다(부서가 지워지면 department_id 만 비워진다).
      */
     @Modifying
     @Query("""
