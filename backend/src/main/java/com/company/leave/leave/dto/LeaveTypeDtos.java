@@ -17,13 +17,13 @@ public final class LeaveTypeDtos {
     }
 
     /**
-     * @param portion                  휴가 단위(FULL 종일·HALF 반차·QUARTER 반반차·HOURLY 시간차)
+     * @param portion                  휴가 단위(FULL 종일·HALF 반차·HOURLY 시간차)
      * @param halfDay                  portion == HALF (기존 화면 호환용)
      * @param annualDeductionMode      연차 차감 방식(DEDUCT 연차처럼 차감·EXHAUST_FIRST 연차 먼저 소진·NONE 연차와 무관)
      * @param deductFromAnnual         annualDeductionMode == DEDUCT (기존 화면 호환용)
      * @param requiresAnnualExhausted  annualDeductionMode == EXHAUST_FIRST (신청 화면의 병가·공가 안내용)
      * @param allowedDuringBlackout    연차 사용 금지 기간에도 신청 가능(경조사·공가)
-     * @param policyEnabled            현재 정책에서 이 단위를 쓸 수 있는지(반차·반반차·시간차 켜기/끄기). 신청 화면 목록 필터용
+     * @param policyEnabled            현재 정책에서 이 단위를 쓸 수 있는지(반차·시간차 켜기/끄기). 신청 화면 목록 필터용
      * @param specialRules             이 종류에 연결된 경조사 규정. 비어 있지 않으면 신청 때 하나를 골라야 한다
      */
     public record Response(

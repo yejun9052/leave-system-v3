@@ -20,7 +20,7 @@ import { formatKoreanDate } from "./useDateSelection";
 
 const SCOPE_LABEL = { COMPANY: "전사", DEPARTMENT: "부서", PERSONAL: "개인" } as const;
 
-/** 휴가 단위 표시: 종일 · 오전 반차 · 시간차 2시간 (반반차는 폐지 전 기록 표시용) */
+/** 휴가 단위 표시: 종일 · 오전 반차 · 시간차 2시간 */
 function portionLabel(l: DayLeaveDto): string {
   switch (l.portion) {
     case "FULL":
@@ -28,8 +28,6 @@ function portionLabel(l: DayLeaveDto): string {
     case "HALF":
       if (l.halfDayPart) return `${l.leaveTypeName} · ${HALF_DAY_LABEL[l.halfDayPart]} 반차`;
       return l.leaveTypeName.includes("반차") ? l.leaveTypeName : "반차";
-    case "QUARTER":
-      return "반반차";
     case "HOURLY":
       return l.hours != null ? `시간차 ${l.hours}시간` : "시간차";
   }

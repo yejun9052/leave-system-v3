@@ -2,7 +2,6 @@ package com.company.leave.leave;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
-import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveTypeDtos;
 import com.company.leave.leave.repository.LeaveTypeRepository;
@@ -50,7 +49,6 @@ public class LeaveTypeService {
         if (leaveTypeRepository.existsByCode(req.code())) {
             throw new BusinessException(ErrorCode.CONFLICT, "이미 존재하는 휴가 코드입니다: " + req.code());
         }
-        rejectQuarter(req.portion());
         LeaveType type = new LeaveType(req.code(), req.name(), req.deductDays(), req.paid(),
                 req.portion(), req.annualDeductionMode(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0);
@@ -61,10 +59,6 @@ public class LeaveTypeService {
     @Transactional
     public LeaveTypeDtos.Response update(Long id, LeaveTypeDtos.Update req) {
         LeaveType type = getEntity(id);
-        // 기존 반반차 종류는 비활성 상태로 이름 등을 고치는 것만 허용(과거 기록 보존용)
-        if (req.active()) {
-            rejectQuarter(req.portion());
-        }
         type.update(req.name(), req.deductDays(), req.paid(), req.portion(),
                 req.annualDeductionMode(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0, req.active());
@@ -91,14 +85,6 @@ public class LeaveTypeService {
     @Transactional(readOnly = true)
     public List<SpecialLeaveRule> specialRulesOf(LeaveType type) {
         return specialRuleRepository.findByLeaveTypeCodeOrderBySortOrderAscIdAsc(type.getCode());
-    }
-
-    /** 반반차는 시간차(2시간)로 대체되어 새로 만들거나 다시 켤 수 없다. */
-    private static void rejectQuarter(DayPortion portion) {
-        if (portion == DayPortion.QUARTER) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT,
-                    "반반차는 시간차로 대체되었습니다. 2시간 시간차를 사용해 주세요.");
-        }
     }
 
     private LeaveTypeDtos.Response toResponse(LeaveType type) {

@@ -46,7 +46,6 @@ import AutomationTab from "./AutomationTab";
 const PORTION_LABEL: Record<LeavePortion, string> = {
   FULL: "종일",
   HALF: "반차",
-  QUARTER: "반반차(폐지)", // 시간차 2시간으로 대체. 과거 종류 표시용
   HOURLY: "시간차",
 };
 
@@ -194,7 +193,7 @@ function PolicyTab() {
           />
           <ToggleRow
             label="시간차 사용"
-            desc="1시간(0.125일) 단위, 한 건 1~3시간, 기본 꺼짐. 반반차는 시간차 2시간으로 대체"
+            desc="1시간(0.125일) 단위, 한 건 1~3시간, 기본 꺼짐"
             checked={form.hourlyEnabled}
             onChange={(v) => set("hourlyEnabled", v)}
           />
@@ -547,10 +546,7 @@ function LeaveTypeDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {/* 반반차는 폐지: 이미 반반차인 종류를 고칠 때만 현재 값으로 보여 준다 */}
-                {(Object.keys(PORTION_LABEL) as LeavePortion[])
-                  .filter((p) => p !== "QUARTER" || form.portion === "QUARTER")
-                  .map((p) => (
+                {(Object.keys(PORTION_LABEL) as LeavePortion[]).map((p) => (
                   <SelectItem key={p} value={p}>
                     {PORTION_LABEL[p]}
                   </SelectItem>

@@ -157,12 +157,11 @@ public class LeavePolicy extends BaseTimeEntity {
             boolean nextPeriodReservationEnabled) {
     }
 
-    /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능, 반반차는 시간차로 대체되어 항상 불가. */
+    /** 해당 단위의 휴가를 현재 정책에서 신청할 수 있는지. 종일은 항상 가능. */
     public boolean allows(DayPortion portion) {
         return switch (portion) {
             case FULL -> true;
             case HALF -> halfDayEnabled;
-            case QUARTER -> false;
             case HOURLY -> hourlyEnabled;
         };
     }

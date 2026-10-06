@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class WorkdayCalculator {
 
-    /** 종일·반차·반반차용. 시간차는 시간 수가 필요하므로 {@link #computeLeaveDays(LocalDate, LocalDate, LeaveType, Set, Integer)}. */
+    /** 종일·반차용. 시간차는 시간 수가 필요하므로 {@link #computeLeaveDays(LocalDate, LocalDate, LeaveType, Set, Integer)}. */
     public BigDecimal computeLeaveDays(LocalDate start, LocalDate end, LeaveType type,
                                        Set<LocalDate> holidays) {
         return computeLeaveDays(start, end, type, holidays, null);
@@ -26,7 +26,7 @@ public class WorkdayCalculator {
      * @param type     휴가 종류
      * @param holidays 제외할 공휴일 집합
      * @param hours    시간차의 시간 수(1~{@value DayPortion#MAX_HOURLY_HOURS}). 다른 단위는 무시
-     * @return 기록 일수. 종일=근무일 수, 반차 0.5, 반반차 0.25, 시간차 시간×0.125
+     * @return 기록 일수. 종일=근무일 수, 반차 0.5, 시간차 시간×0.125
      */
     public BigDecimal computeLeaveDays(LocalDate start, LocalDate end, LeaveType type,
                                        Set<LocalDate> holidays, Integer hours) {
@@ -45,7 +45,7 @@ public class WorkdayCalculator {
         // 경조사/병가/공가처럼 잔액을 차감하지 않는 휴가도 실제 일수로 기록된다.
         return switch (portion) {
             case FULL -> BigDecimal.valueOf(countWorkdays(start, end, holidays));
-            case HALF, QUARTER -> portion.unitDays();
+            case HALF -> portion.unitDays();
             case HOURLY -> {
                 if (hours == null || hours < 1) {
                     throw new IllegalArgumentException("시간차는 시간 수가 필요합니다.");
@@ -67,7 +67,7 @@ public class WorkdayCalculator {
     }
 
     /**
-     * 실제 잔액 차감액: 종일=근무일수×deductDays, 반차·반반차=deductDays, 시간차=시간×deductDays,
+     * 실제 잔액 차감액: 종일=근무일수×deductDays, 반차=deductDays, 시간차=시간×deductDays,
      * 비차감 유형=0. 휴가 신청(LeaveRequestService)과 공휴일 반영 재계산(HolidayImpactService)이 같은 규칙을 쓰도록 여기에 둔다.
      *
      * @param durationDays computeLeaveDays 결과(기록 일수)
@@ -78,7 +78,7 @@ public class WorkdayCalculator {
         }
         return switch (type.getPortion()) {
             case FULL -> durationDays.multiply(type.getDeductDays());
-            case HALF, QUARTER -> type.getDeductDays();
+            case HALF -> type.getDeductDays();
             case HOURLY -> BigDecimal.valueOf(hoursOf(durationDays)).multiply(type.getDeductDays());
         };
     }

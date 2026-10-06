@@ -902,7 +902,7 @@ public class LeaveRequestService {
 
     /**
      * 겹침 검사. 종일 휴가는 대기·승인·취소 요청 중인 어떤 신청과도 겹칠 수 없다(취소 요청은 반려되면 승인으로 돌아간다).
-     * 부분 휴가(반차·반반차·시간차)는 같은 날 부분 휴가끼리 합계 1일까지 허용한다.
+     * 부분 휴가(반차·시간차)는 같은 날 부분 휴가끼리 합계 1일까지 허용한다.
      */
     private void validateNoOverlap(Long employeeId, LocalDate start, LocalDate end, DayPortion portion,
                                    BigDecimal days) {
@@ -917,7 +917,7 @@ public class LeaveRequestService {
         BigDecimal sameDay = overlapping.stream().map(LeaveRequest::getDays).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (sameDay.add(days).compareTo(BigDecimal.ONE) > 0) {
             throw cancelPending ? overlapsCancelRequested() : new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP,
-                    "같은 날 반차·반반차·시간차 합계는 1일을 넘을 수 없습니다. (이미 신청 " + plain(sameDay) + "일)");
+                    "같은 날 반차·시간차 합계는 1일을 넘을 수 없습니다. (이미 신청 " + plain(sameDay) + "일)");
         }
     }
 

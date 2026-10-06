@@ -69,17 +69,6 @@ class WorkdayCalculatorTest {
     }
 
     @Test
-    void 반반차는_0_25일이고_차감도_0_25일이다() {
-        LeaveType 반반차 = new LeaveType("QUARTER", "반반차", new BigDecimal("0.25"), true, DayPortion.QUARTER,
-                true, false, "#000", 3);
-
-        BigDecimal days = calculator.computeLeaveDays(WED, WED, 반반차, Set.of());
-
-        assertThat(days).isEqualByComparingTo("0.25");
-        assertThat(calculator.deductionFor(반반차, days)).isEqualByComparingTo("0.25");
-    }
-
-    @Test
     void 시간차는_시간마다_0_125일이고_시간_수가_없으면_계산할_수_없다() {
         LeaveType 시간차 = new LeaveType("HOURLY", "시간차", new BigDecimal("0.125"), true, DayPortion.HOURLY,
                 true, false, "#000", 3);

@@ -80,7 +80,7 @@ export interface LeaveTypeSpecialRule {
   days: number;
 }
 
-export type LeavePortion = "FULL" | "HALF" | "QUARTER" | "HOURLY";
+export type LeavePortion = "FULL" | "HALF" | "HOURLY";
 
 /** 종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정, 예: 생일 반차) */
 export type HalfDayPart = "AM" | "PM";

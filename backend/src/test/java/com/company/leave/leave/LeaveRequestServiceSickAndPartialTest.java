@@ -60,7 +60,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * 병가·공가 사용 조건(잔여 연차 1일 미만 + 대기 중 연차 신청 없음, 승인 시 남은 연차 소멸)과
- * 부분 휴가(반차·반반차·시간차, 같은 날 합계 1일, 정책 켜기/끄기).
+ * 부분 휴가(반차·시간차, 같은 날 합계 1일, 정책 켜기/끄기).
  * 기준일 2027-05-04(화). 공휴일 없음. 일수 계산은 실제 WorkdayCalculator.
  */
 @ExtendWith(MockitoExtension.class)
@@ -107,7 +107,6 @@ class LeaveRequestServiceSickAndPartialTest {
     // LeaveType(code, name, deductDays, paid, portion, deductFromAnnual, requiresAnnualExhausted, color, sort)
     private final LeaveType 연차 = 종류(1L, "ANNUAL", "연차", "1.0", DayPortion.FULL, true, false);
     private final LeaveType 반차 = 종류(2L, "HALF_AM", "오전 반차", "0.5", DayPortion.HALF, true, false);
-    private final LeaveType 반반차 = 종류(3L, "QUARTER", "반반차", "0.25", DayPortion.QUARTER, true, false);
     private final LeaveType 시간차 = 종류(4L, "HOURLY", "시간차", "0.125", DayPortion.HOURLY, true, false);
     // 연차 사용 금지 기간에도 신청 가능: 경조사·공가(기본 데이터와 같음). 병가는 불가
     private final LeaveType 경조사 = 종류(5L, "CONDOLENCE", "경조사 휴가", "0.0", DayPortion.FULL, false, false)
@@ -134,7 +133,7 @@ class LeaveRequestServiceSickAndPartialTest {
         ReflectionTestUtils.setField(admin, "id", ADMIN);
         lenient().when(employeeService.getEntity(EMP)).thenReturn(employee);
         lenient().when(employeeService.getEntity(ADMIN)).thenReturn(admin);
-        for (LeaveType t : List.of(연차, 반차, 반반차, 시간차, 경조사, 병가, 공가)) {
+        for (LeaveType t : List.of(연차, 반차, 시간차, 경조사, 병가, 공가)) {
             lenient().when(leaveTypeService.getEntity(t.getId())).thenReturn(t);
         }
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
@@ -386,22 +385,11 @@ class LeaveRequestServiceSickAndPartialTest {
         }
 
         @Test
-        void 반반차를_대체하는_시간차_2시간은_0_25일을_차감한다() {
+        void 시간차_2시간은_0_25일을_차감한다() {
             LeaveRequest request = 신청(시간차, 2, null);
 
             assertThat(request.getDays()).isEqualByComparingTo("0.25");
             assertThat(request.getDeductedDays()).isEqualByComparingTo("0.25");
-        }
-
-        @Test
-        void 반반차는_시간차로_대체되어_정책과_무관하게_신청할_수_없다() {
-            LeavePolicy real = LeavePolicy.createDefault();
-            when(policy.allows(DayPortion.QUARTER)).thenAnswer(inv -> real.allows(DayPortion.QUARTER));
-
-            assertThat(real.allows(DayPortion.QUARTER)).isFalse();
-            assertThatThrownBy(() -> 신청(반반차, null, null))
-                    .isInstanceOfSatisfying(BusinessException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_TYPE_DISABLED));
         }
 
         @Test
@@ -439,7 +427,7 @@ class LeaveRequestServiceSickAndPartialTest {
         @Test
         void 같은_날_부분_휴가는_합계_1일까지_함께_신청할_수_있다() {
             기존_신청(반차, "0.5");
-            기존_신청(반반차, "0.25"); // 시간차로 바뀌기 전에 승인된 반반차 기록도 합계에 들어간다
+            기존_신청(시간차, "0.25");
 
             LeaveRequest request = 신청(시간차, 2, null); // 0.5 + 0.25 + 0.25 = 1.0
 
@@ -449,7 +437,7 @@ class LeaveRequestServiceSickAndPartialTest {
         @Test
         void 같은_날_부분_휴가_합계가_1일을_넘으면_거부한다() {
             기존_신청(반차, "0.5");
-            기존_신청(반반차, "0.25");
+            기존_신청(시간차, "0.25");
 
             assertThatThrownBy(() -> 신청(시간차, 3, null)) // 1.125일
                     .isInstanceOfSatisfying(BusinessException.class, ex -> {
@@ -469,7 +457,7 @@ class LeaveRequestServiceSickAndPartialTest {
 
         @Test
         void 부분_휴가가_있는_날에는_종일_휴가를_신청할_수_없다() {
-            기존_신청(반반차, "0.25");
+            기존_신청(시간차, "0.25");
 
             assertThatThrownBy(() -> 신청(연차, null, null))
                     .isInstanceOfSatisfying(BusinessException.class,

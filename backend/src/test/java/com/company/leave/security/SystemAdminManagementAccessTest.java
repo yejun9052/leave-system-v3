@@ -134,7 +134,7 @@ class SystemAdminManagementAccessTest {
                 {"grantBasis":"HIRE_DATE","fiscalStartMonth":1,"fiscalStartDay":1,
                  "baseAnnualDays":15,"seniorityStepYears":2,"seniorityIncrementDays":1,"maxAnnualDays":25,
                  "monthlyAccrualEnabled":true,"monthlyAccrualMax":11,"allowNegative":false,
-                 "halfDayEnabled":true,"quarterDayEnabled":true,"hourlyEnabled":true,"leadApprovalRequired":true,
+                 "halfDayEnabled":true,"hourlyEnabled":true,"leadApprovalRequired":true,
                  "maxConcurrentAbsence":0,"minAdvanceDays":0,"maxConsecutiveDays":0,
                  "promotionEnabled":false,"carryOverEnabled":false,"maxCarryOverDays":0}
                 """)).andExpect(status().isOk());

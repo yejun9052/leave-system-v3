@@ -30,14 +30,14 @@ public class LeaveType extends BaseTimeEntity {
     @Column(nullable = false, length = 60)
     private String name;
 
-    /** 차감 일수. 종일=하루당, 반차·반반차=1회당, 시간차=1시간당. 0=비차감 */
+    /** 차감 일수. 종일=하루당, 반차=1회당, 시간차=1시간당. 0=비차감 */
     @Column(name = "deduct_days", nullable = false)
     private BigDecimal deductDays = BigDecimal.ONE;
 
     @Column(nullable = false)
     private boolean paid = true;
 
-    /** 휴가 단위(종일·반차·반반차·시간차). */
+    /** 휴가 단위(종일·반차·시간차). */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private DayPortion portion = DayPortion.FULL;
@@ -124,7 +124,7 @@ public class LeaveType extends BaseTimeEntity {
         return portion == DayPortion.HALF;
     }
 
-    /** 반차·반반차·시간차(하루만, 1일 미만). */
+    /** 반차·시간차(하루만, 1일 미만). */
     public boolean isPartialDay() {
         return portion.isPartial();
     }
