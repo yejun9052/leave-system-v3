@@ -59,7 +59,7 @@ public class LeaveDataInitializer implements ApplicationRunner {
         policyService.getActivePolicy(); // 기본 정책 보장
 
         if (leaveTypeRepository.count() == 0) {
-            // 시간차는 정책에서 켜야 신청 가능(기본 꺼짐)..
+            // 시간차는 정책에서 켜야 신청 가능(기본 꺼짐).
             // 차감 방식: 연차·반차·시간차는 연차처럼 차감, 병가·공가는 회사 규정(연차 먼저 소진), 경조사는 연차와 무관
             // 연차 사용 금지 기간에도 신청 가능: 경조사·공가(병가는 불가)
             leaveTypeRepository.saveAll(List.of(
