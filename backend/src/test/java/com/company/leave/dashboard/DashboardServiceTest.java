@@ -65,14 +65,14 @@ class DashboardServiceTest {
         lenient().when(requestRepository.findApprovedBetween(TODAY, TODAY)).thenReturn(List.of());
         lenient().when(requestRepository.findApprovedBetween(LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31)))
                 .thenReturn(List.of());
-        lenient().when(balanceService.balancesAsOf(TODAY, true)).thenReturn(List.of());
+        lenient().when(balanceService.balancesAsOf(TODAY, true, true)).thenReturn(List.of());
     }
 
     // --- 관리자 ---
 
     @Test
     void 관리자_대시보드는_재직자_수_오늘_부재_결재_대기를_보여준다() {
-        when(employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)).thenReturn(20L);
+        when(employeeRepository.countByStatus(EmployeeStatus.ACTIVE)).thenReturn(20L);
         when(requestRepository.findApprovedBetween(TODAY, TODAY))
                 .thenReturn(List.of(휴가(직원(1L, 개발팀), TODAY, TODAY, "1"), 휴가(직원(2L, QA팀), TODAY, TODAY, "1")));
         when(requestRepository.countByStatusIn(any())).thenReturn(3L);
@@ -94,7 +94,7 @@ class DashboardServiceTest {
 
     @Test
     void 부여와_사용은_직원마다_지금_연차_기간의_합계이고_소진율은_소수_첫째_자리까지다() {
-        when(balanceService.balancesAsOf(TODAY, true)).thenReturn(List.of(기간_잔액("15", "5"), 기간_잔액("16", "3")));
+        when(balanceService.balancesAsOf(TODAY, true, true)).thenReturn(List.of(기간_잔액("15", "5"), 기간_잔액("16", "3")));
 
         DashboardDtos.AdminDashboard d = service.admin();
 
@@ -105,7 +105,7 @@ class DashboardServiceTest {
 
     @Test
     void 부여된_연차가_없으면_소진율은_0이다() {
-        when(balanceService.balancesAsOf(TODAY, true)).thenReturn(List.of(기간_잔액("0", "0")));
+        when(balanceService.balancesAsOf(TODAY, true, true)).thenReturn(List.of(기간_잔액("0", "0")));
 
         DashboardDtos.AdminDashboard d = service.admin();
 

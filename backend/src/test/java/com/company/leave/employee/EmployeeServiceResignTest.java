@@ -102,13 +102,13 @@ class EmployeeServiceResignTest {
         }
 
         @Test
-        void 관리_전용_계정은_없는_직원으로_보고_퇴사_처리하지_않는다() {
+        void 관리_전용_계정은_퇴사_처리하지_않는다() {
             Employee 관리계정 = employee(1L, Set.of(Role.SYSTEM_ADMIN), true);
             when(employees.findById(1L)).thenReturn(Optional.of(관리계정));
 
             assertThatThrownBy(() -> service.resign(1L, LocalDate.of(2026, 10, 31)))
                     .isInstanceOfSatisfying(BusinessException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.EMPLOYEE_NOT_FOUND));
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.SYSTEM_ACCOUNT_CANNOT_RESIGN));
             assertThat(관리계정.getStatus()).isEqualTo(EmployeeStatus.ACTIVE);
             verify(sessionTerminator, never()).terminateAll(anyLong());
         }
@@ -142,14 +142,13 @@ class EmployeeServiceResignTest {
         }
 
         @Test
-        void 관리_전용_계정은_복원_대상이_아니다() {
+        void 관리_전용_계정은_퇴사하지_않으므로_복원해도_재직_그대로다() {
             Employee 관리계정 = employee(1L, Set.of(Role.SYSTEM_ADMIN), true);
             when(employees.findById(1L)).thenReturn(Optional.of(관리계정));
 
-            assertThatThrownBy(() -> service.reactivate(1L))
-                    .isInstanceOfSatisfying(BusinessException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.EMPLOYEE_NOT_FOUND));
-            verify(leadSync, never()).afterSave(any(), any(), anyBoolean());
+            service.reactivate(1L);
+
+            assertThat(관리계정.getStatus()).isEqualTo(EmployeeStatus.ACTIVE);
         }
     }
 

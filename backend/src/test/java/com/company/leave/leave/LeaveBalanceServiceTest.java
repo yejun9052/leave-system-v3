@@ -151,7 +151,7 @@ class LeaveBalanceServiceTest {
         LocalDate today = LocalDate.now();
         Employee 다른_직원 = 직원(20L, "김철수", today.minusYears(2).plusDays(10)); // 기념일이 열흘 뒤
         Employee 잔액_없음 = 직원(30L, "이영희", today.minusYears(5));
-        when(employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE))
+        when(employeeRepository.findByStatus(EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(직원, 다른_직원, 잔액_없음));
         int 다른_기간 = PERIODS.yearOf(다른_직원.getHireDate(), today, policy);
         LeaveBalance 내_잔액 = new LeaveBalance(10L, 지금_기간);
@@ -160,7 +160,7 @@ class LeaveBalanceServiceTest {
         when(balanceRepository.findByYearIn(org.mockito.ArgumentMatchers.anyCollection()))
                 .thenReturn(List.of(내_잔액, 다른_잔액, 다른_직원의_다른_해));
 
-        List<LeaveBalanceService.PeriodBalance> result = service.balancesAsOf(today, true);
+        List<LeaveBalanceService.PeriodBalance> result = service.balancesAsOf(today, true, true);
 
         assertThat(result).extracting(pb -> pb.employee().getName()).containsExactly("홍길동", "김철수");
         assertThat(result.get(0).balance()).isSameAs(내_잔액);
@@ -169,24 +169,37 @@ class LeaveBalanceServiceTest {
     }
 
     @Test
-    void 퇴사자를_포함하면_관리_전용_계정만_빼고_모든_직원을_본다() {
-        Employee 관리자 = 직원(1L, "관리자", null);
+    void 리포트용으로_관리_전용_계정을_빼면_퇴사자_포함_나머지_직원을_본다() {
+        Employee 관리자 = 직원(1L, "관리자", 직원.getHireDate());
         ReflectionTestUtils.setField(관리자, "systemAccount", true);
         when(employeeRepository.findAll()).thenReturn(List.of(직원, 관리자));
         when(balanceRepository.findByYearIn(org.mockito.ArgumentMatchers.anyCollection()))
-                .thenReturn(List.of(new LeaveBalance(10L, 지금_기간), new LeaveBalance(1L, LocalDate.now().getYear())));
+                .thenReturn(List.of(new LeaveBalance(10L, 지금_기간), new LeaveBalance(1L, 지금_기간)));
 
-        List<LeaveBalanceService.PeriodBalance> result = service.balancesAsOf(LocalDate.now(), false);
+        List<LeaveBalanceService.PeriodBalance> result = service.balancesAsOf(LocalDate.now(), false, false);
 
         assertThat(result).extracting(pb -> pb.employee().getName()).containsExactly("홍길동");
-        verify(employeeRepository, never()).findByStatusAndSystemAccountFalse(eq(EmployeeStatus.ACTIVE));
+        verify(employeeRepository, never()).findByStatus(eq(EmployeeStatus.ACTIVE));
+    }
+
+    @Test
+    void 리포트가_아니면_관리_전용_계정도_함께_본다() {
+        Employee 관리자 = 직원(1L, "관리자", 직원.getHireDate());
+        ReflectionTestUtils.setField(관리자, "systemAccount", true);
+        when(employeeRepository.findByStatus(EmployeeStatus.ACTIVE)).thenReturn(List.of(직원, 관리자));
+        when(balanceRepository.findByYearIn(org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(new LeaveBalance(10L, 지금_기간), new LeaveBalance(1L, 지금_기간)));
+
+        List<LeaveBalanceService.PeriodBalance> result = service.balancesAsOf(LocalDate.now(), true, true);
+
+        assertThat(result).extracting(pb -> pb.employee().getName()).containsExactly("홍길동", "관리자");
     }
 
     @Test
     void 직원이_없으면_잔액을_조회하지_않고_빈_목록이다() {
-        when(employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)).thenReturn(List.of());
+        when(employeeRepository.findByStatus(EmployeeStatus.ACTIVE)).thenReturn(List.of());
 
-        assertThat(service.balancesAsOf(LocalDate.now(), true)).isEmpty();
+        assertThat(service.balancesAsOf(LocalDate.now(), true, true)).isEmpty();
         verify(balanceRepository, never()).findByYearIn(org.mockito.ArgumentMatchers.anyCollection());
     }
 

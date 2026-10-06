@@ -73,7 +73,7 @@ public class EmployeeService {
 
     @Transactional(readOnly = true)
     public EmployeeResponse get(Long id) {
-        Employee employee = getManageable(id);
+        Employee employee = getEntity(id);
         Set<Long> scope = currentScopeDeptIds();
         if (scope != null
                 && (employee.getDepartmentId() == null || !scope.contains(employee.getDepartmentId()))) {
@@ -136,26 +136,40 @@ public class EmployeeService {
     @Transactional
     public EmployeeResponse update(Long id, EmployeeRequests.Update req) {
         Employee employee = getEntity(id);
-        if (employee.isSystemAccount()) {
+        // 관리 전용 계정은 이름·부서·직위·연락처·입사일만 고친다. 아이디(admin)와 권한은 그대로
+        boolean system = employee.isSystemAccount();
+        if (system && req.roles() != null && !req.roles().equals(employee.getRoles())) {
             throw new BusinessException(ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
         }
-        Set<Role> roles = resolveRoles(req.roles());
-        validateEmailUnique(req.email(), id);
+        if (!system && (req.email() == null || req.email().isBlank())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이메일을 입력해 주세요.");
+        }
+        Set<Role> roles = system ? employee.getRoles() : resolveRoles(req.roles());
+        if (!system) {
+            validateEmailUnique(req.email(), id);
+        }
         Long previousDepartmentId = employee.getDepartmentId();
         boolean wasTeamLead = DepartmentLeadSync.isActiveTeamLead(employee);
 
-        employee.changeEmail(req.email());
+        if (!system) {
+            employee.changeEmail(req.email());
+        }
         employee.updateProfile(req.name(), req.position(), req.phone());
         employee.changeHireDate(req.hireDate());
         employee.assignDepartment(resolveDepartment(req.departmentId()));
-        employee.replaceRoles(roles);
+        if (!system) {
+            employee.replaceRoles(roles);
+        }
         leadSync.afterSave(employee, previousDepartmentId, wasTeamLead);
         return EmployeeResponse.from(employee);
     }
 
     @Transactional
     public void resign(Long id, LocalDate resignedDate) {
-        Employee employee = getManageable(id);
+        Employee employee = getEntity(id);
+        if (employee.isSystemAccount()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ACCOUNT_CANNOT_RESIGN);
+        }
         boolean wasTeamLead = DepartmentLeadSync.isActiveTeamLead(employee);
         employee.resign(resignedDate != null ? resignedDate : LocalDate.now());
         leadSync.afterSave(employee, employee.getDepartmentId(), wasTeamLead); // 맡던 부서는 다른 팀장으로
@@ -165,7 +179,7 @@ public class EmployeeService {
 
     @Transactional
     public void reactivate(Long id) {
-        Employee employee = getManageable(id);
+        Employee employee = getEntity(id);
         employee.reactivate();
         leadSync.afterSave(employee, employee.getDepartmentId(), false);
     }
@@ -173,7 +187,12 @@ public class EmployeeService {
     /** 관리자 초기화: 비밀번호를 바꾸지 않고 본인에게 재설정 링크 메일만 보낸다. */
     @Transactional
     public void sendPasswordResetMail(Long id) {
-        passwordResetService.issue(getManageable(id));
+        Employee employee = getEntity(id);
+        if (employee.isSystemAccount()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "관리 전용 계정은 이메일이 없어 재설정 메일을 보낼 수 없습니다. 로그인해서 비밀번호를 바꿔 주세요.");
+        }
+        passwordResetService.issue(employee);
     }
 
     /** 본인 비밀번호 변경. 성공하면 변경 요구 해제(세션 처리는 호출부에서). */
@@ -197,19 +216,6 @@ public class EmployeeService {
     public Employee getEntity(Long id) {
         return employeeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND));
-    }
-
-    /**
-     * 관리자가 id 로 다루는 대상 조회. 기본 시스템 관리자 계정은 목록에서 숨겨지므로
-     * 단건 조회/수정/삭제 대상에서도 제외한다(존재하지 않는 것으로 처리).
-     * 본인 셀프 조작(내 프로필/비밀번호)은 getEntity 를 그대로 사용한다.
-     */
-    private Employee getManageable(Long id) {
-        Employee employee = getEntity(id);
-        if (employee.isSystemAccount()) {
-            throw new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND);
-        }
-        return employee;
     }
 
     @Transactional(readOnly = true)

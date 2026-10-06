@@ -139,7 +139,7 @@ public class LeavePromotionService {
         LocalDate today = LocalDate.now();
         LocalDate limit = today.plusMonths(m);
         Predicate<Employee> matches = keywordFilter(keyword);
-        List<LeaveBalanceService.PeriodBalance> candidates = balanceService.balancesAsOf(today, true).stream()
+        List<LeaveBalanceService.PeriodBalance> candidates = balanceService.balancesAsOf(today, true, true).stream()
                 .filter(pb -> !pb.period().end().isAfter(limit))
                 .filter(pb -> pb.balance().remaining().signum() > 0)
                 .filter(pb -> matches.test(pb.employee()))

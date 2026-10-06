@@ -23,8 +23,9 @@ public final class EmployeeRequests {
             Set<Role> roles) {
     }
 
+    /** email: 관리 전용 계정은 아이디(admin)가 바뀌지 않으므로 비워 보낸다. 그 외 직원은 필수. */
     public record Update(
-            @NotBlank @Email String email,
+            @Email String email,
             @NotBlank @Size(max = 100) String name,
             Long departmentId,
             @Size(max = 50) String position,

@@ -258,8 +258,9 @@ export default function EmployeePage() {
                         <Button size="icon" variant="ghost" title="수정" onClick={() => setEditing(e)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <ResetPasswordButton employee={e} />
-                        {e.status === "RESIGNED" ? (
+                        {/* 관리 전용 계정은 이메일이 없고 퇴사 처리할 수 없다 */}
+                        {!e.systemAccount && <ResetPasswordButton employee={e} />}
+                        {e.systemAccount ? null : e.status === "RESIGNED" ? (
                           <Button
                             size="icon"
                             variant="ghost"
@@ -386,6 +387,8 @@ function EmployeeDialog({
   const { toast } = useToast();
   const confirm = useConfirm();
   const isEdit = !!employee;
+  // 관리 전용 계정: 아이디(admin)와 권한은 고칠 수 없고 이름·부서·직급·연락처·입사일만
+  const isSystem = !!employee?.systemAccount;
   const [form, setForm] = useState<EmployeeCreate>({
     email: employee?.email ?? "",
     name: employee?.name ?? "",
@@ -393,7 +396,7 @@ function EmployeeDialog({
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
     hireDate: employee?.hireDate ?? new Date().toISOString().slice(0, 10),
-    roles: employee?.roles.filter((role) => role !== "SYSTEM_ADMIN") ?? ["EMPLOYEE"],
+    roles: isSystem ? employee!.roles : (employee?.roles.filter((role) => role !== "SYSTEM_ADMIN") ?? ["EMPLOYEE"]),
   });
 
   const set = <K extends keyof EmployeeCreate>(k: K, v: EmployeeCreate[K]) =>
@@ -416,7 +419,12 @@ function EmployeeDialog({
         hireDate: form.hireDate,
         roles: form.roles.length ? form.roles : (["EMPLOYEE"] as Role[]),
       };
-      if (isEdit && employee) return employeeApi.update(employee.id, payload);
+      if (isEdit && employee) {
+        return employeeApi.update(
+          employee.id,
+          isSystem ? { ...payload, email: undefined, roles: undefined } : payload,
+        );
+      }
       return employeeApi.create(payload);
     },
     onSuccess: () => {
@@ -461,8 +469,13 @@ function EmployeeDialog({
           <Field label="이름">
             <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
           </Field>
-          <Field label="이메일">
-            <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+          <Field label={isSystem ? "아이디 (변경 불가)" : "이메일"}>
+            <Input
+              type={isSystem ? "text" : "email"}
+              value={form.email}
+              disabled={isSystem}
+              onChange={(e) => set("email", e.target.value)}
+            />
           </Field>
           <Field label="직급">
             <Input value={form.position} onChange={(e) => set("position", e.target.value)} />
@@ -505,11 +518,15 @@ function EmployeeDialog({
 
         <div className="space-y-2">
           <Label>권한</Label>
+          {isSystem && (
+            <p className="text-xs text-muted-foreground">관리 전용 계정의 권한(시스템 관리자)은 바꿀 수 없습니다.</p>
+          )}
           <div className="flex flex-wrap gap-2">
-            {ALL_ROLES.map((role) => (
+            {(isSystem ? form.roles : ALL_ROLES).map((role) => (
               <button
                 key={role}
                 type="button"
+                disabled={isSystem}
                 onClick={() => toggleRole(role)}
                 className={cn(
                   "rounded-full border px-3 py-1 text-sm transition-colors",

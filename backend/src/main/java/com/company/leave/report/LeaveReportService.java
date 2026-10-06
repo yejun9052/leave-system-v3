@@ -39,7 +39,7 @@ public class LeaveReportService {
     public byte[] exportUsage(int year) {
         LocalDate today = LocalDate.now();
         LocalDate asOf = year == today.getYear() ? today : LocalDate.of(year, 12, 31);
-        List<LeaveBalanceService.PeriodBalance> rows = balanceService.balancesAsOf(asOf, false);
+        List<LeaveBalanceService.PeriodBalance> rows = balanceService.balancesAsOf(asOf, false, false);
 
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = wb.createSheet(year + " 연차현황 (" + asOf + " 기준)");

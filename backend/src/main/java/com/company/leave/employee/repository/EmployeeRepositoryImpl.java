@@ -39,7 +39,6 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
         // 부서 이름 검색에도 부서가 없는 직원이 빠지지 않도록 left join
         QDepartment d = new QDepartment("dept");
         BooleanBuilder where = new BooleanBuilder();
-        where.and(e.systemAccount.isFalse()); // 기본 시스템 관리자 계정은 목록에서 제외
         where.and(keyword(e, d, condition.keyword()));
         if (condition.departmentId() != null) {
             where.and(e.department.id.eq(condition.departmentId()));

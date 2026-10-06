@@ -41,13 +41,13 @@ public class DashboardService {
         int year = LocalDate.now().getYear();
         LocalDate today = LocalDate.now();
 
-        long totalEmployees = employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE);
+        long totalEmployees = employeeRepository.countByStatus(EmployeeStatus.ACTIVE);
         int onLeaveToday = requestRepository.findApprovedBetween(today, today).size();
         long pending = requestRepository.countByStatusIn(java.util.EnumSet.of(
                 LeaveRequestStatus.PENDING, LeaveRequestStatus.CANCEL_REQUESTED));
 
         // 직원마다 지금 쓰고 있는 연차 기간(입사일 기준이면 기간이 서로 다르다)
-        List<LeaveBalance> balances = balanceService.balancesAsOf(today, true).stream()
+        List<LeaveBalance> balances = balanceService.balancesAsOf(today, true, true).stream()
                 .map(LeaveBalanceService.PeriodBalance::balance).toList();
         BigDecimal totalGranted = balances.stream()
                 .map(LeaveBalance::getGranted).reduce(BigDecimal.ZERO, BigDecimal::add);

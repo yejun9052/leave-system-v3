@@ -36,6 +36,8 @@ public enum ErrorCode {
             "시스템 관리자 권한은 관리 전용 계정에만 부여할 수 있습니다."),
     SYSTEM_ACCOUNT_ROLE_IMMUTABLE(HttpStatus.BAD_REQUEST,
             "관리 전용 계정의 권한은 변경할 수 없습니다."),
+    SYSTEM_ACCOUNT_CANNOT_RESIGN(HttpStatus.BAD_REQUEST,
+            "관리 전용 계정은 퇴사 처리할 수 없습니다."),
 
     // 부서
     DEPARTMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "부서를 찾을 수 없습니다."),

@@ -201,7 +201,7 @@ public class LeaveMessenger {
     }
 
     private static boolean mailable(Employee e) {
-        return !e.isSystemAccount() && e.getEmail() != null && e.getEmail().contains("@");
+        return e.getEmail() != null && e.getEmail().contains("@");
     }
 
     private static String cancelledInfo(LeaveRequest r, Handler by) {

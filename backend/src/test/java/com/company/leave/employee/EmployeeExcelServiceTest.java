@@ -118,7 +118,7 @@ class EmployeeExcelServiceTest {
     void 내보내기_양식에는_사번_열이_없다() throws IOException {
         when(employeeService.search(any(), any())).thenReturn(new PageImpl<>(List.of(
                 new EmployeeResponse(1L, "kim@company.com", "김철수", 2L, "개발팀", "대리", "010-1111-2222",
-                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, List.of("EMPLOYEE")))));
+                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, List.of("EMPLOYEE"), false))));
 
         byte[] exported = excelService.export();
 
@@ -128,6 +128,20 @@ class EmployeeExcelServiceTest {
             header.forEach(c -> headers.add(c.getStringCellValue()));
             assertThat(headers).containsExactly(NEW_HEADERS);
             assertThat(wb.getSheetAt(0).getRow(1).getCell(2).getStringCellValue()).isEqualTo("개발팀");
+        }
+    }
+
+    @Test
+    void 내보내기에는_관리_전용_계정을_넣지_않는다() throws IOException {
+        when(employeeService.search(any(), any())).thenReturn(new PageImpl<>(List.of(
+                new EmployeeResponse(1L, "admin", "시스템관리자", 2L, "연구소", null, null,
+                        LocalDate.of(2023, 10, 6), EmployeeStatus.ACTIVE, List.of("SYSTEM_ADMIN"), true),
+                new EmployeeResponse(2L, "kim@company.com", "김철수", 2L, "개발팀", "대리", null,
+                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, List.of("EMPLOYEE"), false))));
+
+        try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(excelService.export()))) {
+            assertThat(wb.getSheetAt(0).getLastRowNum()).isEqualTo(1);
+            assertThat(wb.getSheetAt(0).getRow(1).getCell(0).getStringCellValue()).isEqualTo("kim@company.com");
         }
     }
 

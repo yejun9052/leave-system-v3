@@ -86,17 +86,20 @@ public class LeaveBalanceService {
     }
 
     /**
-     * date 기준으로 각 직원이 쓰고 있던 연차 기간의 잔액(관리 전용 계정 제외, 잔액이 없는 직원 제외).
+     * date 기준으로 각 직원이 쓰고 있던 연차 기간의 잔액(잔액이 없는 직원 제외).
      * 입사일 기준이면 직원마다 기간이 달라 연도 하나로 모을 수 없다. 대시보드·보고서·연차 촉진 집계용.
      *
-     * @param activeOnly 재직 중인 직원만
+     * @param activeOnly           재직 중인 직원만
+     * @param includeSystemAccount 관리 전용 계정(admin)도 넣을지. 리포트(엑셀)만 빼고 나머지는 넣는다
      */
     @Transactional(readOnly = true)
-    public List<PeriodBalance> balancesAsOf(LocalDate date, boolean activeOnly) {
+    public List<PeriodBalance> balancesAsOf(LocalDate date, boolean activeOnly, boolean includeSystemAccount) {
         LeavePolicy policy = policyService.getActivePolicy();
-        List<Employee> employees = activeOnly
-                ? employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)
-                : employeeRepository.findAll().stream().filter(e -> !e.isSystemAccount()).toList();
+        List<Employee> employees = (activeOnly
+                ? employeeRepository.findByStatus(EmployeeStatus.ACTIVE)
+                : employeeRepository.findAll()).stream()
+                .filter(e -> includeSystemAccount || !e.isSystemAccount())
+                .toList();
         if (employees.isEmpty()) {
             return List.of();
         }

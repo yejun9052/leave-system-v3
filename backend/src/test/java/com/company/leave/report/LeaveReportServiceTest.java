@@ -51,27 +51,27 @@ class LeaveReportServiceTest {
 
     @Test
     void 올해_보고서는_오늘_기준이고_퇴사자도_포함해_조회한다() throws IOException {
-        when(balanceService.balancesAsOf(any(), eq(false))).thenReturn(List.of());
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
 
         Sheet sheet = 시트(service.exportUsage(TODAY.getYear()));
 
-        verify(balanceService).balancesAsOf(TODAY, false);
+        verify(balanceService).balancesAsOf(TODAY, false, false);
         assertThat(sheet.getSheetName()).isEqualTo(TODAY.getYear() + " 연차현황 (" + TODAY + " 기준)");
     }
 
     @Test
     void 다른_해_보고서는_그해_12월_31일_기준이다() throws IOException {
-        when(balanceService.balancesAsOf(any(), eq(false))).thenReturn(List.of());
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
 
         Sheet sheet = 시트(service.exportUsage(2024));
 
-        verify(balanceService).balancesAsOf(LocalDate.of(2024, 12, 31), false);
+        verify(balanceService).balancesAsOf(LocalDate.of(2024, 12, 31), false, false);
         assertThat(sheet.getSheetName()).isEqualTo("2024 연차현황 (2024-12-31 기준)");
     }
 
     @Test
     void 머리줄에는_기간_시작과_사용_기한이_들어간다() throws IOException {
-        when(balanceService.balancesAsOf(any(), eq(false))).thenReturn(List.of());
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
 
         Sheet sheet = 시트(service.exportUsage(2024));
 
@@ -91,7 +91,7 @@ class LeaveReportServiceTest {
         Employee 정하은 = Employee.builder().email("a@company.com").passwordHash("h").name("정하은")
                 .department(개발팀).hireDate(LocalDate.of(2021, 7, 5)).build();
         Employee 부서없음 = Employee.builder().email("b@company.com").passwordHash("h").name("부서없음").build();
-        when(balanceService.balancesAsOf(any(), eq(false))).thenReturn(List.of(
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of(
                 new LeaveBalanceService.PeriodBalance(정하은,
                         new LeavePeriodCalculator.Period(2024, LocalDate.of(2024, 7, 5), LocalDate.of(2025, 7, 4)), b),
                 new LeaveBalanceService.PeriodBalance(부서없음,

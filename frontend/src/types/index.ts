@@ -46,6 +46,8 @@ export interface Employee {
   hireDate: string;
   status: EmployeeStatus;
   roles: Role[];
+  /** 관리 전용 계정(아이디 admin): 아이디·권한을 바꾸거나 퇴사 처리할 수 없다 */
+  systemAccount: boolean;
 }
 
 export interface Page<T> {

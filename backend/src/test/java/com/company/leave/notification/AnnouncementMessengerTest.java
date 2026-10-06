@@ -67,7 +67,7 @@ class AnnouncementMessengerTest {
         큐에이2 = 직원(12L, QA팀, null, Role.EMPLOYEE); // 이메일 없음: 알림만
         개발1 = 직원(21L, 개발팀, "dev1@company.com", Role.EMPLOYEE);
         lenient().when(employees.findById(1L)).thenReturn(Optional.of(인사관리자));
-        lenient().when(employees.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE))
+        lenient().when(employees.findByStatus(EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(인사관리자, 큐에이1, 큐에이2, 개발1));
         lenient().when(employees.findByDepartmentId(3L)).thenReturn(List.of(큐에이1, 큐에이2));
         lenient().when(employees.findByDepartmentId(4L)).thenReturn(List.of(개발1));
@@ -125,7 +125,7 @@ class AnnouncementMessengerTest {
     }
 
     @Test
-    void 퇴사자와_관리_전용_계정은_받지_않는다() {
+    void 퇴사자는_받지_않고_관리_전용_계정은_받는다() {
         Employee 퇴사자 = 직원(31L, QA팀, "gone@company.com", Role.EMPLOYEE);
         ReflectionTestUtils.setField(퇴사자, "status", EmployeeStatus.RESIGNED);
         Employee 관리계정 = 직원(32L, QA팀, "admin@company.com", Role.SYSTEM_ADMIN);
@@ -134,9 +134,9 @@ class AnnouncementMessengerTest {
 
         messenger.event(Change.DELETED, 일정(CalendarEventScope.DEPARTMENT, 3L), null, 1L);
 
-        assertThat(보낸_메일().bcc()).containsExactly("qa1@company.com");
+        assertThat(보낸_메일().bcc()).containsExactly("qa1@company.com", "admin@company.com");
         verify(notifications, never()).notify(eq(31L), anyString(), anyString(), anyString(), anyString());
-        verify(notifications, never()).notify(eq(32L), anyString(), anyString(), anyString(), anyString());
+        verify(notifications).notify(eq(32L), anyString(), anyString(), anyString(), anyString());
     }
 
     private AnnouncementMail 보낸_메일() {

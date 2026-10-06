@@ -99,7 +99,7 @@ public class AnnouncementMessenger {
                          AnnouncementMailTemplates.Mail mail) {
         List<Employee> targets = recipients.stream()
                 .filter(e -> !e.getId().equals(actorId))
-                .filter(e -> !e.isSystemAccount() && e.isActive())
+                .filter(Employee::isActive)
                 .toList();
         targets.forEach(e -> notificationService.notify(e.getId(), type, title, message, "/calendar"));
         List<String> bcc = targets.stream()
@@ -136,7 +136,7 @@ public class AnnouncementMessenger {
     }
 
     private List<Employee> companyWide() {
-        return employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE);
+        return employeeRepository.findByStatus(EmployeeStatus.ACTIVE);
     }
 
     private Schedule schedule(EventView view) {

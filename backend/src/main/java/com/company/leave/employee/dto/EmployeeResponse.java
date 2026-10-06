@@ -16,7 +16,9 @@ public record EmployeeResponse(
         String phone,
         LocalDate hireDate,
         EmployeeStatus status,
-        List<String> roles) {
+        List<String> roles,
+        /** 관리 전용 계정(아이디 admin). 아이디·권한을 바꾸거나 퇴사 처리할 수 없다 */
+        boolean systemAccount) {
 
     public static EmployeeResponse from(Employee e) {
         return new EmployeeResponse(
@@ -29,6 +31,7 @@ public record EmployeeResponse(
                 e.getPhone(),
                 e.getHireDate(),
                 e.getStatus(),
-                e.getRoles().stream().map(Role::name).sorted().toList());
+                e.getRoles().stream().map(Role::name).sorted().toList(),
+                e.isSystemAccount());
     }
 }

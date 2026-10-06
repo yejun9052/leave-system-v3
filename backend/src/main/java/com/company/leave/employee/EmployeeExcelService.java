@@ -61,7 +61,8 @@ public class EmployeeExcelService {
                 header.createCell(i).setCellValue(HEADERS[i]);
             }
             int r = 1;
-            for (var e : employees.getContent()) {
+            // 관리 전용 계정(admin)은 내보내지 않는다. 다시 올리면 시스템 관리자 권한 제한에 걸린다
+            for (var e : employees.getContent().stream().filter(x -> !x.systemAccount()).toList()) {
                 Row row = sheet.createRow(r++);
                 row.createCell(0).setCellValue(e.email());
                 row.createCell(1).setCellValue(e.name());
