@@ -237,7 +237,8 @@ public class LeaveMessenger {
         if (r.getLeaveType().getPortion() == DayPortion.HOURLY) {
             return WorkdayCalculator.hoursOf(r.getDays()) + "시간";
         }
-        return r.getDays().stripTrailingZeros().toPlainString() + "일";
+        String days = r.getDays().stripTrailingZeros().toPlainString() + "일";
+        return r.getHalfDayPart() != null ? days + ", " + r.getHalfDayPart().label() + " 반차" : days;
     }
 
     private static String orNone(String text) {

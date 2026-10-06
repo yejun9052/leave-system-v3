@@ -25,6 +25,7 @@ import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
+import com.company.leave.leave.domain.HalfDayPart;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
@@ -456,10 +457,128 @@ class LeaveRequestServiceSickAndPartialTest {
         private static final LocalDate MON_NEXT = LocalDate.of(2027, 5, 10);
         private final SpecialLeaveRule 본인_결혼 = 규정(1L, "본인 결혼", "5.0");
         private final SpecialLeaveRule 자녀_결혼 = 규정(2L, "자녀 결혼", "1.0");
+        private final SpecialLeaveRule 생일 = 규정(3L, "생일", "0.5");
 
         @BeforeEach
         void 규정_연결() {
-            lenient().when(leaveTypeService.specialRulesOf(경조사)).thenReturn(List.of(본인_결혼, 자녀_결혼));
+            lenient().when(leaveTypeService.specialRulesOf(경조사)).thenReturn(List.of(본인_결혼, 자녀_결혼, 생일));
+        }
+
+        @Test
+        void 반일_규정은_오전_오후를_고르면_반차로_신청된다() {
+            LeaveRequestDtos.Response response = service.create(EMP,
+                    new LeaveRequestDtos.Create(경조사.getId(), TUE, TUE, "생일", null, null, 생일.getId(), HalfDayPart.AM));
+            LeaveRequest request = saved.get(response.id());
+
+            assertThat(request.getDays()).isEqualByComparingTo("0.5");
+            assertThat(request.getHalfDayPart()).isEqualTo(HalfDayPart.AM);
+            assertThat(request.getPortion()).isEqualTo(DayPortion.HALF);
+            assertThat(request.getDeductedDays()).isEqualByComparingTo("0");
+            assertThat(response.portion()).isEqualTo(DayPortion.HALF);
+            assertThat(response.halfDayPart()).isEqualTo(HalfDayPart.AM);
+        }
+
+        @Test
+        void 반일_규정은_오전_오후를_고르지_않으면_거부한다() {
+            assertThatThrownBy(() -> 경조사_신청(TUE, TUE, 생일.getId()))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_INVALID);
+                        assertThat(ex.getMessage()).contains("반차(0.5일)로만").contains("오전·오후");
+                    });
+            verify(requestRepository, never()).save(any());
+        }
+
+        @Test
+        void 반일_규정_반차는_하루만_신청할_수_있다() {
+            assertThatThrownBy(() -> service.create(EMP, new LeaveRequestDtos.Create(경조사.getId(), TUE,
+                    TUE.plusDays(1), "생일", null, null, 생일.getId(), HalfDayPart.PM)))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_INVALID_PERIOD);
+                        assertThat(ex.getMessage()).contains("반차는 하루만");
+                    });
+        }
+
+        @Test
+        void 하루_이상_규정에는_오전_오후를_고를_수_없다() {
+            assertThatThrownBy(() -> service.create(EMP, new LeaveRequestDtos.Create(경조사.getId(), TUE, TUE,
+                    "사유", null, null, 자녀_결혼.getId(), HalfDayPart.PM)))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_INVALID);
+                        assertThat(ex.getMessage()).contains("1일 미만 규정에서만");
+                    });
+        }
+
+        @Test
+        void 규정이_없는_종류나_반차_종류에는_오전_오후를_고를_수_없다() {
+            assertThatThrownBy(() -> service.create(EMP, new LeaveRequestDtos.Create(연차.getId(), TUE, TUE,
+                    "사유", null, null, null, HalfDayPart.AM)))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getMessage()).contains("오전·오후를 따로 고를 수 없습니다"));
+            assertThatThrownBy(() -> service.create(EMP, new LeaveRequestDtos.Create(반차.getId(), TUE, TUE,
+                    "사유", null, null, null, HalfDayPart.AM)))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getMessage()).contains("오전·오후를 따로 고를 수 없습니다"));
+        }
+
+        @Test
+        void 반일_규정_반차는_같은_날_다른_반차와_합쳐_하루까지_신청된다() {
+            기존_신청(반차, "0.5");
+
+            LeaveRequestDtos.Response response = service.create(EMP,
+                    new LeaveRequestDtos.Create(경조사.getId(), TUE, TUE, "생일", null, null, 생일.getId(), HalfDayPart.PM));
+
+            assertThat(response.days()).isEqualByComparingTo("0.5");
+        }
+
+        @Test
+        void 반일_규정_반차는_같은_날_종일_휴가와_겹칠_수_없다() {
+            기존_신청(연차, "1");
+
+            assertThatThrownBy(() -> service.create(EMP, new LeaveRequestDtos.Create(경조사.getId(), TUE, TUE,
+                    "생일", null, null, 생일.getId(), HalfDayPart.PM)))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_DATE_OVERLAP));
+        }
+
+        @Test
+        void 같은_날_반일_규정_반차가_있으면_다른_반차와_시간차_합계가_하루를_넘을_수_없다() {
+            LeaveRequest 생일_반차 = new LeaveRequest(employee, 경조사, TUE, TUE, new BigDecimal("0.5"),
+                    BigDecimal.ZERO, 2027, "생일");
+            생일_반차.markHalfDay(HalfDayPart.AM);
+            when(requestRepository.findActiveOverlapping(EMP, TUE, TUE)).thenReturn(List.of(생일_반차));
+
+            assertThat(신청(반차, null, null).getDays()).isEqualByComparingTo("0.5");
+            when(requestRepository.findActiveOverlapping(EMP, TUE, TUE)).thenReturn(List.of(생일_반차,
+                    new LeaveRequest(employee, 반차, TUE, TUE, new BigDecimal("0.5"), new BigDecimal("0.5"), 2027, "기존")));
+            assertThatThrownBy(() -> 신청(시간차, 1, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_DATE_OVERLAP));
+        }
+
+        @Test
+        void 반일_규정_미리보기도_실제_신청과_같다() {
+            LeaveRequestDtos.Eligibility 오전 = service.eligibility(EMP, 경조사.getId(), TUE, TUE, null, 생일.getId(),
+                    HalfDayPart.AM);
+            LeaveRequestDtos.Eligibility 미선택 = service.eligibility(EMP, 경조사.getId(), TUE, TUE, null, 생일.getId(),
+                    null);
+
+            assertThat(오전.allowed()).isTrue();
+            assertThat(오전.deduction()).isEqualByComparingTo("0");
+            assertThat(미선택.allowed()).isFalse();
+            assertThat(미선택.reason()).contains("반차(0.5일)로만");
+        }
+
+        @Test
+        void 인사관리자가_반일_규정을_등록하면_캘린더에_오전_오후_반차로_표시된다() {
+            service.register(ADMIN, new LeaveRequestDtos.Register(EMP, 경조사.getId(), TUE, TUE, "생일", null,
+                    생일.getId(), HalfDayPart.PM));
+
+            org.mockito.ArgumentCaptor<com.company.leave.calendar.domain.CalendarEvent> event =
+                    org.mockito.ArgumentCaptor.forClass(com.company.leave.calendar.domain.CalendarEvent.class);
+            verify(calendarEventRepository).save(event.capture());
+            assertThat(event.getValue().getTitle()).isEqualTo("홍길동 - 경조사 휴가(생일) 오후 반차");
+            assertThat(saved.values()).singleElement()
+                    .satisfies(r -> assertThat(r.getDays()).isEqualByComparingTo("0.5"));
         }
 
         @Test

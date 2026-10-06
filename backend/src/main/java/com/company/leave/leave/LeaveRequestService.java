@@ -20,6 +20,7 @@ import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
+import com.company.leave.leave.domain.HalfDayPart;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
@@ -124,7 +125,8 @@ public class LeaveRequestService {
 
         LocalDate start = req.startDate();
         LocalDate end = req.endDate();
-        Plan plan = plan(employee, type, policy, start, end, req.hours(), req.specialRuleId(), false, false);
+        Plan plan = plan(employee, type, policy, start, end, req.hours(), req.specialRuleId(), req.halfDayPart(),
+                false, false);
 
         if (plan.forfeit().signum() > 0 && !Boolean.TRUE.equals(req.forfeitAcknowledged())) {
             throw new BusinessException(ErrorCode.LEAVE_FORFEIT_NOT_ACKNOWLEDGED,
@@ -139,6 +141,7 @@ public class LeaveRequestService {
         if (specialRule != null) {
             request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
         }
+        request.markHalfDay(plan.halfDay());
         requestRepository.save(request);
 
         String warning = notifyApprovers(request);
@@ -171,7 +174,7 @@ public class LeaveRequestService {
                     "현재 정책에서 사용할 수 없는 휴가 종류입니다: " + type.getName());
         }
         Plan plan = plan(employee, type, policy, req.startDate(), req.endDate(), req.hours(), req.specialRuleId(),
-                false, true);
+                req.halfDayPart(), false, true);
 
         LeaveRequest request = new LeaveRequest(employee, type, req.startDate(), req.endDate(), plan.days(),
                 plan.deduction(), plan.appliedYear(), req.reason());
@@ -180,6 +183,7 @@ public class LeaveRequestService {
         if (specialRule != null) {
             request.attachSpecialRule(specialRule.getId(), specialRule.getName(), specialRule.getDays());
         }
+        request.markHalfDay(plan.halfDay());
         requestRepository.save(request);
 
         LeaveCharges.charge(balanceService, request);
@@ -206,9 +210,11 @@ public class LeaveRequestService {
      * @param nextPeriodDeduction 차감액 중 다음 연차 기간에서 뺄 몫(기산일을 걸친 휴가)
      * @param specialRule 고른 경조사 규정(없으면 null)
      * @param forfeit     승인 시 소멸될 남은 연차(병가·공가, 그 외 0)
+     * @param halfDay     종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정), 그 외 null
      */
     private record Plan(BigDecimal days, int workdays, BigDecimal deduction, int appliedYear,
-                        BigDecimal nextPeriodDeduction, SpecialLeaveRule specialRule, BigDecimal forfeit) {
+                        BigDecimal nextPeriodDeduction, SpecialLeaveRule specialRule, BigDecimal forfeit,
+                        HalfDayPart halfDay) {
     }
 
     /**
@@ -216,11 +222,19 @@ public class LeaveRequestService {
      *
      * @param preview 미리보기면 true: 경조사 규정을 아직 고르지 않았으면 규정 검사를 건너뛴다
      * @param forced  인사관리자 강제 등록이면 true: 사용 통제(블랙아웃·사전 신청·연속 일수·팀 동시 부재)를 건너뛴다
+     * @param halfDayPart 종일 종류를 오전·오후 반차로 신청(0.5일 경조사 규정에서만). 그 외 null
      */
     private Plan plan(Employee employee, LeaveType type, LeavePolicy policy, LocalDate start, LocalDate end,
-                      Integer requestedHours, Long specialRuleId, boolean preview, boolean forced) {
+                      Integer requestedHours, Long specialRuleId, HalfDayPart halfDayPart, boolean preview,
+                      boolean forced) {
         Long employeeId = employee.getId();
-        validatePeriod(start, end, type);
+        if (halfDayPart != null && type.getPortion() != DayPortion.FULL) {
+            throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
+                    type.getName() + "는 오전·오후를 따로 고를 수 없습니다.");
+        }
+        // 이 신청의 실제 단위. 종일 종류를 반차로 신청하면(0.5일 경조사 규정) 반차와 같이 계산한다
+        DayPortion portion = halfDayPart != null ? DayPortion.HALF : type.getPortion();
+        validatePeriod(start, end, type, portion);
         Integer hours = hoursFor(type, requestedHours);
 
         Set<LocalDate> holidays = holidaysBetween(start, end);
@@ -229,16 +243,16 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
                     "시작일이 주말 또는 공휴일입니다. 근무일부터 신청해 주세요.");
         }
-        BigDecimal days = workdayCalculator.computeLeaveDays(start, end, type, holidays, hours);
+        BigDecimal days = workdayCalculator.computeLeaveDays(start, end, portion, holidays, hours);
         if (days.signum() <= 0) {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "신청 기간에 근무일이 없습니다.");
         }
 
         SpecialLeaveRule specialRule = preview && specialRuleId == null
                 ? null
-                : resolveSpecialRule(type, specialRuleId, days);
+                : resolveSpecialRule(type, specialRuleId, days, halfDayPart);
 
-        validateNoOverlap(employeeId, start, end, type, days);
+        validateNoOverlap(employeeId, start, end, portion, days);
 
         if (!forced) {
             validateUsagePolicy(employee, type, start, end, days, policy);
@@ -275,7 +289,7 @@ public class LeaveRequestService {
             }
         }
         int workdays = workdayCalculator.countWorkdays(start, end, holidays);
-        return new Plan(days, workdays, deduction, appliedYear, nextPart, specialRule, forfeit);
+        return new Plan(days, workdays, deduction, appliedYear, nextPart, specialRule, forfeit, halfDayPart);
     }
 
     /**
@@ -314,6 +328,14 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequestDtos.Eligibility eligibility(Long employeeId, Long leaveTypeId, LocalDate startDate,
                                                    LocalDate endDate, Integer hours, Long specialRuleId) {
+        return eligibility(employeeId, leaveTypeId, startDate, endDate, hours, specialRuleId, null);
+    }
+
+    /** @param halfDayPart 0.5일 경조사 규정의 오전·오후(그 외 null) */
+    @Transactional
+    public LeaveRequestDtos.Eligibility eligibility(Long employeeId, Long leaveTypeId, LocalDate startDate,
+                                                   LocalDate endDate, Integer hours, Long specialRuleId,
+                                                   HalfDayPart halfDayPart) {
         LeaveType type = leaveTypeService.getEntity(leaveTypeId);
         LeavePolicy policy = policyService.getActivePolicy();
         if (!type.isActive() || !policy.allows(type.getPortion())) {
@@ -324,7 +346,7 @@ public class LeaveRequestService {
         int year = periods.yearOf(employee.getHireDate(), startDate != null ? startDate : LocalDate.now(), policy);
         BigDecimal remaining = available(employee, year, policy);
         if (startDate != null && endDate != null) {
-            return preview(employee, type, policy, startDate, endDate, hours, specialRuleId, remaining);
+            return preview(employee, type, policy, startDate, endDate, hours, specialRuleId, halfDayPart, remaining);
         }
         if (!type.isRequiresAnnualExhausted()) {
             return new LeaveRequestDtos.Eligibility(true, null, remaining, BigDecimal.ZERO);
@@ -343,7 +365,8 @@ public class LeaveRequestService {
      */
     private LeaveRequestDtos.Eligibility preview(Employee employee, LeaveType type, LeavePolicy policy,
                                                  LocalDate start, LocalDate end, Integer hours,
-                                                 Long specialRuleId, BigDecimal remaining) {
+                                                 Long specialRuleId, HalfDayPart halfDayPart,
+                                                 BigDecimal remaining) {
         Long employeeId = employee.getId();
         if (employee.isSystemAccount()) {
             return new LeaveRequestDtos.Eligibility(false, "관리 전용 계정은 휴가를 신청할 수 없습니다.",
@@ -351,7 +374,7 @@ public class LeaveRequestService {
         }
         Plan plan;
         try {
-            plan = plan(employee, type, policy, start, end, hours, specialRuleId, true, false);
+            plan = plan(employee, type, policy, start, end, hours, specialRuleId, halfDayPart, true, false);
         } catch (BusinessException ex) {
             return new LeaveRequestDtos.Eligibility(false, ex.getMessage(), remaining, BigDecimal.ZERO);
         }
@@ -819,28 +842,34 @@ public class LeaveRequestService {
     }
 
 
-    private void validatePeriod(LocalDate start, LocalDate end, LeaveType type) {
+    private void validatePeriod(LocalDate start, LocalDate end, LeaveType type, DayPortion portion) {
         if (end.isBefore(start)) {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD, "종료일이 시작일보다 빠릅니다.");
         }
-        if (type.isPartialDay() && !start.isEqual(end)) {
+        if (portion.isPartial() && !start.isEqual(end)) {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
-                    type.getName() + "는 하루만 신청할 수 있습니다.");
+                    type.getName() + (type.isPartialDay() ? "" : " 반차") + "는 하루만 신청할 수 있습니다.");
         }
     }
 
     /**
      * 경조사 규정 확인. 종류에 규정이 연결돼 있으면 하나를 골라야 하고,
      * 신청 근무일 수(주말·공휴일 제외)가 규정 일수를 넘을 수 없다. 횟수 제한은 없다.
+     * 1일 미만 규정(예: 생일 0.5일)은 오전·오후 반차로만, 오전·오후 반차는 그런 규정에서만 신청할 수 있다.
      *
      * @return 고른 규정(규정이 없는 종류면 null)
      */
-    private SpecialLeaveRule resolveSpecialRule(LeaveType type, Long specialRuleId, BigDecimal workdays) {
+    private SpecialLeaveRule resolveSpecialRule(LeaveType type, Long specialRuleId, BigDecimal workdays,
+                                                HalfDayPart halfDayPart) {
         List<SpecialLeaveRule> rules = leaveTypeService.specialRulesOf(type);
         if (rules.isEmpty()) {
             if (specialRuleId != null) {
                 throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
                         type.getName() + "에는 선택할 경조사 규정이 없습니다.");
+            }
+            if (halfDayPart != null) {
+                throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
+                        type.getName() + "는 오전·오후를 따로 고를 수 없습니다.");
             }
             return null;
         }
@@ -851,6 +880,16 @@ public class LeaveRequestService {
         SpecialLeaveRule rule = rules.stream().filter(r -> r.getId().equals(specialRuleId)).findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
                         type.getName() + "에 해당하지 않는 규정입니다."));
+        boolean halfDayRule = rule.getDays().compareTo(BigDecimal.ONE) < 0;
+        if (halfDayRule && halfDayPart == null) {
+            throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
+                    rule.getName() + "은(는) 반차(" + plain(rule.getDays()) + "일)로만 신청할 수 있습니다. 오전·오후를 골라 주세요.");
+        }
+        if (!halfDayRule && halfDayPart != null) {
+            throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
+                    "오전·오후 반차는 1일 미만 규정에서만 신청할 수 있습니다. (" + rule.getName() + " "
+                            + plain(rule.getDays()) + "일)");
+        }
         if (workdays.compareTo(rule.getDays()) > 0) {
             throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_EXCEEDED,
                     rule.getName() + "은(는) 근무일 기준 최대 " + plain(rule.getDays()) + "일까지 신청할 수 있습니다. (신청 "
@@ -875,13 +914,13 @@ public class LeaveRequestService {
      * 겹침 검사. 종일 휴가는 대기·승인 중인 어떤 신청과도 겹칠 수 없다.
      * 부분 휴가(반차·반반차·시간차)는 같은 날 부분 휴가끼리 합계 1일까지 허용한다.
      */
-    private void validateNoOverlap(Long employeeId, LocalDate start, LocalDate end, LeaveType type,
+    private void validateNoOverlap(Long employeeId, LocalDate start, LocalDate end, DayPortion portion,
                                    BigDecimal days) {
         List<LeaveRequest> overlapping = requestRepository.findActiveOverlapping(employeeId, start, end);
         if (overlapping.isEmpty()) {
             return;
         }
-        if (!type.isPartialDay() || overlapping.stream().anyMatch(r -> !r.getLeaveType().isPartialDay())) {
+        if (!portion.isPartial() || overlapping.stream().anyMatch(r -> !r.isPartialDay())) {
             throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP);
         }
         BigDecimal sameDay = overlapping.stream().map(LeaveRequest::getDays).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -1000,7 +1039,8 @@ public class LeaveRequestService {
                 .title(e.getName() + " - " + request.getLeaveType().getName()
                         + (request.getSpecialRuleName() != null ? "(" + request.getSpecialRuleName() + ")" : "")
                         + (request.getLeaveType().getPortion() == DayPortion.HOURLY
-                                ? " " + WorkdayCalculator.hoursOf(request.getDays()) + "시간" : ""))
+                                ? " " + WorkdayCalculator.hoursOf(request.getDays()) + "시간" : "")
+                        + (request.getHalfDayPart() != null ? " " + request.getHalfDayPart().label() + " 반차" : ""))
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .allDay(true)

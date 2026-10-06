@@ -65,6 +65,11 @@ public class LeaveRequest extends BaseTimeEntity {
     @Column(name = "special_rule_days")
     private BigDecimal specialRuleDays;
 
+    /** 종일 단위 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정). 그 외 null. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "half_day_part", length = 2)
+    private HalfDayPart halfDayPart;
+
     @Column(name = "applied_year", nullable = false)
     private int appliedYear;
 
@@ -154,6 +159,25 @@ public class LeaveRequest extends BaseTimeEntity {
         this.specialRuleId = ruleId;
         this.specialRuleName = ruleName;
         this.specialRuleDays = ruleDays;
+    }
+
+    /** 종일 단위 종류를 오전·오후 반차로 신청(0.5일 경조사 규정). */
+    public void markHalfDay(HalfDayPart part) {
+        this.halfDayPart = part;
+    }
+
+    public HalfDayPart getHalfDayPart() {
+        return halfDayPart;
+    }
+
+    /** 이 신청의 실제 단위: 종일 종류를 반차로 신청했으면 HALF, 아니면 휴가 종류의 단위. */
+    public DayPortion getPortion() {
+        return halfDayPart != null ? DayPortion.HALF : leaveType.getPortion();
+    }
+
+    /** 반차·반반차·시간차(하루만, 1일 미만). 종일 종류의 반차 신청 포함. */
+    public boolean isPartialDay() {
+        return getPortion().isPartial();
     }
 
     /** 승인 때 소멸시킨 남은 연차를 기록한다. */

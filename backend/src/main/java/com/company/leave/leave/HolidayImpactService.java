@@ -148,8 +148,9 @@ public class HolidayImpactService {
         }
 
         Integer hours = type.getPortion() == DayPortion.HOURLY ? WorkdayCalculator.hoursOf(oldDays) : null;
+        // 신청 건의 실제 단위(종일 종류를 반차로 신청했으면 반차)로 다시 계산
         BigDecimal newDays = workdayCalculator.computeLeaveDays(
-                request.getStartDate(), request.getEndDate(), type, holidays, hours);
+                request.getStartDate(), request.getEndDate(), request.getPortion(), holidays, hours);
         BigDecimal newDeducted = workdayCalculator.deductionFor(type, newDays);
         // 기산일을 걸친 휴가는 다음 기간 몫도 다시 나눈다
         BigDecimal oldNext = request.getNextPeriodDeductedDays();

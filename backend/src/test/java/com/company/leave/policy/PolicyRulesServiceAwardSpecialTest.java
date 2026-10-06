@@ -110,6 +110,37 @@ class PolicyRulesServiceAwardSpecialTest {
     class 경조사 {
 
         @Test
+        void 일수는_반일이나_하루_단위만_받는다() {
+            when(specials.save(any(SpecialLeaveRule.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            assertThat(service.createSpecial(new PolicyRuleDtos.SpecialRuleRequest("생일", new BigDecimal("0.5"),
+                    "CONDOLENCE", null)).days()).isEqualByComparingTo("0.5");
+            assertThat(service.createSpecial(new PolicyRuleDtos.SpecialRuleRequest("본인 결혼", new BigDecimal("5.0"),
+                    "CONDOLENCE", null)).days()).isEqualByComparingTo("5");
+            for (String days : new String[] {"0.25", "1.5", "0", "-1"}) {
+                assertThatThrownBy(() -> service.createSpecial(new PolicyRuleDtos.SpecialRuleRequest("잘못", new BigDecimal(days),
+                        "CONDOLENCE", null)))
+                        .as(days)
+                        .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                            assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
+                            assertThat(ex.getMessage()).contains("0.5일(반차) 또는 1일 단위");
+                        });
+            }
+        }
+
+        @Test
+        void 고칠_때도_일수는_반일이나_하루_단위만_받는다() {
+            SpecialLeaveRule rule = new SpecialLeaveRule("생일", new BigDecimal("0.5"), "CONDOLENCE", 1);
+            when(specials.findById(3L)).thenReturn(Optional.of(rule));
+
+            assertThatThrownBy(() -> service.updateSpecial(3L,
+                    new PolicyRuleDtos.SpecialRuleRequest("생일", new BigDecimal("0.25"), "CONDOLENCE", 1)))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT));
+            assertThat(rule.getDays()).isEqualByComparingTo("0.5");
+        }
+
+        @Test
         void 정렬순서를_주지_않으면_0으로_만든다() {
             when(specials.save(any(SpecialLeaveRule.class))).thenAnswer(inv -> inv.getArgument(0));
 

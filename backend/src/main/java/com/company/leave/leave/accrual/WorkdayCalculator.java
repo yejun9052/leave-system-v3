@@ -30,10 +30,19 @@ public class WorkdayCalculator {
      */
     public BigDecimal computeLeaveDays(LocalDate start, LocalDate end, LeaveType type,
                                        Set<LocalDate> holidays, Integer hours) {
+        return computeLeaveDays(start, end, type.getPortion(), holidays, hours);
+    }
+
+    /**
+     * 단위를 직접 주는 계산. 신청 건의 실제 단위가 종류와 다를 때(종일 종류를 반차로 신청한 0.5일 경조사 규정) 쓴다.
+     *
+     * @see com.company.leave.leave.domain.LeaveRequest#getPortion()
+     */
+    public BigDecimal computeLeaveDays(LocalDate start, LocalDate end, DayPortion portion,
+                                       Set<LocalDate> holidays, Integer hours) {
         // 부분 휴가는 날짜와 관계없이 단위 일수(근무일 여부는 countWorkdays/isWorkday 로 따로 판단).
         // 연차 잔액 차감 여부는 LeaveType.deductFromAnnual 로 별도 판단하므로,
         // 경조사/병가/공가처럼 잔액을 차감하지 않는 휴가도 실제 일수로 기록된다.
-        DayPortion portion = type.getPortion();
         return switch (portion) {
             case FULL -> BigDecimal.valueOf(countWorkdays(start, end, holidays));
             case HALF, QUARTER -> portion.unitDays();

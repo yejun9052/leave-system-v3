@@ -2,6 +2,7 @@ package com.company.leave.leave.dto;
 
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.DayPortion;
+import com.company.leave.leave.domain.HalfDayPart;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
 import jakarta.validation.constraints.Max;
@@ -21,6 +22,7 @@ public final class LeaveRequestDtos {
      * @param hours               시간차의 시간 수(1~3). 다른 종류는 무시
      * @param forfeitAcknowledged 병가·공가 승인 시 남은 연차가 소멸된다는 안내를 확인했는지(소멸분이 있을 때 필수)
      * @param specialRuleId       경조사 규정(규정이 연결된 종류면 필수, 신청 근무일 수 ≤ 규정 일수)
+     * @param halfDayPart         0.5일짜리 경조사 규정(예: 생일)이면 필수인 오전·오후. 그 외에는 비워 둔다
      */
     public record Create(
             @NotNull Long leaveTypeId,
@@ -29,15 +31,21 @@ public final class LeaveRequestDtos {
             @Size(max = 500) String reason,
             @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
             Boolean forfeitAcknowledged,
-            Long specialRuleId) {
+            Long specialRuleId,
+            HalfDayPart halfDayPart) {
 
         public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason) {
-            this(leaveTypeId, startDate, endDate, reason, null, null, null);
+            this(leaveTypeId, startDate, endDate, reason, null, null, null, null);
         }
 
         public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
                       Integer hours, Boolean forfeitAcknowledged) {
-            this(leaveTypeId, startDate, endDate, reason, hours, forfeitAcknowledged, null);
+            this(leaveTypeId, startDate, endDate, reason, hours, forfeitAcknowledged, null, null);
+        }
+
+        public Create(Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
+                      Integer hours, Boolean forfeitAcknowledged, Long specialRuleId) {
+            this(leaveTypeId, startDate, endDate, reason, hours, forfeitAcknowledged, specialRuleId, null);
         }
     }
 
@@ -52,7 +60,13 @@ public final class LeaveRequestDtos {
             @NotNull LocalDate endDate,
             @Size(max = 500) String reason,
             @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
-            Long specialRuleId) {
+            Long specialRuleId,
+            HalfDayPart halfDayPart) {
+
+        public Register(Long employeeId, Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
+                        Integer hours, Long specialRuleId) {
+            this(employeeId, leaveTypeId, startDate, endDate, reason, hours, specialRuleId, null);
+        }
     }
 
     /** 결재자 종류: 팀장 / 인사관리자 / 본인(최상위 부서 팀장·인사관리자의 자가 승인). */
@@ -113,10 +127,18 @@ public final class LeaveRequestDtos {
             LocalDate startDate,
             LocalDate endDate,
             LeaveRequestStatus status,
-            boolean mine) {
+            boolean mine,
+            HalfDayPart halfDayPart) {
+
+        public DayLeave(Long id, Long employeeId, String employeeName, Long departmentId, String departmentName,
+                        String leaveTypeName, String leaveTypeColor, DayPortion portion, Integer hours,
+                        LocalDate startDate, LocalDate endDate, LeaveRequestStatus status, boolean mine) {
+            this(id, employeeId, employeeName, departmentId, departmentName, leaveTypeName, leaveTypeColor, portion,
+                    hours, startDate, endDate, status, mine, null);
+        }
 
         public static DayLeave from(LeaveRequest r, boolean mine) {
-            DayPortion portion = r.getLeaveType().getPortion();
+            DayPortion portion = r.getPortion();
             return new DayLeave(
                     r.getId(),
                     r.getEmployee().getId(),
@@ -130,7 +152,8 @@ public final class LeaveRequestDtos {
                     r.getStartDate(),
                     r.getEndDate(),
                     r.getStatus(),
-                    mine);
+                    mine,
+                    r.getHalfDayPart());
         }
     }
 
@@ -153,6 +176,8 @@ public final class LeaveRequestDtos {
             BigDecimal days,
             DayPortion portion,
             Integer hours,
+            /** 종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정), 그 외 null */
+            HalfDayPart halfDayPart,
             BigDecimal forfeitedDays,
             String specialRuleName,
             BigDecimal specialRuleDays,
@@ -172,20 +197,20 @@ public final class LeaveRequestDtos {
 
         public Response withInbox(boolean own, String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
-                    leaveTypeColor, startDate, endDate, days, portion, hours, forfeitedDays, specialRuleName,
-                    specialRuleDays, status, reason, approverName, approvedAt, rejectReason, cancelReason,
-                    createdAt, own, warning, requestWarning);
+                    leaveTypeColor, startDate, endDate, days, portion, hours, halfDayPart, forfeitedDays,
+                    specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
+                    cancelReason, createdAt, own, warning, requestWarning);
         }
 
         public Response withRequestWarning(String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
-                    leaveTypeColor, startDate, endDate, days, portion, hours, forfeitedDays, specialRuleName,
-                    specialRuleDays, status, reason, approverName, approvedAt, rejectReason, cancelReason,
-                    createdAt, ownRequest, approvalWarning, warning);
+                    leaveTypeColor, startDate, endDate, days, portion, hours, halfDayPart, forfeitedDays,
+                    specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
+                    cancelReason, createdAt, ownRequest, approvalWarning, warning);
         }
 
         public static Response from(LeaveRequest r) {
-            DayPortion portion = r.getLeaveType().getPortion();
+            DayPortion portion = r.getPortion();
             return new Response(
                     r.getId(),
                     r.getEmployee().getId(),
@@ -200,6 +225,7 @@ public final class LeaveRequestDtos {
                     r.getDays(),
                     portion,
                     portion == DayPortion.HOURLY ? WorkdayCalculator.hoursOf(r.getDays()) : null,
+                    r.getHalfDayPart(),
                     r.getForfeitedDays(),
                     r.getSpecialRuleName(),
                     r.getSpecialRuleDays(),

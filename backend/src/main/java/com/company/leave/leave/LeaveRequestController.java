@@ -3,6 +3,7 @@ package com.company.leave.leave;
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.common.dto.PageResponse;
 import com.company.leave.leave.domain.LeaveRequestStatus;
+import com.company.leave.leave.domain.HalfDayPart;
 import com.company.leave.leave.dto.LeaveBalanceResponse;
 import com.company.leave.leave.dto.LeaveRequestDtos;
 import com.company.leave.security.SecurityUtils;
@@ -63,9 +64,10 @@ public class LeaveRequestController {
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate,
             @RequestParam(required = false) Integer hours,
-            @RequestParam(required = false) Long specialRuleId) {
+            @RequestParam(required = false) Long specialRuleId,
+            @RequestParam(required = false) HalfDayPart halfDayPart) {
         return ApiResponse.ok(leaveRequestService.eligibility(
-                SecurityUtils.currentEmployeeId(), leaveTypeId, startDate, endDate, hours, specialRuleId));
+                SecurityUtils.currentEmployeeId(), leaveTypeId, startDate, endDate, hours, specialRuleId, halfDayPart));
     }
 
     @Operation(summary = "내 결재 경로",

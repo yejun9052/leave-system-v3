@@ -240,6 +240,19 @@ class HolidayImpactServiceTest {
     }
 
     @Test
+    void 종일_종류를_반차로_신청한_휴가는_다시_계산해도_반일을_유지한다() {
+        LeaveType 경조사 = new LeaveType("CONDOLENCE", "경조사 휴가", new BigDecimal("0.0"), true, false, false, "#000", 4);
+        LeaveRequest request = 승인된_휴가(경조사, MON.plusDays(1), MON.plusDays(1), "0.5", "0");
+        request.markHalfDay(com.company.leave.leave.domain.HalfDayPart.AM);
+
+        // 같은 날짜로 동기화가 다시 돌아도(그날이 근무일로 남아 있으면) 0.5일 그대로, 1일로 바뀌지 않는다
+        HolidayImpactService.ImpactSummary summary = service.applyNewHolidays(Map.of(MON.plusDays(1), "임시"));
+
+        assertThat(summary.adjustedRequests()).isZero();
+        assertThat(request.getDays()).isEqualByComparingTo("0.5");
+    }
+
+    @Test
     void 취소_요청_중인_휴가도_승인_건처럼_잔액을_돌려준다() {
         LeaveRequest request = 승인된_휴가(연차, MON, MON.plusDays(2), "3", "3");
         request.requestCancel("개인 사정");
