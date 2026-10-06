@@ -53,9 +53,9 @@ const PORTION_LABEL: Record<LeavePortion, string> = {
 const DEDUCTION_MODES: AnnualDeductionMode[] = ["DEDUCT", "EXHAUST_FIRST", "NONE"];
 
 const DEDUCTION_MODE_DESC: Record<AnnualDeductionMode, string> = {
-  DEDUCT: "일반 연차처럼 쓴 일수만큼 연차에서 뺍니다.",
-  EXHAUST_FIRST: "사용 가능한 연차가 1일 미만일 때만 신청할 수 있고, 승인되면 남은 연차는 소멸됩니다(병가·공가).",
-  NONE: "연차와 상관없이 신청하고 연차에서 빼지 않습니다(경조사).",
+  DEDUCT: "쓴 일수만큼 연차에서 뺍니다. 예: 연차·반차·시간차",
+  EXHAUST_FIRST: "사용 가능한 연차가 1일 미만일 때만 신청할 수 있고, 승인되면 남은 연차는 소멸됩니다. 예: 병가·공가",
+  NONE: "연차와 상관없이 신청하고 연차에서 빼지 않습니다. 예: 경조사 휴가",
 };
 
 export default function PolicyPage() {
@@ -580,7 +580,7 @@ function LeaveTypeDialog({
           </div>
           <ToggleRow
             label="연차 사용 금지 기간에도 신청 가능"
-            desc="켜면 금지 기간에도 신청할 수 있습니다(예: 경조사·공가)."
+            desc="켜면 금지 기간에도 신청할 수 있습니다. 예: 경조사 휴가·공가"
             checked={form.allowedDuringBlackout}
             onChange={(v) => set("allowedDuringBlackout", v)}
           />
