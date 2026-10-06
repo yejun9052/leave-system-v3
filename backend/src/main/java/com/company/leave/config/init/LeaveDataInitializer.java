@@ -61,14 +61,17 @@ public class LeaveDataInitializer implements ApplicationRunner {
         if (leaveTypeRepository.count() == 0) {
             // 시간차는 정책에서 켜야 신청 가능(기본 꺼짐). 반반차는 시간차(2시간)로 대체되어 만들지 않는다.
             // 차감 방식: 연차·반차·시간차는 연차처럼 차감, 병가·공가는 회사 규정(연차 먼저 소진), 경조사는 연차와 무관
+            // 연차 사용 금지 기간에도 신청 가능: 경조사·공가(병가는 불가)
             leaveTypeRepository.saveAll(List.of(
                     type("ANNUAL", "연차", "1.0", true, DayPortion.FULL, AnnualDeductionMode.DEDUCT, "#4f46e5", 1),
                     type("HALF_AM", "오전 반차", "0.5", true, DayPortion.HALF, AnnualDeductionMode.DEDUCT, "#22c55e", 2),
                     type("HALF_PM", "오후 반차", "0.5", true, DayPortion.HALF, AnnualDeductionMode.DEDUCT, "#06b6d4", 3),
                     type("HOURLY", "시간차", "0.125", true, DayPortion.HOURLY, AnnualDeductionMode.DEDUCT, "#0ea5e9", 3),
-                    type("CONDOLENCE", "경조사 휴가", "0.0", true, DayPortion.FULL, AnnualDeductionMode.NONE, "#f59e0b", 4),
+                    type("CONDOLENCE", "경조사 휴가", "0.0", true, DayPortion.FULL, AnnualDeductionMode.NONE, "#f59e0b", 4)
+                            .allowDuringBlackout(true),
                     type("SICK", "병가", "0.0", false, DayPortion.FULL, AnnualDeductionMode.EXHAUST_FIRST, "#ef4444", 5),
-                    type("OFFICIAL", "공가", "0.0", true, DayPortion.FULL, AnnualDeductionMode.EXHAUST_FIRST, "#8b5cf6", 6)));
+                    type("OFFICIAL", "공가", "0.0", true, DayPortion.FULL, AnnualDeductionMode.EXHAUST_FIRST, "#8b5cf6", 6)
+                            .allowDuringBlackout(true)));
             log.info("기본 휴가 종류 7종 생성");
         }
 

@@ -54,6 +54,7 @@ public class LeaveTypeService {
         LeaveType type = new LeaveType(req.code(), req.name(), req.deductDays(), req.paid(),
                 req.portion(), req.annualDeductionMode(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0);
+        type.allowDuringBlackout(Boolean.TRUE.equals(req.allowedDuringBlackout()));
         return toResponse(leaveTypeRepository.save(type));
     }
 
@@ -67,6 +68,9 @@ public class LeaveTypeService {
         type.update(req.name(), req.deductDays(), req.paid(), req.portion(),
                 req.annualDeductionMode(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0, req.active());
+        if (req.allowedDuringBlackout() != null) {
+            type.allowDuringBlackout(req.allowedDuringBlackout());
+        }
         return toResponse(type);
     }
 

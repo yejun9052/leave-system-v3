@@ -18,6 +18,7 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
+import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
@@ -759,13 +760,14 @@ public class LeaveRequestService {
     /** 정책 기반 사용 통제 검증 (블랙아웃/사전신청/연속일/팀 동시부재). */
     private void validateUsagePolicy(Employee employee, LeaveType type, LocalDate start, LocalDate end,
                                      BigDecimal days, LeavePolicy policy) {
-        // 경조사·병가·공가(연차 비차감)는 갑자기 생기거나 회사가 막을 수 없는 휴가라 사용 통제를 적용하지 않는다.
-        // 팀 동시 부재 한도 초과는 막지 않고 결재함에 경고로 보여 팀장이 재량으로 판단한다(teamLimitWarning).
-        if (!type.isDeductFromAnnual()) {
-            return;
-        }
-        if (blackoutPeriodRepository.existsOverlap(start, end)) {
+        // 연차 사용 금지 기간은 휴가 종류마다 정한다(경조사·공가는 허용, 병가·연차는 불가).
+        if (!type.isAllowedDuringBlackout() && blackoutPeriodRepository.existsOverlap(start, end)) {
             throw new BusinessException(ErrorCode.LEAVE_BLACKOUT);
+        }
+        // 나머지 사용 통제는 연차처럼 차감하는 종류에만. 경조사·병가·공가는 갑자기 생기거나 회사가 막을 수 없는 휴가다.
+        // 팀 동시 부재 한도 초과는 막지 않고 결재함에 경고로 보여 팀장이 재량으로 판단한다(teamLimitWarning).
+        if (type.getAnnualDeductionMode() != AnnualDeductionMode.DEDUCT) {
+            return;
         }
         if (policy.getMinAdvanceDays() > 0) {
             LocalDate earliest = LocalDate.now().plusDays(policy.getMinAdvanceDays());
@@ -801,11 +803,12 @@ public class LeaveRequestService {
     }
 
     /**
-     * 결재자에게 보여 줄 경고. 사용 통제를 적용하지 않은 비차감 휴가(경조사·병가·공가)가 팀 동시 부재 한도를
+     * 결재자에게 보여 줄 경고. 사용 통제를 적용하지 않는 휴가(연차처럼 차감하지 않는 경조사·병가·공가)가 팀 동시 부재 한도를
      * 넘으면 알려 주고, 승인 여부는 결재자가 판단한다. 해당 없으면 null.
      */
     private String teamLimitWarning(LeaveRequest request, LeavePolicy policy) {
-        if (!request.isAwaitingApproval() || request.getLeaveType().isDeductFromAnnual()
+        if (!request.isAwaitingApproval()
+                || request.getLeaveType().getAnnualDeductionMode() == AnnualDeductionMode.DEDUCT
                 || !exceedsTeamLimit(request.getEmployee(), request.getStartDate(), request.getEndDate(), policy)) {
             return null;
         }

@@ -23,6 +23,7 @@ import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.LeaveAccrualCalculator;
 import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
+import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
@@ -107,9 +108,12 @@ class LeaveRequestServiceSickAndPartialTest {
     private final LeaveType 반차 = 종류(2L, "HALF_AM", "오전 반차", "0.5", DayPortion.HALF, true, false);
     private final LeaveType 반반차 = 종류(3L, "QUARTER", "반반차", "0.25", DayPortion.QUARTER, true, false);
     private final LeaveType 시간차 = 종류(4L, "HOURLY", "시간차", "0.125", DayPortion.HOURLY, true, false);
-    private final LeaveType 경조사 = 종류(5L, "CONDOLENCE", "경조사 휴가", "0.0", DayPortion.FULL, false, false);
+    // 연차 사용 금지 기간에도 신청 가능: 경조사·공가(기본 데이터와 같음). 병가는 불가
+    private final LeaveType 경조사 = 종류(5L, "CONDOLENCE", "경조사 휴가", "0.0", DayPortion.FULL, false, false)
+            .allowDuringBlackout(true);
     private final LeaveType 병가 = 종류(6L, "SICK", "병가", "0.0", DayPortion.FULL, false, true);
-    private final LeaveType 공가 = 종류(7L, "OFFICIAL", "공가", "0.0", DayPortion.FULL, false, true);
+    private final LeaveType 공가 = 종류(7L, "OFFICIAL", "공가", "0.0", DayPortion.FULL, false, true)
+            .allowDuringBlackout(true);
 
     @BeforeEach
     void setUp() {
@@ -526,20 +530,85 @@ class LeaveRequestServiceSickAndPartialTest {
     }
 
     @Nested
-    @DisplayName("경조사·병가·공가는 사용 통제 제외")
+    @DisplayName("연차 사용 금지 기간과 사용 통제")
     @DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
     class 사용_통제_제외 {
 
         @Test
-        void 블랙아웃_기간에도_경조사와_병가는_신청되고_연차는_막힌다() {
+        void 금지_기간에_경조사와_공가는_신청되고_병가와_연차는_막힌다() {
             when(blackoutPeriodRepository.existsOverlap(any(), any())).thenReturn(true);
             잔여(0);
 
             assertThat(신청(경조사, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
-            assertThat(신청(병가, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(신청(공가, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            금지_기간이라_막힌다(병가);
+            금지_기간이라_막힌다(연차);
+        }
+
+        @Test
+        void 금지_기간_미리보기도_실제_신청과_같다() {
+            when(blackoutPeriodRepository.existsOverlap(any(), any())).thenReturn(true);
+            잔여(0);
+
+            LeaveRequestDtos.Eligibility 병가_미리보기 = service.eligibility(EMP, 병가.getId(), TUE, TUE, null, null);
+            LeaveRequestDtos.Eligibility 공가_미리보기 = service.eligibility(EMP, 공가.getId(), TUE, TUE, null, null);
+
+            assertThat(병가_미리보기.allowed()).isFalse();
+            assertThat(병가_미리보기.reason()).isEqualTo(ErrorCode.LEAVE_BLACKOUT.defaultMessage());
+            assertThat(공가_미리보기.allowed()).isTrue();
+        }
+
+        @Test
+        void 공가를_연차처럼_차감으로_바꿔도_금지_기간_허용은_그대로다() {
+            lenient().when(blackoutPeriodRepository.existsOverlap(any(), any())).thenReturn(true);
+            잔여(5);
+            공가.update("공가", BigDecimal.ONE, true, DayPortion.FULL, AnnualDeductionMode.DEDUCT, "#000", 1, true);
+
+            LeaveRequest request = 신청(공가, null, null);
+
+            assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(request.getDeductedDays()).isEqualByComparingTo("1");
+        }
+
+        @Test
+        void 병가를_연차처럼_차감으로_바꾸면_차감되고_금지_기간에는_여전히_막힌다() {
+            잔여(5);
+            병가.update("병가", BigDecimal.ONE, false, DayPortion.FULL, AnnualDeductionMode.DEDUCT, "#000", 1, true);
+
+            when(blackoutPeriodRepository.existsOverlap(any(), any())).thenReturn(true);
+            금지_기간이라_막힌다(병가);
+
+            when(blackoutPeriodRepository.existsOverlap(any(), any())).thenReturn(false);
+            assertThat(신청(병가, null, null).getDeductedDays()).isEqualByComparingTo("1");
+        }
+
+        @Test
+        void 연차와_무관한_경조사는_잔여_연차가_없어도_신청되고_차감하지_않는다() {
+            when(policy.isAllowNegative()).thenReturn(false);
+            잔여(0);
+
+            LeaveRequest request = 신청(경조사, null, null);
+
+            assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(request.getDeductedDays()).isEqualByComparingTo("0");
             assertThatThrownBy(() -> 신청(연차, null, null))
                     .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INSUFFICIENT_LEAVE_BALANCE));
+        }
+
+        private void 금지_기간이라_막힌다(LeaveType type) {
+            assertThatThrownBy(() -> 신청(type, null, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_BLACKOUT));
+        }
+
+        @Test
+        void 최소_사전_신청_기한은_병가와_공가에도_적용하지_않는다() {
+            lenient().when(policy.getMinAdvanceDays()).thenReturn(10_000);
+            잔여(0);
+
+            assertThat(신청(병가, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(신청(공가, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
         }
 
         @Test

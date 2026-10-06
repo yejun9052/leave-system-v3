@@ -62,6 +62,8 @@ class LeaveDataInitializerTest {
                 .containsExactly("SICK", "OFFICIAL");
         assertThat(types).filteredOn(t -> t.getAnnualDeductionMode() == AnnualDeductionMode.NONE)
                 .extracting(LeaveType::getCode).containsExactly("CONDOLENCE");
+        assertThat(types).filteredOn(LeaveType::isAllowedDuringBlackout).extracting(LeaveType::getCode)
+                .containsExactly("CONDOLENCE", "OFFICIAL");
         assertThat(types).filteredOn(t -> t.getCode().equals("HOURLY")).extracting(LeaveType::getPortion)
                 .containsExactly(DayPortion.HOURLY);
         assertThat(types).filteredOn(t -> !t.isPaid()).extracting(LeaveType::getCode).containsExactly("SICK");

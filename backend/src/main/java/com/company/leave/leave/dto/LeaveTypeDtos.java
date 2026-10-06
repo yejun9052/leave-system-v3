@@ -22,6 +22,7 @@ public final class LeaveTypeDtos {
      * @param annualDeductionMode      연차 차감 방식(DEDUCT 연차처럼 차감·EXHAUST_FIRST 연차 먼저 소진·NONE 연차와 무관)
      * @param deductFromAnnual         annualDeductionMode == DEDUCT (기존 화면 호환용)
      * @param requiresAnnualExhausted  annualDeductionMode == EXHAUST_FIRST (신청 화면의 병가·공가 안내용)
+     * @param allowedDuringBlackout    연차 사용 금지 기간에도 신청 가능(경조사·공가)
      * @param policyEnabled            현재 정책에서 이 단위를 쓸 수 있는지(반차·반반차·시간차 켜기/끄기). 신청 화면 목록 필터용
      * @param specialRules             이 종류에 연결된 경조사 규정. 비어 있지 않으면 신청 때 하나를 골라야 한다
      */
@@ -36,6 +37,7 @@ public final class LeaveTypeDtos {
             AnnualDeductionMode annualDeductionMode,
             boolean deductFromAnnual,
             boolean requiresAnnualExhausted,
+            boolean allowedDuringBlackout,
             String colorHex,
             int sortOrder,
             boolean active,
@@ -45,7 +47,7 @@ public final class LeaveTypeDtos {
         public static Response from(LeaveType t, LeavePolicy policy, List<SpecialLeaveRule> rules) {
             return new Response(t.getId(), t.getCode(), t.getName(), t.getDeductDays(),
                     t.isPaid(), t.getPortion(), t.isHalfDay(), t.getAnnualDeductionMode(), t.isDeductFromAnnual(),
-                    t.isRequiresAnnualExhausted(), t.getColorHex(), t.getSortOrder(), t.isActive(),
+                    t.isRequiresAnnualExhausted(), t.isAllowedDuringBlackout(), t.getColorHex(), t.getSortOrder(), t.isActive(),
                     policy.allows(t.getPortion()),
                     rules.stream().map(r -> new SpecialRuleOption(r.getId(), r.getName(), r.getDays())).toList());
         }
@@ -55,7 +57,7 @@ public final class LeaveTypeDtos {
     public record SpecialRuleOption(Long id, String name, BigDecimal days) {
     }
 
-    /** portion 이 없으면 종일(FULL). */
+    /** portion 이 없으면 종일(FULL). allowedDuringBlackout 이 없으면 금지 기간에 신청 불가. */
     public record Create(
             @NotBlank @Size(max = 40) String code,
             @NotBlank @Size(max = 60) String name,
@@ -63,17 +65,19 @@ public final class LeaveTypeDtos {
             boolean paid,
             DayPortion portion,
             @NotNull AnnualDeductionMode annualDeductionMode,
+            Boolean allowedDuringBlackout,
             @NotBlank @Size(max = 7) String colorHex,
             Integer sortOrder) {
     }
 
-    /** portion 이 없으면 종일(FULL). */
+    /** portion 이 없으면 종일(FULL). allowedDuringBlackout 이 없으면(null) 지금 값을 유지. */
     public record Update(
             @NotBlank @Size(max = 60) String name,
             @NotNull BigDecimal deductDays,
             boolean paid,
             DayPortion portion,
             @NotNull AnnualDeductionMode annualDeductionMode,
+            Boolean allowedDuringBlackout,
             @NotBlank @Size(max = 7) String colorHex,
             Integer sortOrder,
             boolean active) {

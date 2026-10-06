@@ -138,7 +138,7 @@ class LeaveTypeDeductionModeTest {
             when(repository.findById(6L)).thenReturn(Optional.of(병가));
 
             LeaveTypeDtos.Response response = service().update(6L, new LeaveTypeDtos.Update("병가", BigDecimal.ONE,
-                    false, DayPortion.FULL, AnnualDeductionMode.DEDUCT, "#ef4444", 5, true));
+                    false, DayPortion.FULL, AnnualDeductionMode.DEDUCT, null, "#ef4444", 5, true));
 
             assertThat(response.annualDeductionMode()).isEqualTo(AnnualDeductionMode.DEDUCT);
             assertThat(response.deductFromAnnual()).isTrue();
@@ -151,11 +151,47 @@ class LeaveTypeDeductionModeTest {
             when(repository.save(any(LeaveType.class))).thenAnswer(inv -> inv.getArgument(0));
 
             LeaveTypeDtos.Response response = service().create(new LeaveTypeDtos.Create("REFRESH", "리프레시",
-                    BigDecimal.ONE, true, DayPortion.FULL, AnnualDeductionMode.NONE, "#22c55e", 7));
+                    BigDecimal.ONE, true, DayPortion.FULL, AnnualDeductionMode.NONE, true, "#22c55e", 7));
 
             assertThat(response.annualDeductionMode()).isEqualTo(AnnualDeductionMode.NONE);
             assertThat(response.deductFromAnnual()).isFalse();
             assertThat(response.requiresAnnualExhausted()).isFalse();
+            assertThat(response.allowedDuringBlackout()).isTrue();
+        }
+
+        @Test
+        void 금지_기간_허용을_안_보내고_만들면_금지_기간에_신청할_수_없다() {
+            when(repository.save(any(LeaveType.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            LeaveTypeDtos.Response response = service().create(new LeaveTypeDtos.Create("REFRESH", "리프레시",
+                    BigDecimal.ONE, true, DayPortion.FULL, AnnualDeductionMode.NONE, null, "#22c55e", 7));
+
+            assertThat(response.allowedDuringBlackout()).isFalse();
+        }
+
+        @Test
+        void 차감_방식을_바꿔도_금지_기간_허용은_보내지_않으면_그대로다() {
+            LeaveType 공가 = new LeaveType("OFFICIAL", "공가", BigDecimal.ZERO, true, DayPortion.FULL,
+                    AnnualDeductionMode.EXHAUST_FIRST, "#8b5cf6", 6).allowDuringBlackout(true);
+            when(repository.findById(7L)).thenReturn(Optional.of(공가));
+
+            LeaveTypeDtos.Response response = service().update(7L, new LeaveTypeDtos.Update("공가", BigDecimal.ONE,
+                    true, DayPortion.FULL, AnnualDeductionMode.DEDUCT, null, "#8b5cf6", 6, true));
+
+            assertThat(response.annualDeductionMode()).isEqualTo(AnnualDeductionMode.DEDUCT);
+            assertThat(response.allowedDuringBlackout()).isTrue();
+        }
+
+        @Test
+        void 금지_기간_허용을_끄면_꺼진다() {
+            LeaveType 공가 = new LeaveType("OFFICIAL", "공가", BigDecimal.ZERO, true, DayPortion.FULL,
+                    AnnualDeductionMode.EXHAUST_FIRST, "#8b5cf6", 6).allowDuringBlackout(true);
+            when(repository.findById(7L)).thenReturn(Optional.of(공가));
+
+            service().update(7L, new LeaveTypeDtos.Update("공가", BigDecimal.ZERO, true, DayPortion.FULL,
+                    AnnualDeductionMode.EXHAUST_FIRST, false, "#8b5cf6", 6, true));
+
+            assertThat(공가.isAllowedDuringBlackout()).isFalse();
         }
     }
 

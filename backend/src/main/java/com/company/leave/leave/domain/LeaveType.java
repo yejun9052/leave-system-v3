@@ -52,6 +52,10 @@ public class LeaveType extends BaseTimeEntity {
     @Column(name = "requires_annual_exhausted", nullable = false)
     private boolean requiresAnnualExhausted = false;
 
+    /** 연차 사용 금지 기간(블랙아웃)에도 신청 가능(경조사·공가). 차감 방식과 따로 정한다. */
+    @Column(name = "allowed_during_blackout", nullable = false)
+    private boolean allowedDuringBlackout = false;
+
     @Column(name = "color_hex", nullable = false, length = 7)
     private String colorHex = "#4f46e5";
 
@@ -100,6 +104,12 @@ public class LeaveType extends BaseTimeEntity {
         this.colorHex = colorHex;
         this.sortOrder = sortOrder;
         this.active = active;
+    }
+
+    /** 연차 사용 금지 기간에도 신청 가능하게(또는 불가하게). */
+    public LeaveType allowDuringBlackout(boolean allowed) {
+        this.allowedDuringBlackout = allowed;
+        return this;
     }
 
     private void applyDeductionMode(AnnualDeductionMode mode) {
@@ -156,6 +166,10 @@ public class LeaveType extends BaseTimeEntity {
      */
     public boolean isRequiresAnnualExhausted() {
         return annualDeductionMode == AnnualDeductionMode.EXHAUST_FIRST;
+    }
+
+    public boolean isAllowedDuringBlackout() {
+        return allowedDuringBlackout;
     }
 
     public String getColorHex() {
