@@ -56,7 +56,7 @@ import {
   type DateSelection,
 } from "./useDateSelection";
 
-type ViewScope = "ALL" | "COMPANY" | "DEPARTMENT" | "PERSONAL";
+type ViewScope = "ALL" | "SCHEDULE" | "DEPARTMENT" | "PERSONAL";
 
 /** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
 const HOLIDAY_COLOR = "#ef4444";
@@ -68,10 +68,30 @@ function scopeKey(scope: string, departmentId: number | null | undefined): strin
 
 const VIEW_TABS: { key: ViewScope; label: string }[] = [
   { key: "ALL", label: "전체" },
-  { key: "COMPANY", label: "전사" },
+  { key: "SCHEDULE", label: "일정" },
   { key: "DEPARTMENT", label: "부서" },
   { key: "PERSONAL", label: "개인" },
 ];
+
+/**
+ * 보기 탭에 들어갈 일정인지. 공휴일은 모든 탭에 보이고, 블랙아웃 기간은 탭과 관계없이 따로 그린다.
+ * <ul>
+ *   <li>일정: 공통 일정만(회사 일정·팀 일정). 휴가는 빼고</li>
+ *   <li>부서: 내 부서 직원의 휴가 + 내 부서 일정</li>
+ *   <li>개인: 내 휴가</li>
+ * </ul>
+ */
+function inView(e: CalendarEventDto, view: ViewScope, me: { id: number; departmentId: number | null } | null): boolean {
+  if (view === "ALL" || e.source === "HOLIDAY") return true;
+  switch (view) {
+    case "SCHEDULE":
+      return e.source === "ADMIN_EVENT" && e.scope !== "PERSONAL";
+    case "DEPARTMENT":
+      return !!me && me.departmentId != null && e.departmentId === me.departmentId && e.scope !== "PERSONAL";
+    case "PERSONAL":
+      return !!me && e.employeeId === me.id;
+  }
+}
 
 export default function CalendarPage() {
   const qc = useQueryClient();
@@ -96,9 +116,10 @@ export default function CalendarPage() {
 
   const { data: blackouts = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
 
+  const me = useAuthStore((s) => s.user);
   const filtered = useMemo(
-    () => (view === "ALL" ? events : events.filter((e) => e.scope === view || e.source === "HOLIDAY")),
-    [events, view],
+    () => events.filter((e) => inView(e, view, me ? { id: me.id, departmentId: me.departmentId } : null)),
+    [events, view, me],
   );
 
   // 신청 시작일 검사용 공휴일(보이는 달 범위만 불러오지만, 누를 수 있는 날짜도 그 범위 안이다)

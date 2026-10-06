@@ -14,7 +14,11 @@ public final class CalendarDtos {
     private CalendarDtos() {
     }
 
-    /** FullCalendar 이벤트 형식. allDay 이벤트의 end 는 배타적(다음 날)으로 내려준다. */
+    /**
+     * FullCalendar 이벤트 형식. allDay 이벤트의 end 는 배타적(다음 날)으로 내려준다.
+     *
+     * @param employeeId 휴가 일정이면 휴가를 낸 직원(캘린더 "개인" 탭에서 내 휴가를 고를 때 씀), 그 외 null
+     */
     public record EventResponse(
             String id,
             String title,
@@ -25,6 +29,7 @@ public final class CalendarDtos {
             CalendarEventSource source,
             String colorHex,
             Long departmentId,
+            Long employeeId,
             boolean editable) {
 
         public static EventResponse fromEvent(CalendarEvent e, boolean editable) {
@@ -38,6 +43,7 @@ public final class CalendarDtos {
                     e.getSource(),
                     e.getColorHex(),
                     e.getDepartmentId(),
+                    e.getEmployeeId(),
                     editable);
         }
 
@@ -51,6 +57,7 @@ public final class CalendarDtos {
                     CalendarEventScope.COMPANY,
                     CalendarEventSource.HOLIDAY,
                     "#ef4444",
+                    null,
                     null,
                     false);
         }

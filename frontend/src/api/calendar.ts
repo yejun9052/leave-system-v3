@@ -11,6 +11,8 @@ export interface CalendarEventDto {
   source: "LEAVE_REQUEST" | "ADMIN_EVENT" | "HOLIDAY";
   colorHex: string;
   departmentId: number | null;
+  /** 휴가 일정이면 휴가를 낸 직원, 그 외 null */
+  employeeId: number | null;
   editable: boolean;
 }
 

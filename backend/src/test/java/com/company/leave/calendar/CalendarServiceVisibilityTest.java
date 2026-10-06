@@ -102,6 +102,22 @@ class CalendarServiceVisibilityTest {
     }
 
     @Test
+    void 휴가_일정에는_휴가를_낸_직원과_부서가_들어가고_공휴일에는_없다() {
+        CalendarEvent 휴가 = CalendarEvent.builder().title("홍길동 - 연차").startDate(DAY).endDate(DAY)
+                .scope(CalendarEventScope.COMPANY).source(CalendarEventSource.LEAVE_REQUEST)
+                .employeeId(ME).departmentId(MY_DEPT).build();
+        ReflectionTestUtils.setField(휴가, "id", 9L);
+        when(events.findBetween(DAY, DAY)).thenReturn(List.of(휴가));
+        when(holidays.findByDateBetweenOrderByDateAsc(DAY, DAY)).thenReturn(List.of(holiday(1L, DAY, "임시공휴일")));
+
+        List<CalendarDtos.EventResponse> visible = service.getEvents(DAY, DAY, employee(ME, MY_DEPT, Role.EMPLOYEE));
+
+        assertThat(visible).extracting(CalendarDtos.EventResponse::id, CalendarDtos.EventResponse::employeeId,
+                        CalendarDtos.EventResponse::departmentId)
+                .containsExactly(tuple("E9", ME, MY_DEPT), tuple("H1", null, null));
+    }
+
+    @Test
     void 휴가에서_만든_일정은_관리자에게도_수정_불가로_표시된다() {
         CalendarEvent 휴가 = CalendarEvent.builder().title("홍길동 - 연차").startDate(DAY).endDate(DAY)
                 .scope(CalendarEventScope.COMPANY).source(CalendarEventSource.LEAVE_REQUEST).createdBy(10L).build();
