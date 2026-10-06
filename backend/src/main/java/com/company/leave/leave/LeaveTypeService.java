@@ -52,7 +52,7 @@ public class LeaveTypeService {
         }
         rejectQuarter(req.portion());
         LeaveType type = new LeaveType(req.code(), req.name(), req.deductDays(), req.paid(),
-                req.portion(), req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
+                req.portion(), req.annualDeductionMode(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0);
         return toResponse(leaveTypeRepository.save(type));
     }
@@ -65,7 +65,7 @@ public class LeaveTypeService {
             rejectQuarter(req.portion());
         }
         type.update(req.name(), req.deductDays(), req.paid(), req.portion(),
-                req.deductFromAnnual(), req.requiresAnnualExhausted(), req.colorHex(),
+                req.annualDeductionMode(), req.colorHex(),
                 req.sortOrder() != null ? req.sortOrder() : 0, req.active());
         return toResponse(type);
     }

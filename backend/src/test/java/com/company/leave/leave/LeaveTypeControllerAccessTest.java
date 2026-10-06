@@ -44,12 +44,12 @@ class LeaveTypeControllerAccessTest {
     static class MethodSecurity {}
 
     private static final String CREATE = """
-            {"code":"REFRESH","name":"리프레시","deductDays":1,"paid":true,"deductFromAnnual":false,
-             "requiresAnnualExhausted":false,"colorHex":"#22c55e"}
+            {"code":"REFRESH","name":"리프레시","deductDays":1,"paid":true,"annualDeductionMode":"NONE",
+             "colorHex":"#22c55e"}
             """;
     private static final String UPDATE = """
-            {"name":"리프레시","deductDays":1,"paid":true,"deductFromAnnual":false,
-             "requiresAnnualExhausted":false,"colorHex":"#22c55e","active":true}
+            {"name":"리프레시","deductDays":1,"paid":true,"annualDeductionMode":"NONE",
+             "colorHex":"#22c55e","active":true}
             """;
 
     private AnnotationConfigApplicationContext context;
@@ -114,15 +114,28 @@ class LeaveTypeControllerAccessTest {
     }
 
     @Test
+    void 차감_방식이_빠지면_400이고_저장하지_않는다() throws Exception {
+        authenticate(Set.of(Role.HR_ADMIN));
+        mvc.perform(post("/api/leave-types").contentType(MediaType.APPLICATION_JSON)
+                        .content(CREATE.replace("\"annualDeductionMode\":\"NONE\",", "")))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/api/leave-types/3").contentType(MediaType.APPLICATION_JSON)
+                        .content(UPDATE.replace("\"annualDeductionMode\":\"NONE\",", "")))
+                .andExpect(status().isBadRequest());
+        verify(service, never()).create(any());
+        verify(service, never()).update(anyLong(), any());
+    }
+
+    @Test
     void 코드_이름_색이_빠지면_400이고_저장하지_않는다() throws Exception {
         authenticate(Set.of(Role.HR_ADMIN));
         mvc.perform(post("/api/leave-types").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"리프레시\",\"deductDays\":1,\"paid\":true,\"deductFromAnnual\":true,"
-                                + "\"requiresAnnualExhausted\":false}"))
+                        .content("{\"name\":\"리프레시\",\"deductDays\":1,\"paid\":true,\"annualDeductionMode\":\"DEDUCT\","
+                                + "\"sortOrder\":1}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(put("/api/leave-types/3").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"deductDays\":1,\"paid\":true,\"deductFromAnnual\":true,"
-                                + "\"requiresAnnualExhausted\":false,\"colorHex\":\"#000000\",\"active\":true}"))
+                        .content("{\"deductDays\":1,\"paid\":true,\"annualDeductionMode\":\"DEDUCT\","
+                                + "\"colorHex\":\"#000000\",\"active\":true}"))
                 .andExpect(status().isBadRequest());
         verify(service, never()).create(any());
         verify(service, never()).update(anyLong(), any());

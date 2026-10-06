@@ -3,6 +3,7 @@ package com.company.leave.config.init;
 import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.holiday.HolidayApiProperties;
 import com.company.leave.calendar.repository.HolidayRepository;
+import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.repository.LeaveTypeRepository;
@@ -59,15 +60,15 @@ public class LeaveDataInitializer implements ApplicationRunner {
 
         if (leaveTypeRepository.count() == 0) {
             // 시간차는 정책에서 켜야 신청 가능(기본 꺼짐). 반반차는 시간차(2시간)로 대체되어 만들지 않는다.
-            // 병가·공가는 잔여 연차 소진 후 사용
+            // 차감 방식: 연차·반차·시간차는 연차처럼 차감, 병가·공가는 회사 규정(연차 먼저 소진), 경조사는 연차와 무관
             leaveTypeRepository.saveAll(List.of(
-                    type("ANNUAL", "연차", "1.0", true, DayPortion.FULL, true, false, "#4f46e5", 1),
-                    type("HALF_AM", "오전 반차", "0.5", true, DayPortion.HALF, true, false, "#22c55e", 2),
-                    type("HALF_PM", "오후 반차", "0.5", true, DayPortion.HALF, true, false, "#06b6d4", 3),
-                    type("HOURLY", "시간차", "0.125", true, DayPortion.HOURLY, true, false, "#0ea5e9", 3),
-                    type("CONDOLENCE", "경조사 휴가", "0.0", true, DayPortion.FULL, false, false, "#f59e0b", 4),
-                    type("SICK", "병가", "0.0", false, DayPortion.FULL, false, true, "#ef4444", 5),
-                    type("OFFICIAL", "공가", "0.0", true, DayPortion.FULL, false, true, "#8b5cf6", 6)));
+                    type("ANNUAL", "연차", "1.0", true, DayPortion.FULL, AnnualDeductionMode.DEDUCT, "#4f46e5", 1),
+                    type("HALF_AM", "오전 반차", "0.5", true, DayPortion.HALF, AnnualDeductionMode.DEDUCT, "#22c55e", 2),
+                    type("HALF_PM", "오후 반차", "0.5", true, DayPortion.HALF, AnnualDeductionMode.DEDUCT, "#06b6d4", 3),
+                    type("HOURLY", "시간차", "0.125", true, DayPortion.HOURLY, AnnualDeductionMode.DEDUCT, "#0ea5e9", 3),
+                    type("CONDOLENCE", "경조사 휴가", "0.0", true, DayPortion.FULL, AnnualDeductionMode.NONE, "#f59e0b", 4),
+                    type("SICK", "병가", "0.0", false, DayPortion.FULL, AnnualDeductionMode.EXHAUST_FIRST, "#ef4444", 5),
+                    type("OFFICIAL", "공가", "0.0", true, DayPortion.FULL, AnnualDeductionMode.EXHAUST_FIRST, "#8b5cf6", 6)));
             log.info("기본 휴가 종류 7종 생성");
         }
 
@@ -97,9 +98,8 @@ public class LeaveDataInitializer implements ApplicationRunner {
     }
 
     private LeaveType type(String code, String name, String deduct, boolean paid, DayPortion portion,
-                           boolean deductFromAnnual, boolean requiresAnnualExhausted, String color, int sort) {
-        return new LeaveType(code, name, new BigDecimal(deduct), paid, portion, deductFromAnnual,
-                requiresAnnualExhausted, color, sort);
+                           AnnualDeductionMode mode, String color, int sort) {
+        return new LeaveType(code, name, new BigDecimal(deduct), paid, portion, mode, color, sort);
     }
 
     private void seedHolidays2026() {

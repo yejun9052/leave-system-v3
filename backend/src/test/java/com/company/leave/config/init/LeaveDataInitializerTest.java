@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.holiday.HolidayApiProperties;
 import com.company.leave.calendar.repository.HolidayRepository;
+import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.repository.LeaveTypeRepository;
@@ -59,6 +60,8 @@ class LeaveDataInitializerTest {
                 .containsExactly("ANNUAL", "HALF_AM", "HALF_PM", "HOURLY");
         assertThat(types).filteredOn(LeaveType::isRequiresAnnualExhausted).extracting(LeaveType::getCode)
                 .containsExactly("SICK", "OFFICIAL");
+        assertThat(types).filteredOn(t -> t.getAnnualDeductionMode() == AnnualDeductionMode.NONE)
+                .extracting(LeaveType::getCode).containsExactly("CONDOLENCE");
         assertThat(types).filteredOn(t -> t.getCode().equals("HOURLY")).extracting(LeaveType::getPortion)
                 .containsExactly(DayPortion.HOURLY);
         assertThat(types).filteredOn(t -> !t.isPaid()).extracting(LeaveType::getCode).containsExactly("SICK");

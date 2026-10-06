@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveTypeDtos;
@@ -53,7 +54,7 @@ class LeaveTypeServiceQuarterTest {
     @Test
     void 반반차_단위로_새_휴가_종류를_만들_수_없다() {
         assertThatThrownBy(() -> service.create(new LeaveTypeDtos.Create("Q2", "반반차2", new BigDecimal("0.25"),
-                true, DayPortion.QUARTER, true, false, "#000000", 1)))
+                true, DayPortion.QUARTER, AnnualDeductionMode.DEDUCT, "#000000", 1)))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> {
                     assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
                     assertThat(ex.getMessage()).contains("시간차로 대체");
@@ -81,13 +82,13 @@ class LeaveTypeServiceQuarterTest {
         when(repository.save(any(LeaveType.class))).thenAnswer(inv -> inv.getArgument(0));
 
         LeaveTypeDtos.Response response = service.create(new LeaveTypeDtos.Create("HOURLY2", "시간차2",
-                new BigDecimal("0.125"), true, DayPortion.HOURLY, true, false, "#000000", 1));
+                new BigDecimal("0.125"), true, DayPortion.HOURLY, AnnualDeductionMode.DEDUCT, "#000000", 1));
 
         assertThat(response.portion()).isEqualTo(DayPortion.HOURLY);
     }
 
     private static LeaveTypeDtos.Update 수정(DayPortion portion, boolean active) {
-        return new LeaveTypeDtos.Update("반반차(폐지)", new BigDecimal("0.25"), true, portion, true, false,
+        return new LeaveTypeDtos.Update("반반차(폐지)", new BigDecimal("0.25"), true, portion, AnnualDeductionMode.DEDUCT,
                 "#14b8a6", 3, active);
     }
 }

@@ -40,14 +40,15 @@ public class LeaveType extends BaseTimeEntity {
     @Column(nullable = false, length = 10)
     private DayPortion portion = DayPortion.FULL;
 
-    /** 연차 잔액에서 차감할지 여부 (경조/병가 등은 false 가능) */
+    /** 연차 차감 방식(연차처럼 차감 / 연차 먼저 소진 / 연차와 무관). 연차 관련 판단은 이 값만 본다. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "annual_deduction_mode", nullable = false, length = 20)
+    private AnnualDeductionMode annualDeductionMode = AnnualDeductionMode.DEDUCT;
+
+    // 예전 두 스위치 열. 읽지 않고 annualDeductionMode 에 맞춰 같이 저장만 한다(되돌릴 때를 위해 DB 에 남김)
     @Column(name = "deduct_from_annual", nullable = false)
     private boolean deductFromAnnual = true;
 
-    /**
-     * 잔여 연차를 먼저 소진해야 쓸 수 있는 종류(병가·공가). 승인 기준 잔여 1일 미만이고 대기 중인
-     * 연차 차감 신청이 없을 때만 신청·승인되며, 승인 때 남은 연차(1일 미만)는 소멸된다.
-     */
     @Column(name = "requires_annual_exhausted", nullable = false)
     private boolean requiresAnnualExhausted = false;
 
@@ -64,16 +65,22 @@ public class LeaveType extends BaseTimeEntity {
     }
 
     public LeaveType(String code, String name, BigDecimal deductDays, boolean paid, DayPortion portion,
-                     boolean deductFromAnnual, boolean requiresAnnualExhausted, String colorHex, int sortOrder) {
+                     AnnualDeductionMode annualDeductionMode, String colorHex, int sortOrder) {
         this.code = code;
         this.name = name;
         this.deductDays = deductDays;
         this.paid = paid;
         this.portion = portion != null ? portion : DayPortion.FULL;
-        this.deductFromAnnual = deductFromAnnual;
-        this.requiresAnnualExhausted = requiresAnnualExhausted;
+        applyDeductionMode(annualDeductionMode);
         this.colorHex = colorHex;
         this.sortOrder = sortOrder;
+    }
+
+    /** 예전 두 스위치로 만드는 생성(기존 호출부 호환). {@link AnnualDeductionMode#of} 로 변환한다. */
+    public LeaveType(String code, String name, BigDecimal deductDays, boolean paid, DayPortion portion,
+                     boolean deductFromAnnual, boolean requiresAnnualExhausted, String colorHex, int sortOrder) {
+        this(code, name, deductDays, paid, portion,
+                AnnualDeductionMode.of(deductFromAnnual, requiresAnnualExhausted), colorHex, sortOrder);
     }
 
     /** 종일/반차만 구분하는 간단 생성(기존 호출부 호환). */
@@ -84,17 +91,21 @@ public class LeaveType extends BaseTimeEntity {
     }
 
     public void update(String name, BigDecimal deductDays, boolean paid, DayPortion portion,
-                       boolean deductFromAnnual, boolean requiresAnnualExhausted,
-                       String colorHex, int sortOrder, boolean active) {
+                       AnnualDeductionMode annualDeductionMode, String colorHex, int sortOrder, boolean active) {
         this.name = name;
         this.deductDays = deductDays;
         this.paid = paid;
         this.portion = portion != null ? portion : DayPortion.FULL;
-        this.deductFromAnnual = deductFromAnnual;
-        this.requiresAnnualExhausted = requiresAnnualExhausted;
+        applyDeductionMode(annualDeductionMode);
         this.colorHex = colorHex;
         this.sortOrder = sortOrder;
         this.active = active;
+    }
+
+    private void applyDeductionMode(AnnualDeductionMode mode) {
+        this.annualDeductionMode = mode != null ? mode : AnnualDeductionMode.DEDUCT;
+        this.deductFromAnnual = annualDeductionMode == AnnualDeductionMode.DEDUCT;
+        this.requiresAnnualExhausted = annualDeductionMode == AnnualDeductionMode.EXHAUST_FIRST;
     }
 
     public Long getId() {
@@ -130,12 +141,21 @@ public class LeaveType extends BaseTimeEntity {
         return portion.isPartial();
     }
 
-    public boolean isDeductFromAnnual() {
-        return deductFromAnnual;
+    public AnnualDeductionMode getAnnualDeductionMode() {
+        return annualDeductionMode;
     }
 
+    /** 연차처럼 차감(DEDUCT). */
+    public boolean isDeductFromAnnual() {
+        return annualDeductionMode == AnnualDeductionMode.DEDUCT;
+    }
+
+    /**
+     * 회사 규정: 연차 먼저 소진(EXHAUST_FIRST). 승인 기준 잔여 1일 미만이고 대기 중인 연차 차감 신청이 없을 때만
+     * 신청·승인되며, 승인 때 남은 연차(1일 미만)는 소멸된다.
+     */
     public boolean isRequiresAnnualExhausted() {
-        return requiresAnnualExhausted;
+        return annualDeductionMode == AnnualDeductionMode.EXHAUST_FIRST;
     }
 
     public String getColorHex() {
