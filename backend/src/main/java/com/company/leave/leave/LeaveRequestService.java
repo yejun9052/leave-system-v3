@@ -580,9 +580,6 @@ public class LeaveRequestService {
             case CANCEL_REQUESTED -> {
                 if (admin) {
                     finalizeCancel(request, requester);
-                    if (!owner) {
-                        messenger.cancelApproved(request, requester);
-                    }
                 } else {
                     throw new BusinessException(ErrorCode.CONFLICT, "이미 취소 요청 상태입니다.");
                 }
@@ -618,7 +615,6 @@ public class LeaveRequestService {
         }
         requireApprover(approver, request);
         finalizeCancel(request, approver);
-        messenger.cancelApproved(request, approver);
         return LeaveRequestDtos.Response.from(request);
     }
 
@@ -636,13 +632,18 @@ public class LeaveRequestService {
         return LeaveRequestDtos.Response.from(request);
     }
 
-    /** 확정 취소 공통 처리: 잔액 환원 + 캘린더 일정 삭제 + 상태 CANCELLED + 팀장 안내(처리자 actor 포함). */
+    /**
+     * 확정 취소 공통 처리: 잔액 환원 + 캘린더 일정 삭제 + 상태 CANCELLED + 안내.
+     * 다른 사람이 처리했으면 신청자에게 취소 승인 안내(담당 팀장은 참조), 신청자 본인이 처리했으면(인사관리자의 본인 휴가)
+     * 담당 팀장에게만 안내한다. 처리한 사람이 그 팀장이면 팀장 안내는 생략.
+     */
     private void finalizeCancel(LeaveRequest request, Employee actor) {
         restoreAndClearCalendar(request);
         request.cancel();
-        // 승인됐던 휴가가 취소되면 담당 팀장에게 안내(취소를 처리한 사람이 그 팀장이면 생략)
         Employee lead = informedLead(request, actor);
-        if (lead != null) {
+        if (!actor.getId().equals(request.getEmployee().getId())) {
+            messenger.cancelApproved(request, actor, lead);
+        } else if (lead != null) {
             messenger.leadCancelledInfo(request, lead, actor);
         }
     }
@@ -721,7 +722,7 @@ public class LeaveRequestService {
         return adminIdsExcept(applicant).stream().map(employeeService::getEntity).toList();
     }
 
-    /** 승인·등록·강제 취소 결과를 따로 안내받을 담당 팀장(결재·처리한 사람 본인이면 생략). */
+    /** 승인·등록·강제 취소·취소 승인 결과 메일에 참조로 걸 담당 팀장(결재·처리한 사람 본인이면 생략). */
     private Employee informedLead(LeaveRequest request, Employee actor) {
         Employee lead = leadApproverOf(request.getEmployee());
         return lead != null && !lead.getId().equals(actor.getId()) ? lead : null;

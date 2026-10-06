@@ -29,7 +29,8 @@ class LeaveMailTemplatesTest {
 
         assertThat(mail.messageId()).isEqualTo("<leave-42-1700000000000.applicant@company.com>");
         assertThat(mail.inReplyTo()).isNull();
-        assertThat(mail.subject()).isEqualTo("[연차관리] 내 휴가 - 경조사(본인 결혼) 2026-10-14 ~ 2026-10-16");
+        assertThat(mail.subject()).isEqualTo("[연차관리] 휴가 - 홍길동 경조사(본인 결혼) 2026-10-14 ~ 2026-10-16");
+        assertThat(mail.references()).isEmpty();
         assertThat(mail.body()).contains("결재: 팀장 김팀장님 승인(인사관리자도 승인 가능)");
     }
 
@@ -41,13 +42,25 @@ class LeaveMailTemplatesTest {
         assertThat(reply.messageId()).isNull();
         assertThat(reply.inReplyTo()).isEqualTo(root.messageId());
         assertThat(reply.subject()).isEqualTo("RE: " + root.subject());
-        assertThat(reply.body()).contains("김팀장님이 휴가를 승인했습니다");
+        assertThat(reply.body()).contains("홍길동님의 휴가가 승인되었습니다");
+    }
+
+    @Test
+    void 신청자_대화와_결재_요청_대화는_제목이_같고_답장은_두_대화를_모두_참조한다() {
+        Mail submitted = LeaveMailTemplates.submitted(info, DOMAIN, BASE, "팀장 김팀장님 승인");
+        Mail request = LeaveMailTemplates.approvalRequest(info, DOMAIN, BASE);
+        Mail approved = LeaveMailTemplates.approved(info, DOMAIN, BASE, 인사, false);
+
+        assertThat(request.subject()).isEqualTo(submitted.subject());
+        assertThat(request.messageId()).isNotEqualTo(submitted.messageId())
+                .isEqualTo("<leave-42-1700000000000.approver@company.com>");
+        assertThat(approved.references()).containsExactly(submitted.messageId(), request.messageId());
     }
 
     @Test
     void 자가_승인이면_자가_승인으로_안내한다() {
         assertThat(LeaveMailTemplates.approved(info, DOMAIN, BASE, 팀장, true).body())
-                .contains("자가 승인으로 휴가가 확정되었습니다");
+                .contains("홍길동님의 휴가가 자가 승인으로 확정되었습니다");
     }
 
     @Test
@@ -55,7 +68,7 @@ class LeaveMailTemplatesTest {
         Mail mail = LeaveMailTemplates.registered(info, DOMAIN, BASE, 인사);
 
         assertThat(mail.messageId()).isEqualTo(LeaveMailTemplates.threadId(info, Thread.APPLICANT, DOMAIN));
-        assertThat(mail.body()).startsWith("휴가 등록 안내\n\n이인사님이 휴가를 등록했습니다.\n아래 휴가 내역은 승인 완료 상태입니다.");
+        assertThat(mail.body()).startsWith("휴가 등록 안내\n\n이인사님이 홍길동님의 휴가를 등록했습니다.\n아래 휴가 내역은 승인 완료 상태입니다.");
     }
 
     @Test
@@ -64,7 +77,7 @@ class LeaveMailTemplatesTest {
         Mail withdrawn = LeaveMailTemplates.withdrawn(info, DOMAIN, BASE);
         Mail cancel = LeaveMailTemplates.cancelRequested(info, DOMAIN, BASE, "일정 변경");
 
-        assertThat(request.subject()).isEqualTo("[연차관리] 휴가 결재 요청 - 홍길동 경조사(본인 결혼) 2026-10-14 ~ 2026-10-16");
+        assertThat(request.subject()).isEqualTo("[연차관리] 휴가 - 홍길동 경조사(본인 결혼) 2026-10-14 ~ 2026-10-16");
         assertThat(request.body()).contains("결재함 바로가기: https://leave.company.com/approvals");
         assertThat(withdrawn.inReplyTo()).isEqualTo(request.messageId());
         assertThat(cancel.inReplyTo()).isEqualTo(request.messageId());
@@ -72,16 +85,28 @@ class LeaveMailTemplatesTest {
     }
 
     @Test
-    void 팀장_안내는_승인이나_등록이_첫_메일이고_취소_안내가_답장이다() {
-        Mail approvedInfo = LeaveMailTemplates.leadApprovedInfo(info, DOMAIN, BASE, 인사);
-        Mail cancelled = LeaveMailTemplates.leadCancelledInfo(info, DOMAIN, BASE, 팀장);
-        Mail forced = LeaveMailTemplates.leadForceCancelledInfo(info, DOMAIN, BASE, 인사, "근태 정정");
+    void 팀장에게만_가는_취소_안내는_결재_요청_대화에_답장으로_붙는다() {
+        Mail request = LeaveMailTemplates.approvalRequest(info, DOMAIN, BASE);
+        Mail cancelled = LeaveMailTemplates.leadCancelledInfo(info, DOMAIN, BASE, 인사);
 
-        assertThat(approvedInfo.subject()).isEqualTo("[연차관리] 팀원 휴가 - 홍길동 경조사(본인 결혼) 2026-10-14 ~ 2026-10-16");
-        assertThat(approvedInfo.body()).contains("이인사님이 홍길동님의 휴가를 승인했습니다");
-        assertThat(cancelled.inReplyTo()).isEqualTo(approvedInfo.messageId());
-        assertThat(forced.inReplyTo()).isEqualTo(approvedInfo.messageId());
-        assertThat(forced.body()).contains("취소 사유: 근태 정정");
+        assertThat(cancelled.subject()).isEqualTo("RE: " + request.subject());
+        assertThat(cancelled.inReplyTo()).isEqualTo(request.messageId());
+        assertThat(cancelled.body()).contains("홍길동님의 승인된 휴가가 취소되었습니다")
+                .contains("캘린더 보기: https://leave.company.com/calendar");
+    }
+
+    @Test
+    void 팀장_참조용_링크를_덧붙이면_내_휴가와_캘린더_링크가_모두_들어간다() {
+        Mail approved = LeaveMailTemplates.approved(info, DOMAIN, BASE, 인사, false);
+
+        MailLayout.Content content = LeaveMailTemplates.withLeadLink(
+                approved.content().withRecipient("홍길동", "김팀장"), BASE);
+
+        assertThat(content.text())
+                .contains("수신자: 홍길동\n참조: 김팀장")
+                .contains("내 휴가 확인하기: https://leave.company.com/my-leaves")
+                .contains("캘린더 보기: https://leave.company.com/calendar");
+        assertThat(content.html()).contains("href=\"https://leave.company.com/calendar\"");
     }
 
     @Test
@@ -105,7 +130,7 @@ class LeaveMailTemplatesTest {
 
         assertThat(rejected.body()).contains("김팀장님이 휴가 신청을 반려했습니다").contains("반려 사유: 마감 주간");
         assertThat(noReason.body()).contains("반려 사유: 미기재");
-        assertThat(forced.body()).contains("이인사님이 승인된 휴가를 취소했습니다").contains("취소 사유: 근태 정정");
+        assertThat(forced.body()).contains("이인사님이 홍길동님의 승인된 휴가를 취소했습니다").contains("취소 사유: 근태 정정");
     }
 
     @Test
@@ -115,7 +140,7 @@ class LeaveMailTemplatesTest {
         assertThat(LeaveMailTemplates.approved(info, DOMAIN, BASE, 팀장, false).body())
                 .contains("처리자: 김팀장 (팀장)");
         assertThat(LeaveMailTemplates.cancelApproved(info, DOMAIN, BASE, 인사).body())
-                .contains("이인사님이 휴가 취소 요청을 승인해 휴가가 취소되었습니다")
+                .contains("홍길동님의 휴가 취소 요청이 승인되어 휴가가 취소되었습니다")
                 .contains("처리자: 이인사 (인사관리자)");
         assertThat(LeaveMailTemplates.cancelRejected(info, DOMAIN, BASE, 팀장, "인력 부족").body())
                 .contains("김팀장님이 휴가 취소 요청을 반려했습니다")

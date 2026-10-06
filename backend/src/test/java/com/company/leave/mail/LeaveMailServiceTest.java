@@ -67,6 +67,30 @@ class LeaveMailServiceTest {
     }
 
     @Test
+    void 참조와_References_를_함께_보내면_두_대화의_첫_메일_ID_를_모두_넣는다() throws Exception {
+        service.onLeaveMail(new LeaveMail(List.of("emp@company.com"), List.of("lead@company.com"),
+                "RE: [연차관리] 휴가 - 홍길동 연차 2026-10-14", "본문", "<p>본문</p>", null,
+                "<leave-1-0.applicant@company.com>",
+                List.of("<leave-1-0.applicant@company.com>", "<leave-1-0.approver@company.com>")));
+
+        MimeMessage sent = sent();
+        assertThat(sent.getRecipients(Message.RecipientType.TO))
+                .extracting(a -> ((InternetAddress) a).getAddress()).containsExactly("emp@company.com");
+        assertThat(sent.getRecipients(Message.RecipientType.CC))
+                .extracting(a -> ((InternetAddress) a).getAddress()).containsExactly("lead@company.com");
+        assertThat(sent.getHeader("In-Reply-To", null)).isEqualTo("<leave-1-0.applicant@company.com>");
+        assertThat(sent.getHeader("References", null))
+                .isEqualTo("<leave-1-0.applicant@company.com> <leave-1-0.approver@company.com>");
+    }
+
+    @Test
+    void 참조가_없으면_CC_헤더를_넣지_않는다() throws Exception {
+        service.onLeaveMail(new LeaveMail(List.of("a@company.com"), "제목", "본문", "<p>본문</p>", null, null));
+
+        assertThat(sent().getRecipients(Message.RecipientType.CC)).isNull();
+    }
+
+    @Test
     void HTML_본문과_일반_텍스트_본문을_함께_담는다() throws Exception {
         service.onLeaveMail(new LeaveMail(List.of("a@company.com"), "제목", "plain body", "<p>html body</p>",
                 null, null));

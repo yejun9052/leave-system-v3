@@ -16,7 +16,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * 휴가 결재 메일 발송(신청·승인·반려·취소).
  * <p>{@link AccountMailService} 와 같이 요청 트랜잭션이 <b>커밋된 뒤</b> 별도 스레드에서 보내고,
  * 실패는 로그로만 남긴다(결재 처리에 영향 없음).
- * <p>같은 신청 건의 메일은 Message-ID / In-Reply-To / References 헤더로 한 대화로 묶는다.
+ * <p>같은 신청 건의 메일은 Message-ID / In-Reply-To / References 헤더로 한 대화로 묶는다. 담당 팀장을 참조(CC)로 건
+ * 메일은 References 에 신청자 대화와 결재 요청 대화의 첫 메일 ID 를 함께 넣어 두 사람 모두 기존 대화에 붙게 한다.
  * 미리 정한 Message-ID 는 JavaMailSenderImpl 이 발송 시 그대로 유지한다.
  */
 @Service
@@ -40,10 +41,14 @@ public class LeaveMailService {
         }
         try {
             mailSender.send(toMimeMessage(mail));
-            log.info("[휴가 메일] 발송 완료: {} → {}", mail.subject(), mail.to());
+            log.info("[휴가 메일] 발송 완료: {} → {}{}", mail.subject(), mail.to(), ccNote(mail));
         } catch (MailException | MessagingException ex) {
-            log.warn("[휴가 메일] 발송 실패: {} → {} ({})", mail.subject(), mail.to(), ex.getMessage());
+            log.warn("[휴가 메일] 발송 실패: {} → {}{} ({})", mail.subject(), mail.to(), ccNote(mail), ex.getMessage());
         }
+    }
+
+    private static String ccNote(LeaveMail mail) {
+        return mail.cc().isEmpty() ? "" : " (참조 " + mail.cc() + ")";
     }
 
     MimeMessage toMimeMessage(LeaveMail mail) throws MessagingException {
@@ -51,6 +56,9 @@ public class LeaveMailService {
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
         helper.setFrom(properties.from());
         helper.setTo(mail.to().toArray(String[]::new));
+        if (!mail.cc().isEmpty()) {
+            helper.setCc(mail.cc().toArray(String[]::new));
+        }
         helper.setSubject(mail.subject());
         helper.setText(mail.text(), mail.html());
         if (mail.messageId() != null) {
@@ -58,6 +66,10 @@ public class LeaveMailService {
         }
         if (mail.inReplyTo() != null) {
             message.setHeader("In-Reply-To", mail.inReplyTo());
+        }
+        if (!mail.references().isEmpty()) {
+            message.setHeader("References", String.join(" ", mail.references()));
+        } else if (mail.inReplyTo() != null) {
             message.setHeader("References", mail.inReplyTo());
         }
         return message;

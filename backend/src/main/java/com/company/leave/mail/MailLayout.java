@@ -17,6 +17,10 @@ public final class MailLayout {
     private MailLayout() {
     }
 
+    /** 바로가기 링크 하나. */
+    public record Link(String label, String url) {
+    }
+
     /** 표 한 줄. strong 이면 값을 굵게(처리 상태 등). */
     public record Row(String label, String value, boolean strong) {
 
@@ -38,16 +42,37 @@ public final class MailLayout {
      * @param rows      표 내용
      * @param linkLabel 바로가기 문구(예: "내 휴가 확인하기")
      * @param linkUrl   바로가기 주소
+     * @param moreLinks 바로가기 아래에 덧붙이는 링크(한 통을 여럿이 받을 때 각자의 화면). 보통 비어 있다
      */
     public record Content(String title, List<String> intro, List<Row> head, List<Row> rows,
-                          String linkLabel, String linkUrl) {
+                          String linkLabel, String linkUrl, List<Link> moreLinks) {
+
+        public Content(String title, List<String> intro, List<Row> head, List<Row> rows,
+                       String linkLabel, String linkUrl) {
+            this(title, intro, head, rows, linkLabel, linkUrl, List.of());
+        }
 
         /** 표 맨 위에 수신자 줄을 넣은 사본. */
         public Content withRecipient(String recipient) {
-            List<Row> withRecipient = new ArrayList<>();
-            withRecipient.add(Row.of("수신자", recipient));
-            withRecipient.addAll(head);
-            return new Content(title, intro, withRecipient, rows, linkLabel, linkUrl);
+            return withTop(List.of(Row.of("수신자", recipient)));
+        }
+
+        /** 표 맨 위에 수신자·참조 줄을 넣은 사본(한 통을 함께 받을 때). */
+        public Content withRecipient(String recipient, String cc) {
+            return withTop(List.of(Row.of("수신자", recipient), Row.of("참조", cc)));
+        }
+
+        /** 바로가기 링크를 하나 더 붙인 사본. */
+        public Content withLink(String label, String url) {
+            List<Link> links = new ArrayList<>(moreLinks);
+            links.add(new Link(label, url));
+            return new Content(title, intro, head, rows, linkLabel, linkUrl, List.copyOf(links));
+        }
+
+        private Content withTop(List<Row> top) {
+            List<Row> merged = new ArrayList<>(top);
+            merged.addAll(head);
+            return new Content(title, intro, merged, rows, linkLabel, linkUrl, moreLinks);
         }
 
         public String text() {
@@ -60,6 +85,7 @@ public final class MailLayout {
             }
             rows.forEach(r -> sb.append(r.label()).append(": ").append(r.value()).append('\n'));
             sb.append('\n').append(linkLabel).append(": ").append(linkUrl).append('\n');
+            moreLinks.forEach(l -> sb.append(l.label()).append(": ").append(l.url()).append('\n'));
             return sb.toString();
         }
 
@@ -81,14 +107,18 @@ public final class MailLayout {
             for (int i = 0; i < rows.size(); i++) {
                 row(sb, rows.get(i), i == 0 && !head.isEmpty());
             }
-            return sb.append("</table>")
-                    .append("<p style=\"margin:28px 0 4px;font-size:15px;\"><a href=\"").append(escape(linkUrl))
-                    .append("\" style=\"color:#2563eb;text-decoration:underline;\">").append(escape(linkLabel))
-                    .append("</a></p>")
+            sb.append("</table>");
+            link(sb, linkLabel, linkUrl, 28);
+            moreLinks.forEach(l -> link(sb, l.label(), l.url(), 16));
+            return sb.append("</div></body></html>").toString();
+        }
+
+        private static void link(StringBuilder sb, String label, String url, int marginTop) {
+            sb.append("<p style=\"margin:").append(marginTop).append("px 0 4px;font-size:15px;\"><a href=\"")
+                    .append(escape(url)).append("\" style=\"color:#2563eb;text-decoration:underline;\">")
+                    .append(escape(label)).append("</a></p>")
                     .append("<p style=\"margin:0;font-size:13px;color:#6b7280;word-break:break-all;\">")
-                    .append(escape(linkUrl)).append("</p>")
-                    .append("</div></body></html>")
-                    .toString();
+                    .append(escape(url)).append("</p>");
         }
 
         private static void row(StringBuilder sb, Row r, boolean divider) {

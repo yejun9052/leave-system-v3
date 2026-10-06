@@ -617,9 +617,10 @@ class LeaveRequestServiceApprovalTest {
             List<LeaveMail> mails = 보낸_메일();
             assertThat(mails).extracting(LeaveMail::to)
                     .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(파트장_메일));
-            assertThat(받은(mails, 파트원_메일).subject()).startsWith("[연차관리] 내 휴가 - 연차");
+            assertThat(받은(mails, 파트원_메일).subject()).startsWith("[연차관리] 휴가 - 직원13 연차");
             assertThat(받은(mails, 파트원_메일).text()).contains("팀장 직원7님 승인(인사관리자도 승인 가능)");
-            assertThat(받은(mails, 파트장_메일).subject()).startsWith("[연차관리] 휴가 결재 요청 - 직원13");
+            assertThat(받은(mails, 파트장_메일).subject()).isEqualTo(받은(mails, 파트원_메일).subject());
+            assertThat(받은(mails, 파트장_메일).messageId()).endsWith(".approver@company.com>");
         }
 
         @Test
@@ -638,25 +639,66 @@ class LeaveRequestServiceApprovalTest {
 
             service.approve(request.getId(), 파트장.getId());
 
-            List<LeaveMail> mails = 보낸_메일();
-            assertThat(mails).extracting(LeaveMail::to).containsExactly(List.of(파트원_메일));
-            assertThat(mails.get(0).subject()).startsWith("RE: [연차관리] 내 휴가");
-            assertThat(mails.get(0).inReplyTo()).isEqualTo("<leave-" + request.getId() + "-0.applicant@company.com>");
-            assertThat(mails.get(0).text()).contains("직원7님이 휴가를 승인했습니다");
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).isEmpty();
+                assertThat(m.subject()).startsWith("RE: [연차관리] 휴가 - 직원13");
+                assertThat(m.inReplyTo()).isEqualTo("<leave-" + request.getId() + "-0.applicant@company.com>");
+                assertThat(m.text()).contains("직원13님의 휴가가 승인되었습니다").contains("처리자: 직원7 (팀장)");
+            });
+            verify(notificationService, never())
+                    .notify(eq(파트장.getId()), eq("LEAVE_APPROVED_INFO"), anyString(), anyString(), anyString());
         }
 
         @Test
-        void 인사관리자가_승인하면_담당_팀장에게도_안내_메일이_간다() {
+        void 인사관리자가_승인하면_신청자에게_한_통을_보내며_담당_팀장을_참조로_건다() {
             LeaveRequest request = 대기_신청(파트원);
 
             service.approve(request.getId(), 인사관리자.getId());
 
-            List<LeaveMail> mails = 보낸_메일();
-            assertThat(mails).extracting(LeaveMail::to)
-                    .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(파트장_메일));
-            LeaveMail 팀장 = 받은(mails, 파트장_메일);
-            assertThat(팀장.subject()).startsWith("[연차관리] 팀원 휴가 - 직원13");
-            assertThat(팀장.text()).contains("직원11님이 직원13님의 휴가를 승인했습니다");
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).containsExactly(파트장_메일);
+                assertThat(m.inReplyTo()).isEqualTo("<leave-" + request.getId() + "-0.applicant@company.com>");
+                assertThat(m.references()).containsExactly(
+                        "<leave-" + request.getId() + "-0.applicant@company.com>",
+                        "<leave-" + request.getId() + "-0.approver@company.com>");
+                assertThat(m.text()).contains("직원13님의 휴가가 승인되었습니다")
+                        .contains("수신자: 직원13").contains("참조: 직원7")
+                        .contains("처리자: 직원11 (인사관리자)")
+                        .contains("내 휴가 확인하기:").contains("캘린더 보기:");
+            });
+            // 앱 알림은 지금처럼 신청자·팀장에게 따로
+            verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_APPROVED"), anyString(), anyString(), anyString());
+            verify(notificationService).notify(eq(파트장.getId()), eq("LEAVE_APPROVED_INFO"), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void 상위_부서_팀장이_승인해도_담당_팀장을_참조로_건다() {
+            LeaveRequest request = 대기_신청(파트원);
+
+            service.approve(request.getId(), 개발팀장.getId());
+
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).containsExactly(파트장_메일);
+                assertThat(m.text()).contains("처리자: 직원2 (팀장)");
+            });
+        }
+
+        @Test
+        void 담당_팀장에게_이메일이_없으면_신청자에게만_보내고_앱_알림은_간다() {
+            ReflectionTestUtils.setField(파트장, "email", null);
+            LeaveRequest request = 대기_신청(파트원);
+
+            service.approve(request.getId(), 인사관리자.getId());
+
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).isEmpty();
+                assertThat(m.text()).doesNotContain("참조:").doesNotContain("캘린더 보기:");
+            });
+            verify(notificationService).notify(eq(파트장.getId()), eq("LEAVE_APPROVED_INFO"), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -666,7 +708,7 @@ class LeaveRequestServiceApprovalTest {
             service.approve(request.getId(), 개발팀장.getId());
 
             assertThat(보낸_메일()).singleElement()
-                    .satisfies(m -> assertThat(m.text()).contains("자가 승인으로 휴가가 확정되었습니다"));
+                    .satisfies(m -> assertThat(m.text()).contains("직원2님의 휴가가 자가 승인으로 확정되었습니다"));
         }
 
         @Test
@@ -682,24 +724,30 @@ class LeaveRequestServiceApprovalTest {
         }
 
         @Test
-        void 강제_취소하면_신청자와_담당_팀장에게_사유와_함께_메일이_간다() {
+        void 강제_취소하면_신청자에게_사유와_함께_보내며_담당_팀장을_참조로_건다() {
             LeaveRequest request = 승인된_휴가(파트원, LocalDate.now().minusDays(2));
 
             service.cancel(request.getId(), 인사관리자.getId(), "근태 정정");
 
-            List<LeaveMail> mails = 보낸_메일();
-            assertThat(받은(mails, 파트원_메일).text()).contains("승인된 휴가를 취소했습니다").contains("취소 사유: 근태 정정");
-            assertThat(받은(mails, 파트장_메일).subject()).startsWith("RE: [연차관리] 팀원 휴가");
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).containsExactly(파트장_메일);
+                assertThat(m.text()).contains("직원11님이 직원13님의 승인된 휴가를 취소했습니다")
+                        .contains("취소 사유: 근태 정정");
+            });
+            verify(notificationService).notify(eq(파트장.getId()), eq("LEAVE_CANCELLED_INFO"), anyString(), anyString(), anyString());
         }
 
         @Test
-        void 강제_등록하면_신청자와_담당_팀장에게_등록_메일이_간다() {
+        void 강제_등록하면_신청자에게_등록_메일을_보내며_담당_팀장을_참조로_건다() {
             service.register(인사관리자.getId(), 등록서(파트원, PAST_TUE));
 
-            List<LeaveMail> mails = 보낸_메일();
-            assertThat(받은(mails, 파트원_메일).text()).contains("직원11님이 휴가를 등록했습니다");
-            assertThat(받은(mails, 파트원_메일).messageId()).endsWith(".applicant@company.com>");
-            assertThat(받은(mails, 파트장_메일).text()).contains("직원13님의 휴가를 등록했습니다");
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).containsExactly(파트장_메일);
+                assertThat(m.messageId()).endsWith(".applicant@company.com>");
+                assertThat(m.text()).contains("직원11님이 직원13님의 휴가를 등록했습니다");
+            });
         }
 
         @Test
@@ -710,7 +758,7 @@ class LeaveRequestServiceApprovalTest {
 
             assertThat(보낸_메일()).singleElement().satisfies(m -> {
                 assertThat(m.to()).containsExactly("e14@company.com");
-                assertThat(m.text()).contains("직원1님이 휴가를 승인했습니다");
+                assertThat(m.text()).contains("직원14님의 휴가가 승인되었습니다").contains("처리자: 직원1 (시스템 관리자)");
             });
         }
 
@@ -739,7 +787,7 @@ class LeaveRequestServiceApprovalTest {
 
             assertThat(보낸_메일()).extracting(LeaveMail::text).satisfiesExactly(
                     approved -> assertThat(approved)
-                            .contains("직원7님이 휴가 취소 요청을 승인해 휴가가 취소되었습니다")
+                            .contains("직원13님의 휴가 취소 요청이 승인되어 휴가가 취소되었습니다")
                             .contains("처리자: 직원7 (팀장)"),
                     rejected -> assertThat(rejected)
                             .contains("직원11님이 휴가 취소 요청을 반려했습니다")
@@ -747,13 +795,32 @@ class LeaveRequestServiceApprovalTest {
         }
 
         @Test
-        void 인사관리자가_취소_요청을_승인하면_팀장_안내_메일에도_처리자가_들어간다() {
+        void 인사관리자가_취소_요청을_승인하면_신청자에게_보내며_담당_팀장을_참조로_건다() {
             LeaveRequest request = 승인된_휴가(파트원, LocalDate.now().plusDays(30));
             request.requestCancel("일정 변경");
 
             service.approveCancellation(request.getId(), 인사관리자.getId());
 
-            assertThat(받은(보낸_메일(), 파트장_메일).text()).contains("처리자: 직원11 (인사관리자)");
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).containsExactly(파트장_메일);
+                assertThat(m.text()).contains("처리자: 직원11 (인사관리자)");
+            });
+            verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_CANCEL_APPROVED"), anyString(), anyString(), anyString());
+            verify(notificationService).notify(eq(파트장.getId()), eq("LEAVE_CANCELLED_INFO"), anyString(), anyString(), anyString());
+        }
+
+        @Test
+        void 담당_팀장이_취소_요청을_승인하면_신청자에게만_간다() {
+            LeaveRequest request = 승인된_휴가(파트원, LocalDate.now().plusDays(30));
+            request.requestCancel("일정 변경");
+
+            service.approveCancellation(request.getId(), 파트장.getId());
+
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly(파트원_메일);
+                assertThat(m.cc()).isEmpty();
+            });
         }
 
         @Test

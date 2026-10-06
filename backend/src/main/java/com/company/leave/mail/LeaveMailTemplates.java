@@ -8,15 +8,16 @@ import java.util.List;
 /**
  * 휴가 결재 메일 내용. 모양은 {@link MailLayout}(제목 → 안내 문장 → 표 → 바로가기, HTML + 일반 텍스트).
  *
- * <p>결재는 한 번(팀장·인사관리자·시스템 관리자 중 한 명)으로 확정된다. 신청 건 하나에 받는 쪽별 대화(Thread)가 셋 있다.
+ * <p>결재는 한 번(팀장·인사관리자·시스템 관리자 중 한 명)으로 확정된다. 신청 건 하나에 대화(Thread)가 둘 있다.
  * 각 대화의 첫 메일은 신청 번호로 정한 Message-ID 를 쓰고, 이후 메일은 그 ID 에 답장(RE: 같은 제목)으로 붙는다.
  * <ul>
- *   <li>APPLICANT: 신청 접수(또는 인사관리자 강제 등록) → 승인·반려·취소 결과</li>
+ *   <li>APPLICANT: 신청 접수(또는 인사관리자 강제 등록) → 승인·반려·취소 결과.
+ *       담당 팀장이 아닌 사람이 처리한 결과는 담당 팀장을 참조(CC)로 걸어 한 통으로 보낸다</li>
  *   <li>APPROVER: 결재 요청 → 신청 철회·취소 요청</li>
- *   <li>LEAD: 팀원 휴가 승인·등록 안내 → 취소 안내</li>
  * </ul>
- * 첫 메일 제목은 대화마다 고정이라, 답장 제목은 같은 정보로 다시 계산해 "RE: " 를 붙인다.
- * 첫 메일이 보내지지 않은 대화에 답장하면(예: 팀장이 직접 승인해 안내를 받지 않음) 새 대화처럼 보일 뿐 문제는 없다.
+ * 제목은 신청 건마다 하나(받는 사람과 대화에 상관없이 같음)이고, 답장의 References 에는 두 대화의 첫 메일 ID 를 모두 넣는다.
+ * Gmail 은 제목과 References 가 맞아야 같은 대화로 묶으므로, 참조로 받은 팀장의 메일함에서도 결재 요청 대화에 이어 붙는다.
+ * 첫 메일이 보내지지 않은 대화에 답장하면(예: 팀장이 없어 결재 요청이 인사관리자에게 감) 새 대화처럼 보일 뿐 문제는 없다.
  * 표의 수신자 줄은 받는 사람마다 따로 보낼 때 넣는다({@link Content#withRecipient}).
  */
 public final class LeaveMailTemplates {
@@ -25,11 +26,13 @@ public final class LeaveMailTemplates {
     private static final String MY_LEAVES = "내 휴가 확인하기";
     private static final String APPROVALS = "결재함 바로가기";
     private static final String CALENDAR = "캘린더 보기";
+    private static final String DONE = "아래 휴가 내역은 승인 완료 상태입니다.";
+    private static final String RESTORED = "차감된 연차는 돌아갑니다.";
 
     private LeaveMailTemplates() {
     }
 
-    public enum Thread { APPLICANT, APPROVER, LEAD }
+    public enum Thread { APPLICANT, APPROVER }
 
     /**
      * 메일에 쓰는 신청 정보.
@@ -43,8 +46,8 @@ public final class LeaveMailTemplates {
                        String leaveLabel, String period, String amount, String reason) {
     }
 
-    /** 대화 첫 메일이면 messageId, 답장이면 inReplyTo 가 채워진다. */
-    public record Mail(String subject, Content content, String messageId, String inReplyTo) {
+    /** 대화 첫 메일이면 messageId, 답장이면 inReplyTo 와 references(두 대화의 첫 메일 ID)가 채워진다. */
+    public record Mail(String subject, Content content, String messageId, String inReplyTo, List<String> references) {
 
         /** 일반 텍스트 본문(수신자 줄 없이). */
         public String body() {
@@ -85,19 +88,21 @@ public final class LeaveMailTemplates {
         return root(info, Thread.APPLICANT, domain, content);
     }
 
-    /** 인사관리자가 대신 등록(바로 승인됨). 신청 접수 대신 이 메일이 대화의 첫 메일이 된다. */
+    /**
+     * 인사관리자가 대신 등록(바로 승인됨). 신청 접수 대신 이 메일이 대화의 첫 메일이 된다.
+     * 담당 팀장이 참조로 함께 받을 수 있어 문장은 신청자 이름으로 쓴다(이하 결과 메일 모두 같음).
+     */
     public static Mail registered(Info info, String domain, String baseUrl, Handler by) {
         Content content = content("휴가 등록 안내",
-                List.of(by.honorific() + "이 휴가를 등록했습니다.", "아래 휴가 내역은 승인 완료 상태입니다."),
+                List.of(by.honorific() + "이 " + info.applicantName() + "님의 휴가를 등록했습니다.", DONE),
                 by, info, List.of(), "승인 완료", MY_LEAVES, baseUrl, "/my-leaves");
         return root(info, Thread.APPLICANT, domain, content);
     }
 
     /** @param self 신청자 본인의 자가 승인이면 true */
     public static Mail approved(Info info, String domain, String baseUrl, Handler by, boolean self) {
-        String headline = self ? "자가 승인으로 휴가가 확정되었습니다." : by.honorific() + "이 휴가를 승인했습니다.";
-        return applicantReply(info, domain, baseUrl, "휴가 승인 안내",
-                List.of(headline, "아래 휴가 내역은 승인 완료 상태입니다."), by, List.of(), "승인 완료");
+        String headline = info.applicantName() + (self ? "님의 휴가가 자가 승인으로 확정되었습니다." : "님의 휴가가 승인되었습니다.");
+        return applicantReply(info, domain, baseUrl, "휴가 승인 안내", List.of(headline, DONE), by, List.of(), "승인 완료");
     }
 
     public static Mail rejected(Info info, String domain, String baseUrl, Handler by, String reason) {
@@ -109,7 +114,7 @@ public final class LeaveMailTemplates {
     /** 취소 요청 승인(또는 인사관리자의 취소 요청 건 확정). */
     public static Mail cancelApproved(Info info, String domain, String baseUrl, Handler by) {
         return applicantReply(info, domain, baseUrl, "휴가 취소 승인 안내",
-                List.of(by.honorific() + "이 휴가 취소 요청을 승인해 휴가가 취소되었습니다.", "차감된 연차는 돌아갑니다."), by,
+                List.of(info.applicantName() + "님의 휴가 취소 요청이 승인되어 휴가가 취소되었습니다.", RESTORED), by,
                 List.of(), "취소 완료");
     }
 
@@ -129,7 +134,7 @@ public final class LeaveMailTemplates {
     /** 승인된 휴가를 인사관리자가 강제 취소(시작 후 포함). */
     public static Mail forceCancelled(Info info, String domain, String baseUrl, Handler by, String reason) {
         return applicantReply(info, domain, baseUrl, "휴가 취소 안내",
-                List.of(by.honorific() + "이 승인된 휴가를 취소했습니다.", "차감된 연차는 돌아갑니다."), by,
+                List.of(by.honorific() + "이 " + info.applicantName() + "님의 승인된 휴가를 취소했습니다.", RESTORED), by,
                 List.of(Row.of("취소 사유", orNone(reason))), "취소 완료");
     }
 
@@ -158,39 +163,31 @@ public final class LeaveMailTemplates {
         return reply(info, Thread.APPROVER, domain, content);
     }
 
-    // --- 담당 팀장 대화 ---
+    // --- 담당 팀장에게만 ---
 
-    public static Mail leadApprovedInfo(Info info, String domain, String baseUrl, Handler by) {
-        return leadMail(info, domain, baseUrl, true, "팀원 휴가 승인 안내",
-                by.honorific() + "이 " + info.applicantName() + "님의 휴가를 승인했습니다.", by, List.of(), "승인 완료");
-    }
-
-    public static Mail leadRegisteredInfo(Info info, String domain, String baseUrl, Handler by) {
-        return leadMail(info, domain, baseUrl, true, "팀원 휴가 등록 안내",
-                by.honorific() + "이 " + info.applicantName() + "님의 휴가를 등록했습니다.", by, List.of(), "승인 완료");
-    }
-
+    /**
+     * 신청자 본인이 처리한 확정 취소(인사관리자의 본인 휴가 취소 등)를 담당 팀장에게 알린다. 신청자에게 갈 메일이 없어
+     * 참조로 걸 수 없을 때만 쓴다. 결재 요청 대화에 답장으로 붙는다.
+     */
     public static Mail leadCancelledInfo(Info info, String domain, String baseUrl, Handler by) {
-        return leadMail(info, domain, baseUrl, false, "팀원 휴가 취소 안내",
-                info.applicantName() + "님의 승인된 휴가가 취소되었습니다.", by, List.of(), "취소 완료");
+        Content content = content("팀원 휴가 취소 안내", List.of(info.applicantName() + "님의 승인된 휴가가 취소되었습니다."),
+                by, info, List.of(), "취소 완료", CALENDAR, baseUrl, "/calendar");
+        return reply(info, Thread.APPROVER, domain, content);
     }
 
-    public static Mail leadForceCancelledInfo(Info info, String domain, String baseUrl, Handler by, String reason) {
-        return leadMail(info, domain, baseUrl, false, "팀원 휴가 취소 안내",
-                by.honorific() + "이 " + info.applicantName() + "님의 승인된 휴가를 취소했습니다.", by,
-                List.of(Row.of("취소 사유", orNone(reason))), "취소 완료");
+    /** 담당 팀장이 참조로 함께 받는 메일에 팀장용 바로가기(캘린더)를 덧붙인다. */
+    public static Content withLeadLink(Content content, String baseUrl) {
+        return content.withLink(CALENDAR, MailLayout.url(baseUrl, "/calendar"));
     }
 
     // --- 대화(Thread) 공통 ---
 
-    /** 대화의 첫 메일 제목. 답장 제목도 이것으로 만든다. */
-    public static String rootSubject(Info info, Thread thread) {
-        String what = info.leaveLabel() + " " + info.period();
-        return PREFIX + switch (thread) {
-            case APPLICANT -> "내 휴가 - " + what;
-            case APPROVER -> "휴가 결재 요청 - " + info.applicantName() + " " + what;
-            case LEAD -> "팀원 휴가 - " + info.applicantName() + " " + what;
-        };
+    /**
+     * 신청 건의 메일 제목(첫 메일). 답장은 "RE: " 를 붙인다. 받는 사람·대화에 상관없이 같아서, 참조로 함께 받은 메일도
+     * 각자의 기존 대화에 붙는다. 예: "[연차관리] 휴가 - 홍길동 연차 2026-10-14"
+     */
+    public static String rootSubject(Info info) {
+        return PREFIX + "휴가 - " + info.applicantName() + " " + info.leaveLabel() + " " + info.period();
     }
 
     /** 대화의 첫 메일 Message-ID: &lt;leave-{신청번호}-{신청시각}.{대화}@{도메인}&gt; */
@@ -208,13 +205,6 @@ public final class LeaveMailTemplates {
         int at = address.lastIndexOf('@');
         String domain = at >= 0 ? address.substring(at + 1).trim() : "";
         return domain.isEmpty() ? "annual-leave.local" : domain;
-    }
-
-    /** 팀장 대화: 승인·등록 안내가 첫 메일, 취소 안내가 답장. */
-    private static Mail leadMail(Info info, String domain, String baseUrl, boolean root, String title, String headline,
-                                 Handler by, List<Row> extra, String status) {
-        Content content = content(title, List.of(headline), by, info, extra, status, CALENDAR, baseUrl, "/calendar");
-        return root ? root(info, Thread.LEAD, domain, content) : reply(info, Thread.LEAD, domain, content);
     }
 
     private static Mail applicantReply(Info info, String domain, String baseUrl, String title, List<String> intro,
@@ -239,11 +229,13 @@ public final class LeaveMailTemplates {
     }
 
     private static Mail root(Info info, Thread thread, String domain, Content content) {
-        return new Mail(rootSubject(info, thread), content, threadId(info, thread, domain), null);
+        return new Mail(rootSubject(info), content, threadId(info, thread, domain), null, List.of());
     }
 
+    /** 답장: thread 대화의 첫 메일에 붙고, References 에는 두 대화의 첫 메일 ID 를 모두 넣는다. */
     private static Mail reply(Info info, Thread thread, String domain, Content content) {
-        return new Mail("RE: " + rootSubject(info, thread), content, null, threadId(info, thread, domain));
+        return new Mail("RE: " + rootSubject(info), content, null, threadId(info, thread, domain),
+                List.of(threadId(info, Thread.APPLICANT, domain), threadId(info, Thread.APPROVER, domain)));
     }
 
     private static String orNone(String text) {
