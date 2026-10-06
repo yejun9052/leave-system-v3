@@ -110,9 +110,6 @@ public class LeaveRequestService {
     @Transactional
     public LeaveRequestDtos.Response create(Long employeeId, LeaveRequestDtos.Create req) {
         Employee employee = employeeService.getEntity(employeeId);
-        if (employee.isSystemAccount()) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "관리 전용 계정은 휴가를 신청할 수 없습니다.");
-        }
         LeaveType type = leaveTypeService.getEntity(req.leaveTypeId());
         if (!type.isActive()) {
             throw new BusinessException(ErrorCode.LEAVE_TYPE_NOT_FOUND, "사용할 수 없는 휴가 종류입니다.");
@@ -164,9 +161,6 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "휴가 강제 등록은 인사관리자만 할 수 있습니다.");
         }
         Employee employee = employeeService.getEntity(req.employeeId());
-        if (employee.isSystemAccount()) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "관리 전용 계정에는 휴가를 등록할 수 없습니다.");
-        }
         LeaveType type = leaveTypeService.getEntity(req.leaveTypeId());
         LeavePolicy policy = policyService.getActivePolicy();
         if (!type.isActive() || !policy.allows(type.getPortion())) {
@@ -368,10 +362,6 @@ public class LeaveRequestService {
                                                  Long specialRuleId, HalfDayPart halfDayPart,
                                                  BigDecimal remaining) {
         Long employeeId = employee.getId();
-        if (employee.isSystemAccount()) {
-            return new LeaveRequestDtos.Eligibility(false, "관리 전용 계정은 휴가를 신청할 수 없습니다.",
-                    remaining, BigDecimal.ZERO);
-        }
         Plan plan;
         try {
             plan = plan(employee, type, policy, start, end, hours, specialRuleId, halfDayPart, true, false);

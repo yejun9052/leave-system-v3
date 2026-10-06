@@ -70,7 +70,7 @@ class LeaveGrantServicePeriodTest {
 
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
         lenient().when(employeeRepository.findById(10L)).thenReturn(Optional.of(직원));
-        lenient().when(employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE))
+        lenient().when(employeeRepository.findByStatus(EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(직원));
         lenient().when(balanceService.getOrCreate(anyLong(), anyInt()))
                 .thenAnswer(inv -> 잔액(inv.<Integer>getArgument(1)));

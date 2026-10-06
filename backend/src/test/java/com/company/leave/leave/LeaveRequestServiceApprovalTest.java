@@ -536,15 +536,14 @@ class LeaveRequestServiceApprovalTest {
     // --- 관리 전용 계정·경고·조회 ---
 
     @Test
-    void 관리_전용_계정은_휴가를_신청할_수_없고_등록_대상도_될_수_없다() {
-        assertThatThrownBy(() -> service.create(시스템관리자.getId(), 신청서()))
-                .isInstanceOfSatisfying(BusinessException.class, ex -> {
-                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
-                    assertThat(ex.getMessage()).contains("관리 전용 계정");
-                });
-        assertThatThrownBy(() -> service.register(인사관리자.getId(), 등록서(시스템관리자, PAST_TUE)))
-                .isInstanceOf(BusinessException.class);
-        verify(requestRepository, never()).save(any());
+    void 관리_전용_계정도_테스트용으로_휴가를_신청하고_등록_대상이_될_수_있다() {
+        LeaveRequestDtos.Response requested = service.create(시스템관리자.getId(), 신청서());
+        LeaveRequestDtos.Response registered = service.register(인사관리자.getId(), 등록서(시스템관리자, PAST_TUE));
+
+        assertThat(requested.status()).isEqualTo(LeaveRequestStatus.PENDING);
+        assertThat(registered.status()).isEqualTo(LeaveRequestStatus.APPROVED);
+        assertThat(String.valueOf(service.eligibility(시스템관리자.getId(), 1L, PAST_TUE.plusDays(14),
+                PAST_TUE.plusDays(14), null, null).reason())).doesNotContain("관리 전용 계정");
     }
 
     @Test

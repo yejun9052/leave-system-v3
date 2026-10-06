@@ -69,12 +69,12 @@ public class LeaveGrantService {
         return grant(employee, currentYear(employee, policy), policy);
     }
 
-    /** 재직 중인 전 직원에게 year 에 시작한 연차 기간을 부여한다(관리 전용 계정 제외). */
+    /** 재직 중인 전 직원에게 year 에 시작한 연차 기간을 부여한다(관리 전용 계정 포함: 테스트용으로 휴가를 쓸 수 있다). */
     @Transactional
     public int grantAll(int year) {
         LeavePolicy policy = policyService.getActivePolicy();
         int count = 0;
-        for (Employee employee : employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)) {
+        for (Employee employee : employeeRepository.findByStatus(EmployeeStatus.ACTIVE)) {
             if (employee.getHireDate() != null && year < employee.getHireDate().getYear()) {
                 continue; // 입사 전 기간은 없다
             }
@@ -96,7 +96,7 @@ public class LeaveGrantService {
     public int grantCurrentPeriods() {
         LeavePolicy policy = policyService.getActivePolicy();
         int count = 0;
-        for (Employee employee : employeeRepository.findByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE)) {
+        for (Employee employee : employeeRepository.findByStatus(EmployeeStatus.ACTIVE)) {
             grant(employee, currentYear(employee, policy), policy);
             count++;
         }

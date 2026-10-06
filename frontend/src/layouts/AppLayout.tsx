@@ -49,10 +49,8 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // 관리 전용 계정은 직원이 아니므로 "내 휴가" 메뉴를 숨긴다
-  const visibleNav = NAV.filter(
-    (n) => (!n.roles || hasAnyRole(...n.roles)) && !(user?.systemAccount && n.to === "/my-leaves"),
-  );
+  // 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 "내 휴가" 메뉴를 보여 준다
+  const visibleNav = NAV.filter((n) => !n.roles || hasAnyRole(...n.roles));
 
   const onLogout = async () => {
     await logout().catch(() => undefined);

@@ -49,7 +49,7 @@ export default function MyLeavesPage() {
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [requestWarning, setRequestWarning] = useState<string | null>(null);
-  const canCancelOwn = !!user && !user.systemAccount && !user.roles.includes("SYSTEM_ADMIN");
+  const canCancelOwn = !!user;
 
   const { data: balance } = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
   const { data: requests } = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });

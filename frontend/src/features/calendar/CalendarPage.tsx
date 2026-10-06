@@ -97,8 +97,8 @@ export default function CalendarPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const canManage = useAuthStore((s) => s.hasAnyRole("TEAM_LEAD", "HR_ADMIN", "SYSTEM_ADMIN"));
-  // 관리 전용 계정은 직원이 아니므로 휴가를 신청하지 않는다
-  const canApply = useAuthStore((s) => !!s.user && !s.user.systemAccount);
+  // 관리 전용 계정도 테스트용으로 휴가를 신청할 수 있다
+  const canApply = useAuthStore((s) => !!s.user);
   const [range, setRange] = useState<{ start: string; end: string }>(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
