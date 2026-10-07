@@ -4,6 +4,7 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import java.util.Collection;
 import java.util.List;
+import lombok.Getter;
 import org.springframework.security.core.CredentialsContainer;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -18,14 +19,20 @@ public class UserPrincipal implements UserDetails, CredentialsContainer {
 
     private static final long serialVersionUID = 1L;
 
+    @Getter
     private final Long id;
     private final String email;
+    /** UserDetails#getPassword. 인증 직후 eraseCredentials 로 지운다. */
+    @Getter
     private String password;
+    @Getter
     private final String name;
+    @Getter
     private final Long departmentId;
     private final boolean active;
     private final List<GrantedAuthority> authorities;
     /** 비밀번호 변경 필요(AccountStateFilter 가 매 요청 DB 값으로 다시 만든 principal 에서 확인). */
+    @Getter
     private final boolean passwordChangeRequired;
 
     private UserPrincipal(Long id, String email, String password, String name,
@@ -51,30 +58,9 @@ public class UserPrincipal implements UserDetails, CredentialsContainer {
                 e.getDepartmentId(), e.isActive(), auths, e.isPasswordChangeRequired());
     }
 
-    public boolean isPasswordChangeRequired() {
-        return passwordChangeRequired;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public Long getDepartmentId() {
-        return departmentId;
-    }
-
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return authorities;
-    }
-
-    @Override
-    public String getPassword() {
-        return password;
     }
 
     @Override
