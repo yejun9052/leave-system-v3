@@ -13,8 +13,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
 
     Optional<Employee> findByEmail(String email);
 
-    boolean existsByEmail(String email);
-
     // 주의: Employee 에는 편의 getter getDepartmentId() 가 있어 파생 쿼리(findByDepartmentId)가
     // department.id 로 분해되지 않고 충돌한다. 따라서 명시적 JPQL 로 작성한다.
     @Query("select e from Employee e where e.department.id = :departmentId")
@@ -44,9 +42,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
     @Query("select e.department.id, count(e) from Employee e "
             + "where e.department.id is not null group by e.department.id")
     List<Object[]> countGroupByDepartment();
-
-    @Query("select e from Employee e where e.department.id in :departmentIds")
-    List<Employee> findByDepartmentIdIn(@Param("departmentIds") List<Long> departmentIds);
 
     @Query("select e.id from Employee e")
     List<Long> findAllIds();

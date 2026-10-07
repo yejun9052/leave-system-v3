@@ -169,17 +169,3 @@ export interface LeaveRequest {
   cancelReason: string | null;
   createdAt: string;
 }
-
-export interface CalendarEvent {
-  id: number;
-  title: string;
-  start: string;
-  end: string;
-  allDay: boolean;
-  scope: "COMPANY" | "DEPARTMENT" | "PERSONAL";
-  source: "LEAVE_REQUEST" | "ADMIN_EVENT" | "HOLIDAY";
-  colorHex: string;
-  employeeName: string | null;
-  departmentId: number | null;
-  editable: boolean;
-}

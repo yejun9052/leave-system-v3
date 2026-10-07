@@ -23,21 +23,14 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
             """, nativeQuery = true)
     List<Long> findSubtreeIds(@Param("rootId") Long rootId);
 
-    // 주의: Department 에 편의 getter getParentId()/getLeadId() 가 있어 파생 쿼리가
-    // parent.id / lead.id 로 분해되지 않고 충돌한다. 따라서 명시적 JPQL 로 작성한다.
-    @Query("select d from Department d where d.parent.id = :parentId "
-            + "order by d.sortOrder asc, d.name asc")
-    List<Department> findByParentIdOrderBySortOrderAscNameAsc(@Param("parentId") Long parentId);
-
     List<Department> findByParentIsNullOrderBySortOrderAscNameAsc();
 
     List<Department> findAllByOrderBySortOrderAscNameAsc();
 
+    // 주의: Department 에 편의 getter getParentId()/getLeadId() 가 있어 파생 쿼리가
+    // parent.id / lead.id 로 분해되지 않고 충돌한다. 따라서 명시적 JPQL 로 작성한다.
     @Query("select (count(d) > 0) from Department d where d.parent.id = :parentId")
     boolean existsByParentId(@Param("parentId") Long parentId);
-
-    @Query("select count(d) from Department d where d.parent.id = :parentId")
-    long countByParentId(@Param("parentId") Long parentId);
 
     List<Department> findByName(String name);
 

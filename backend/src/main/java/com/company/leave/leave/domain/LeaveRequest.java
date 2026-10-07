@@ -216,10 +216,6 @@ public class LeaveRequest extends BaseTimeEntity {
         this.cancelReason = null;
     }
 
-    public boolean isPending() {
-        return status == LeaveRequestStatus.PENDING;
-    }
-
     /** 아직 결재 전(대기). 잔액·겹침 계산에서는 대기로 본다. */
     public boolean isAwaitingApproval() {
         return status == LeaveRequestStatus.PENDING;
@@ -227,10 +223,6 @@ public class LeaveRequest extends BaseTimeEntity {
 
     public boolean isCancelRequested() {
         return status == LeaveRequestStatus.CANCEL_REQUESTED;
-    }
-
-    public boolean isApproved() {
-        return status == LeaveRequestStatus.APPROVED;
     }
 
     /** applied_year 기간에서 빼는 몫. */

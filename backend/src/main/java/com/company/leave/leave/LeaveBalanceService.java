@@ -1,7 +1,5 @@
 package com.company.leave.leave;
 
-import com.company.leave.common.exception.BusinessException;
-import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.EmployeeStatus;
 import com.company.leave.employee.repository.EmployeeRepository;
@@ -137,11 +135,5 @@ public class LeaveBalanceService {
     @Transactional(readOnly = true)
     public Optional<LeaveBalance> find(Long employeeId, int year) {
         return balanceRepository.findByEmployeeIdAndYear(employeeId, year);
-    }
-
-    @Transactional(readOnly = true)
-    public LeaveBalance require(Long employeeId, int year) {
-        return balanceRepository.findByEmployeeIdAndYear(employeeId, year)
-                .orElseThrow(() -> new BusinessException(ErrorCode.LEAVE_BALANCE_NOT_FOUND));
     }
 }

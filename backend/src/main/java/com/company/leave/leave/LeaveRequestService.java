@@ -21,7 +21,6 @@ import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.HalfDayPart;
-import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.domain.LeaveType;
@@ -1081,11 +1080,6 @@ public class LeaveRequestService {
     /** 전사 결재·강제 취소·강제 등록 권한: 인사관리자와 시스템 관리자(같은 권한, 회사 합의). */
     private boolean isHrApprover(Employee e) {
         return e.hasRole(Role.HR_ADMIN) || e.hasRole(Role.SYSTEM_ADMIN);
-    }
-
-    /** 팀장: TEAM_LEAD 역할이 있거나 부서장으로 지정된 직원. */
-    private boolean isTeamLead(Employee e) {
-        return e.hasRole(Role.TEAM_LEAD) || !departmentRepository.findByLeadId(e.getId()).isEmpty();
     }
 
     /** 대상자가 본인이 팀장인 부서(하위 포함)에 속함. 조회 권한 판단에도 쓴다. */
