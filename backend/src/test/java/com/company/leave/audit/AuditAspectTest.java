@@ -163,6 +163,48 @@ class AuditAspectTest {
 
     // --- helpers ---
 
+    @Test
+    void 리포트_내보내기는_조회_조건과_함께_export로_남긴다() throws Throwable {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/reports/leave-usage/export");
+        request.setQueryString("year=2026&departmentIds=26&departmentIds=27&employeeIds=112");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        aspect.aroundGet(pjp);
+
+        verify(auditService).record("export", "reports", null,
+                "/api/reports/leave-usage/export?year=2026&departmentIds=26&departmentIds=27&employeeIds=112", true);
+    }
+
+    @Test
+    void 사용자_엑셀_내보내기도_남긴다() throws Throwable {
+        요청("GET", "/api/employees/export");
+
+        aspect.aroundGet(pjp);
+
+        verify(auditService).record("export", "employees", null, "/api/employees/export", true);
+    }
+
+    @Test
+    void 내보내기가_실패해도_실패로_남기고_예외는_그대로_던진다() throws Throwable {
+        요청("GET", "/api/employees/export");
+        when(pjp.proceed()).thenThrow(new IllegalStateException("엑셀 오류"));
+
+        assertThatThrownBy(() -> aspect.aroundGet(pjp)).isInstanceOf(IllegalStateException.class);
+
+        verify(auditService).record(eq("export"), eq("employees"), isNull(),
+                eq("/api/employees/export | IllegalStateException: 엑셀 오류"), eq(false));
+    }
+
+    @Test
+    void 내보내기가_아닌_조회는_남기지_않는다() throws Throwable {
+        요청("GET", "/api/employees");
+        when(pjp.proceed()).thenReturn("목록");
+
+        assertThat(aspect.aroundGet(pjp)).isEqualTo("목록");
+
+        verify(auditService, never()).record(anyString(), anyString(), any(), anyString(), anyBoolean());
+    }
+
     private static void 요청(String method, String uri) {
         MockHttpServletRequest request = new MockHttpServletRequest(method, uri);
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));

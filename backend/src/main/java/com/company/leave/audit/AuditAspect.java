@@ -1,6 +1,8 @@
 package com.company.leave.audit;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -12,7 +14,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
- * 모든 상태 변경 요청(POST/PUT/PATCH/DELETE)을 자동으로 감사 로그에 기록한다.
+ * 모든 상태 변경 요청(POST/PUT/PATCH/DELETE)과 엑셀 내보내기(GET .../export)를 자동으로 감사 로그에 기록한다.
  * 인증 관련(/api/auth/*)은 AuthService 에서 별도로 남긴다.
  */
 @Aspect
@@ -43,24 +45,47 @@ public class AuditAspect {
     void deleteMapping() {
     }
 
+    @Pointcut("@annotation(org.springframework.web.bind.annotation.GetMapping)")
+    void getMapping() {
+    }
+
     @Around("postMapping() || putMapping() || patchMapping() || deleteMapping()")
     public Object around(ProceedingJoinPoint pjp) throws Throwable {
         HttpServletRequest request = currentRequest();
         String uri = request != null ? request.getRequestURI() : pjp.getSignature().toShortString();
         String httpMethod = request != null ? request.getMethod() : "CALL";
         boolean auth = uri.startsWith("/api/auth/");
-        String action = actionOf(uri, httpMethod);
+        return proceedAndRecord(pjp, actionOf(uri, httpMethod), uri, uri, !auth);
+    }
 
+    /**
+     * 조회 중에는 엑셀 내보내기(/export 로 끝나는 GET)만 남긴다: 리포트·사용자 엑셀. 직원 정보가 파일로 나가므로
+     * 누가 언제 어떤 조건(연도·고른 부서·사용자, 요청 주소의 조회 조건)으로 내려받았는지 기록한다.
+     */
+    @Around("getMapping()")
+    public Object aroundGet(ProceedingJoinPoint pjp) throws Throwable {
+        HttpServletRequest request = currentRequest();
+        if (request == null || !request.getRequestURI().endsWith("/export")) {
+            return pjp.proceed();
+        }
+        String uri = request.getRequestURI();
+        String query = request.getQueryString();
+        String detail = query == null ? uri : uri + "?" + URLDecoder.decode(query, StandardCharsets.UTF_8);
+        return proceedAndRecord(pjp, "export", uri, detail, true);
+    }
+
+    private Object proceedAndRecord(ProceedingJoinPoint pjp, String action, String uri, String detail,
+                                    boolean record) throws Throwable {
         try {
             Object result = pjp.proceed();
-            if (!auth) {
-                safeRecord(action, resourceOf(uri), idOf(uri), uri, true);
+            if (record) {
+                safeRecord(action, resourceOf(uri), idOf(uri), detail, true);
             }
             return result;
         } catch (Throwable ex) {
-            if (!auth) {
+            if (record) {
                 safeRecord(action, resourceOf(uri), idOf(uri),
-                        uri + " | " + ex.getClass().getSimpleName()
+                        detail + " | " + ex.getClass().getSimpleName()
                                 + ": " + safeMessage(ex), false);
             }
             throw ex;
