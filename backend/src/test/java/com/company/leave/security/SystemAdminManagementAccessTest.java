@@ -1,5 +1,6 @@
 package com.company.leave.security;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -9,6 +10,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.company.leave.audit.AuditController;
@@ -29,6 +31,10 @@ import com.company.leave.policy.PolicyController;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.report.LeaveReportService;
 import com.company.leave.report.ReportController;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -145,8 +151,12 @@ class SystemAdminManagementAccessTest {
     @Test
     void 시스템_관리자는_보고서를_내려받을_수_있다() throws Exception {
         when(reports.exportUsage(2027, List.of(), List.of())).thenReturn(new byte[] {1, 2, 3});
+        // 파일 이름 "연차현황표_오늘.xlsx" 를 한글이 깨지지 않게 filename*=UTF-8 로
+        String fileName = "연차현황표_" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy_MM_dd")) + ".xlsx";
         mvc.perform(get("/api/reports/leave-usage/export").param("year", "2027"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        containsString("filename*=UTF-8''" + URLEncoder.encode(fileName, StandardCharsets.UTF_8))));
         verify(reports).exportUsage(2027, List.of(), List.of());
     }
 

@@ -12,6 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 
+/** 내려받는 파일 이름의 날짜: 오늘 2026_10_07 */
+function todayForFileName(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}_${pad(d.getMonth() + 1)}_${pad(d.getDate())}`;
+}
+
 /** 직원 목록은 한 번에 받아 화면에서 검색한다(리포트 대상 고르기용, 퇴사자 포함). */
 const ALL_EMPLOYEES = 1000;
 
@@ -64,7 +71,7 @@ export default function ReportsPage() {
       const href = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = href;
-      a.download = `leave-usage-${year}.xlsx`;
+      a.download = `연차현황표_${todayForFileName()}.xlsx`;
       a.click();
       URL.revokeObjectURL(href);
     } catch {
@@ -78,13 +85,13 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">리포트</h1>
-        <p className="text-sm text-muted-foreground">연차 사용 현황을 엑셀로 내려받습니다.</p>
+        <p className="text-sm text-muted-foreground">연차현황표를 엑셀로 내려받습니다.</p>
       </div>
 
       <Card className="max-w-5xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <FileSpreadsheet className="h-5 w-5 text-primary" /> 연차 사용 현황
+            <FileSpreadsheet className="h-5 w-5 text-primary" /> 연차현황표
           </CardTitle>
           <CardDescription>
             선택한 연도의 연차현황표(부서별 직원, 부여·사용·남은 연차, 사용한 날짜)를 엑셀로 출력합니다. 부서나
