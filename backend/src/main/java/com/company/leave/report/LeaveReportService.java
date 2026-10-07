@@ -82,9 +82,9 @@ public class LeaveReportService {
     /** 안내 문구를 합치는 범위: B~J열 */
     private static final int NOTICE_LAST_COL = FIRST_COL + 8;
 
-    /** 받은 양식의 열 너비(글자 수): A 여백, B 번호 … K 사용 기간, L~U 사용일 앞 10칸. 그 뒤는 기본 너비 */
+    /** 받은 양식의 열 너비(글자 수): A 여백, B 번호 … K 사용 기간(양식 20.75보다 10px 넓게), L~U 사용일 앞 10칸. 그 뒤는 기본 너비 */
     private static final double[] TEMPLATE_WIDTHS = {7.25, 14.0, 14.13, 7.88, 9.0, 10.38, 10.38, 8.63, 10.25, 11.25,
-            20.75, 14.5, 15.0, 15.0, 13.25, 12.63, 12.63, 13.75, 13.75, 13.75, 13.75};
+            22.14, 14.5, 15.0, 15.0, 13.25, 12.63, 12.63, 13.75, 13.75, 13.75, 13.75};
     private static final double TEMPLATE_DEFAULT_WIDTH = 12.63;
     /** 받은 양식의 색 */
     private static final int PINK_BAR = 0xF4CCCC;

@@ -174,7 +174,7 @@ class LeaveReportServiceTest {
         assertThat(채움(sheet, row, FIRST_DAY_COL + 1)).isEqualTo("FFCFE2F3"); // 사용일(빈칸)
         assertThat(sheet.getColumnWidth(0)).isEqualTo(Math.round(7.25f * 256));
         assertThat(sheet.getColumnWidth(C)).isEqualTo(14 * 256);
-        assertThat(sheet.getColumnWidth(C + 9)).isEqualTo(Math.round(20.75f * 256));
+        assertThat(sheet.getColumnWidth(C + 9)).isEqualTo(Math.round(22.14f * 256));
         assertThat(sheet.getColumnWidth(FIRST_DAY_COL)).isEqualTo(Math.round(14.5f * 256));
         assertThat(sheet.getColumnWidth(FIRST_DAY_COL + 40)).isEqualTo(Math.round(12.63f * 256));
         assertThat(sheet.getColumnWidth(C + 2)).as("팀 칸은 양식보다 좁지 않다")
