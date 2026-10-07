@@ -104,28 +104,6 @@ public class LeaveGrantService {
         return count;
     }
 
-    /**
-     * 기간 기준을 바꾼 뒤 한 번: 직원마다 잔액이 있는 가장 오래된 기간부터 지금 기간까지 차례로 다시 부여해
-     * 기간별 부여 일수와 지난 기간 이월·소멸을 새 기준으로 맞춘다. 사용·소멸(병가·공가) 일수는 미리 다시 계산돼 있어야 한다.
-     */
-    @Transactional
-    public void regrantAllPeriods(Employee employee) {
-        LeavePolicy policy = policyService.getActivePolicy();
-        int current = currentYear(employee, policy);
-        int first = balanceRepository.findByEmployeeIdOrderByYearDesc(employee.getId()).stream()
-                .mapToInt(LeaveBalance::getYear).min().orElse(current);
-        if (employee.getHireDate() != null) {
-            first = Math.max(first, employee.getHireDate().getYear());
-        }
-        for (int year = first; year <= current; year++) {
-            grant(employee, year, policy);
-        }
-        // 아직 시작 전인 기간에 예전 기준(달력 연도)으로 미리 넣어 둔 부여 일수는 지운다. 그 기간이 시작되는 날 배치가 부여한다
-        balanceRepository.findByEmployeeIdOrderByYearDesc(employee.getId()).stream()
-                .filter(b -> b.getYear() > current)
-                .forEach(b -> b.setGranted(BigDecimal.ZERO));
-    }
-
     private int currentYear(Employee employee, LeavePolicy policy) {
         // 입사 예정자는 첫 기간(입사 연도)을 미리 부여한다
         LocalDate hireDate = employee.getHireDate();
