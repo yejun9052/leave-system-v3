@@ -138,12 +138,24 @@ public class LeavePromotionService {
      */
     @Transactional(readOnly = true)
     public List<Target> targets(int months, String keyword) {
+        return targets(months, keyword, List.of());
+    }
+
+    /**
+     * {@link #targets(int, String)} 중 고른 부서 소속만. 부서는 화면 부서 트리에서 체크한 그대로(하위 부서를 펼치지 않음),
+     * 비면 부서 조건 없음.
+     */
+    @Transactional(readOnly = true)
+    public List<Target> targets(int months, String keyword, Collection<Long> departmentIds) {
         // 화면에서 고른 개월 수를 1~6 으로 맞춘다(0 → 1, 7 → 6)
         int m = Math.max(1, Math.min(MAX_MONTHS, months));
         LocalDate today = LocalDate.now();
         // 기준일 = 오늘 + m개월. 말일은 그 달 말일로 맞춰진다(8/31 + 6개월 = 2/28)
         LocalDate limit = today.plusMonths(m);
-        Predicate<Employee> matches = keywordFilter(keyword);
+        Set<Long> departments = departmentIds == null ? Set.of() : Set.copyOf(departmentIds);
+        Predicate<Employee> matches = keywordFilter(keyword)
+                .and(e -> departments.isEmpty()
+                        || (e.getDepartmentId() != null && departments.contains(e.getDepartmentId())));
         // 재직자 전원(관리 전용 계정 포함)의 오늘이 속한 연차 기간과 그 잔액. 잔액 행이 없는 직원은 빠진다.
         // period().end() 가 사용 기한(입사일 기준 또는 회계연도 기준, LeavePeriodCalculator 가 계산)
         List<LeaveBalanceService.PeriodBalance> candidates = balanceService.balancesAsOf(today, true, true).stream()

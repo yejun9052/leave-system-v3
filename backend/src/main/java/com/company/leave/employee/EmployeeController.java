@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.Set;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpHeaders;
@@ -48,16 +49,17 @@ public class EmployeeController {
         this.sessionTerminator = sessionTerminator;
     }
 
-    @Operation(summary = "사용자 목록/검색 (페이지)")
+    @Operation(summary = "사용자 목록/검색 (페이지)",
+            description = "departmentIds 는 부서 트리에서 체크한 부서(그 부서 소속만, 하위 부서를 펼치지 않음).")
     @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN','TEAM_LEAD')")
     @GetMapping
     public ApiResponse<PageResponse<EmployeeResponse>> search(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long departmentId,
+            @RequestParam(required = false) Set<Long> departmentIds,
             @RequestParam(required = false) EmployeeStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        var condition = new EmployeeSearchCondition(keyword, departmentId, status);
+        var condition = new EmployeeSearchCondition(keyword, departmentIds, status);
         return ApiResponse.ok(PageResponse.from(employeeService.search(condition, PageRequest.of(page, size))));
     }
 

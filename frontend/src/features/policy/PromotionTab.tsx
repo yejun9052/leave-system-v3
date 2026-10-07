@@ -6,6 +6,7 @@ import { extractErrorMessage } from "@/api/client";
 import { formatDays } from "@/lib/leaveFormat";
 import { formatDateTime } from "@/lib/dateFormat";
 import { useTableSort } from "@/lib/useTableSort";
+import DepartmentFilter from "@/components/DepartmentFilter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,11 +46,12 @@ export default function PromotionTab() {
   const [keyword, setKeyword] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [departmentIds, setDepartmentIds] = useState<Set<number>>(new Set());
 
   // 조회 범위를 바꾸는 동안에는 이전 목록을 보여 준다(새 목록이 오기 전에 선택이 풀리지 않게)
   const { data: targets = [], isLoading, isPlaceholderData } = useQuery({
-    queryKey: ["promotionTargets", months, search],
-    queryFn: () => promotionApi.targets(months, search),
+    queryKey: ["promotionTargets", months, search, [...departmentIds]],
+    queryFn: () => promotionApi.targets(months, search, [...departmentIds]),
     placeholderData: keepPreviousData,
   });
 
@@ -161,6 +163,7 @@ export default function PromotionTab() {
               검색
             </Button>
           </form>
+          <DepartmentFilter selected={departmentIds} onChange={setDepartmentIds} />
           <span className="pb-2 text-sm text-muted-foreground">
             대상 {targets.length}명 · 선택 {selected.size}명
           </span>

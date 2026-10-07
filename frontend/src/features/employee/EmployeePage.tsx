@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { employeeApi, type EmployeeCreate } from "@/api/employees";
 import { departmentApi } from "@/api/departments";
+import DepartmentFilter from "@/components/DepartmentFilter";
 import { flattenDepartments, type DepartmentOption } from "@/lib/departmentTree";
 import {
   ROLE_LABEL,
@@ -76,6 +77,7 @@ export default function EmployeePage() {
   const search = searchParams.get("keyword") ?? "";
   const [keyword, setKeyword] = useState(search);
   const [page, setPage] = useState(0);
+  const [departmentIds, setDepartmentIds] = useState<Set<number>>(new Set());
   useEffect(() => {
     setKeyword(search);
     setPage(0);
@@ -91,8 +93,9 @@ export default function EmployeePage() {
   const departments = useMemo(() => flattenDepartments(departmentTree), [departmentTree]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["employees", { search, page }],
-    queryFn: () => employeeApi.search({ keyword: search || undefined, page, size: 15 }),
+    queryKey: ["employees", { search, page, departments: [...departmentIds] }],
+    queryFn: () =>
+      employeeApi.search({ keyword: search || undefined, departmentIds: [...departmentIds], page, size: 15 }),
   });
   // 서버가 이름순으로 페이지를 나눠 주므로 정렬은 지금 페이지 안에서만 한다
   const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {
@@ -209,6 +212,13 @@ export default function EmployeePage() {
         <Button type="submit" variant="secondary">
           검색
         </Button>
+        <DepartmentFilter
+          selected={departmentIds}
+          onChange={(next) => {
+            setDepartmentIds(next);
+            setPage(0);
+          }}
+        />
       </form>
 
       <Card>

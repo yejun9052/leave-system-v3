@@ -34,12 +34,15 @@ public class LeavePromotionController {
     @Operation(summary = "촉진 대상 목록",
             description = "사용 기한(직원별 연차 기간의 마지막 날)이 오늘부터 months 개월(1~6) 안이고 "
                     + "남은 연차가 있는 재직자. 사용 기한이 가까운 순. keyword 는 이름·부서 검색"
-                    + "(공백으로 나눈 단어 모두, 상위 부서로 찾으면 하위 부서 포함).")
+                    + "(공백으로 나눈 단어 모두, 상위 부서로 찾으면 하위 부서 포함). "
+                    + "departmentIds 는 부서 트리에서 체크한 부서(그 부서 소속만, 하위 부서를 펼치지 않음).")
     @GetMapping("/targets")
     public ApiResponse<List<LeavePromotionService.Target>> targets(
             @RequestParam(defaultValue = "6") int months,
-            @RequestParam(required = false) String keyword) {
-        return ApiResponse.ok(promotionService.targets(months, keyword));
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) List<Long> departmentIds) {
+        return ApiResponse.ok(promotionService.targets(months, keyword,
+                departmentIds != null ? departmentIds : List.of()));
     }
 
     @Operation(summary = "고른 직원에게 촉진 안내 발송",

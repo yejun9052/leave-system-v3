@@ -40,8 +40,8 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
         QDepartment d = new QDepartment("dept");
         BooleanBuilder where = new BooleanBuilder();
         where.and(keyword(e, d, condition.keyword()));
-        if (condition.departmentId() != null) {
-            where.and(e.department.id.eq(condition.departmentId()));
+        if (condition.departmentIds() != null && !condition.departmentIds().isEmpty()) {
+            where.and(e.department.id.in(condition.departmentIds()));
         }
         if (condition.allowedDepartmentIds() != null) {
             // 권한 스코프 제한(예: 팀장은 담당 부서만). 빈 집합이면 결과 없음.

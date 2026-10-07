@@ -35,6 +35,7 @@ import com.company.leave.policy.repository.BlackoutPeriodRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -389,7 +390,8 @@ public class LeaveRequestService {
      */
     @Transactional(readOnly = true)
     public Page<LeaveRequestDtos.Response> search(Long callerId, String keyword, Set<LeaveRequestStatus> statuses,
-                                                  LocalDate from, LocalDate to, int page, int size) {
+                                                  LocalDate from, LocalDate to, Collection<Long> departmentIds,
+                                                  int page, int size) {
         Employee caller = employeeService.getEntity(callerId);
         Set<Long> scope = isHrApprover(caller) ? null : subordinateDeptIds(caller);
         PageRequest pageable = PageRequest.of(page, size,
@@ -403,7 +405,7 @@ public class LeaveRequestService {
                                 d.getParent() != null ? d.getParent().getId() : null, d.getName()))
                         .toList();
         return requestRepository.findAll(
-                        LeaveRequestSearch.of(keyword, statuses, from, to, scope, departments), pageable)
+                        LeaveRequestSearch.of(keyword, statuses, from, to, scope, departmentIds, departments), pageable)
                 .map(LeaveRequestDtos.Response::from);
     }
 

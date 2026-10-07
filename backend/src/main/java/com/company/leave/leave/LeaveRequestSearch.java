@@ -25,6 +25,7 @@ import org.springframework.data.jpa.domain.Specification;
  *   <li>상태: 고른 상태만(비면 전체)</li>
  *   <li>기간: 휴가 기간이 [from, to] 와 겹치는 것</li>
  *   <li>범위: 팀장은 맡은 부서(하위 포함) 소속 직원만, 인사관리자·시스템 관리자는 전체</li>
+ *   <li>부서: 부서 트리에서 체크한 부서 소속만(체크한 그대로, 하위 부서를 펼치지 않음). 비면 조건 없음</li>
  *   <li>검색어: 단어마다 신청자 이름, 부서(상위 부서로 찾으면 하위 포함), 휴가 종류, 경조사 규정, 사유, 결재자, 상태(한글) 중
  *       하나라도 맞으면 되고, 단어끼리는 모두 맞아야 한다</li>
  * </ul>
@@ -43,11 +44,12 @@ final class LeaveRequestSearch {
 
     /**
      * @param departmentScope 팀장이 볼 수 있는 부서 id(인사관리자·시스템 관리자는 null = 전체)
+     * @param departmentIds   화면 부서 트리에서 체크한 부서 id(비면 조건 없음)
      * @param departments     검색어의 부서 조건용 전체 부서(검색어가 없으면 빈 목록이어도 된다)
      */
     static Specification<LeaveRequest> of(String keyword, Collection<LeaveRequestStatus> statuses, LocalDate from,
                                           LocalDate to, Collection<Long> departmentScope,
-                                          List<DepartmentNode> departments) {
+                                          Collection<Long> departmentIds, List<DepartmentNode> departments) {
         List<String> tokens = SearchKeywords.tokens(keyword);
         return (root, query, cb) -> {
             Join<LeaveRequest, Employee> employee = root.join("employee", JoinType.INNER);
@@ -63,6 +65,9 @@ final class LeaveRequestSearch {
             }
             if (departmentScope != null) {
                 all.add(employee.get("department").get("id").in(departmentScope));
+            }
+            if (departmentIds != null && !departmentIds.isEmpty()) {
+                all.add(employee.get("department").get("id").in(departmentIds));
             }
             if (!tokens.isEmpty()) {
                 Join<LeaveRequest, LeaveType> type = root.join("leaveType", JoinType.INNER);

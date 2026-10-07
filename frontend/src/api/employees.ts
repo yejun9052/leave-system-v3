@@ -19,7 +19,8 @@ export type EmployeeUpdate = Omit<EmployeeCreate, "email" | "roles"> & { email?:
 
 export interface EmployeeSearchParams {
   keyword?: string;
-  departmentId?: number;
+  /** 부서 트리에서 체크한 부서(그 부서 소속만). 비면 조건 없음 */
+  departmentIds?: number[];
   status?: EmployeeStatus;
   page?: number;
   size?: number;
@@ -27,7 +28,9 @@ export interface EmployeeSearchParams {
 
 export const employeeApi = {
   search: (params: EmployeeSearchParams) =>
-    unwrap<Page<Employee>>(api.get("/employees", { params })),
+    unwrap<Page<Employee>>(
+      api.get("/employees", { params: { ...params, departmentIds: params.departmentIds?.join(",") || undefined } }),
+    ),
   get: (id: number) => unwrap<Employee>(api.get(`/employees/${id}`)),
   create: (body: EmployeeCreate) => unwrap<Employee>(api.post("/employees", body)),
   update: (id: number, body: EmployeeUpdate) => unwrap<Employee>(api.put(`/employees/${id}`, body)),

@@ -581,7 +581,7 @@ class LeaveRequestServiceApprovalTest {
     void 휴가_목록은_휴가_시작일_최신순으로_찾고_검색어가_없으면_부서를_읽지_않는다() {
         when(requestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
 
-        service.search(인사관리자.getId(), null, Set.of(LeaveRequestStatus.APPROVED), null, null, 0, 20);
+        service.search(인사관리자.getId(), null, Set.of(LeaveRequestStatus.APPROVED), null, null, List.of(), 0, 20);
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(requestRepository).findAll(any(Specification.class), pageable.capture());
@@ -593,7 +593,7 @@ class LeaveRequestServiceApprovalTest {
     @Test
     void 맡은_부서가_없는_팀장은_휴가_목록이_비어_있다() {
         Page<LeaveRequestDtos.Response> page =
-                service.search(부파트장.getId(), "연구소", Set.of(), null, null, 0, 20);
+                service.search(부파트장.getId(), "연구소", Set.of(), null, null, List.of(), 0, 20);
 
         assertThat(page.getContent()).isEmpty();
         verify(requestRepository, never()).findAll(any(Specification.class), any(Pageable.class));

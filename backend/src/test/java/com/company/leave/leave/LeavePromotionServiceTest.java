@@ -155,6 +155,23 @@ class LeavePromotionServiceTest {
     }
 
     @Test
+    void 부서_트리에서_고른_부서_소속만_나오고_하위_부서는_따로_펼치지_않는다() {
+        Department 연구소 = 부서(1L, "연구소", null);
+        Department 개발팀 = 부서(2L, "개발팀", 연구소);
+        Department 영업팀 = 부서(3L, "영업팀", null);
+        기간(소속(직원(1L, "김개발", "a@company.com"), 개발팀), TODAY.plusMonths(2), "15", "5");
+        기간(소속(직원(2L, "박영업", "b@company.com"), 영업팀), TODAY.plusMonths(3), "15", "5");
+        기간(소속(직원(3L, "이소장", "c@company.com"), 연구소), TODAY.plusMonths(4), "15", "5");
+        기간(직원(4L, "무소속", "d@company.com"), TODAY.plusMonths(5), "15", "5");
+
+        assertThat(service.targets(6, null, List.of(1L))).extracting(LeavePromotionService.Target::name)
+                .containsExactly("이소장");
+        assertThat(service.targets(6, null, List.of(1L, 2L))).extracting(LeavePromotionService.Target::name)
+                .containsExactly("김개발", "이소장");
+        assertThat(service.targets(6, null, List.of())).hasSize(4);
+    }
+
+    @Test
     void 남은_기간은_서버가_개월과_일로_계산한다() {
         LocalDate d = LocalDate.of(2026, 10, 2);
 

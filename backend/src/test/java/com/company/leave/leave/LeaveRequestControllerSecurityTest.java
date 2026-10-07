@@ -114,8 +114,8 @@ class LeaveRequestControllerSecurityTest {
     }
 
     @Test
-    void 휴가_목록은_결재자만_보고_상태와_기간을_받아_넘기며_한_쪽은_최대_100건이다() throws Exception {
-        when(service.search(anyLong(), any(), any(), any(), any(), anyInt(), anyInt()))
+    void 휴가_목록은_결재자만_보고_상태와_기간과_고른_부서를_받아_넘기며_한_쪽은_최대_100건이다() throws Exception {
+        when(service.search(anyLong(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
                 .thenReturn(Page.empty());
         authenticate(Set.of(Role.EMPLOYEE));
         mvc.perform(get("/api/leave-requests")).andExpect(status().isForbidden());
@@ -124,11 +124,12 @@ class LeaveRequestControllerSecurityTest {
         authenticate(Set.of(Role.TEAM_LEAD));
         mvc.perform(get("/api/leave-requests").param("keyword", "연구소")
                         .param("statuses", "APPROVED,CANCEL_REQUESTED")
-                        .param("from", "2026-01-01").param("to", "2026-12-31").param("size", "500"))
+                        .param("from", "2026-01-01").param("to", "2026-12-31").param("size", "500")
+                        .param("departmentIds", "3,4"))
                 .andExpect(status().isOk());
         verify(service).search(1L, "연구소",
                 Set.of(LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED),
-                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), 0, 100);
+                LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), List.of(3L, 4L), 0, 100);
     }
 
     @Test

@@ -74,13 +74,16 @@ class LeavePromotionControllerAccessTest {
     }
 
     @Test
-    void 대상_조회는_기본_6개월이고_개월과_검색어를_넘긴다() throws Exception {
+    void 대상_조회는_기본_6개월이고_개월과_검색어와_고른_부서를_넘긴다() throws Exception {
         authenticate(Set.of(Role.HR_ADMIN));
         mvc.perform(get("/api/leave/promotion/targets")).andExpect(status().isOk());
         mvc.perform(get("/api/leave/promotion/targets").param("months", "2").param("keyword", "연구소"))
                 .andExpect(status().isOk());
-        verify(service).targets(6, null);
-        verify(service).targets(2, "연구소");
+        mvc.perform(get("/api/leave/promotion/targets").param("departmentIds", "3,4"))
+                .andExpect(status().isOk());
+        verify(service).targets(6, null, List.of());
+        verify(service).targets(2, "연구소", List.of());
+        verify(service).targets(6, null, List.of(3L, 4L));
     }
 
     @Test
@@ -99,7 +102,7 @@ class LeavePromotionControllerAccessTest {
         mvc.perform(post("/api/leave/promotion/send").contentType(MediaType.APPLICATION_JSON)
                 .content("{}")).andExpect(status().isBadRequest());
         verify(service, never()).send(any(), any());
-        verify(service, never()).targets(anyInt(), any());
+        verify(service, never()).targets(anyInt(), any(), any());
     }
 
     private void authenticate(Set<Role> roles) {

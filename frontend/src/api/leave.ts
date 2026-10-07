@@ -76,6 +76,8 @@ export interface LeaveSearchParams {
   /** 휴가 기간이 from~to 와 겹치는 것 */
   from?: string;
   to?: string;
+  /** 부서 트리에서 체크한 부서(그 부서 소속만). 비면 조건 없음 */
+  departmentIds?: number[];
   page?: number;
   size?: number;
 }
@@ -110,7 +112,11 @@ export const leaveApi = {
   search: (params: LeaveSearchParams) =>
     unwrap<Page<LeaveRequest>>(
       api.get("/leave-requests", {
-        params: { ...params, statuses: params.statuses?.join(",") || undefined },
+        params: {
+          ...params,
+          statuses: params.statuses?.join(",") || undefined,
+          departmentIds: params.departmentIds?.join(",") || undefined,
+        },
       }),
     ),
 

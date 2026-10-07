@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
+import DepartmentFilter from "@/components/DepartmentFilter";
 import { useTableSort } from "@/lib/useTableSort";
 import { useAuthStore } from "@/store/auth";
 import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
@@ -61,17 +62,19 @@ export default function LeaveListTab() {
   const [keyword, setKeyword] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [departmentIds, setDepartmentIds] = useState<Set<number>>(new Set());
   const [forceCancelling, setForceCancelling] = useState<LeaveRequest | null>(null);
 
   const statuses = STATUS_FILTERS.find((f) => f.value === statusFilter)?.statuses ?? [];
   const { data, isLoading } = useQuery({
-    queryKey: ["leaveList", { search, statusFilter, from, to, page }],
+    queryKey: ["leaveList", { search, statusFilter, from, to, page, departments: [...departmentIds] }],
     queryFn: () =>
       leaveApi.search({
         keyword: search || undefined,
         statuses,
         from: from || undefined,
         to: to || undefined,
+        departmentIds: [...departmentIds],
         page,
         size: PAGE_SIZE,
       }),
@@ -157,6 +160,13 @@ export default function LeaveListTab() {
           <Button type="submit" variant="secondary">
             검색
           </Button>
+          <DepartmentFilter
+            selected={departmentIds}
+            onChange={(next) => {
+              setDepartmentIds(next);
+              setPage(0);
+            }}
+          />
         </form>
       </div>
 

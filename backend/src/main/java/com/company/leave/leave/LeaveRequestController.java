@@ -87,7 +87,8 @@ public class LeaveRequestController {
                 SecurityUtils.currentEmployeeId(), PageRequest.of(page, size))));
     }
 
-    @Operation(summary = "휴가 목록 (결재함): 상태·기간·검색어로 찾기. 팀장은 맡은 부서(하위 포함)만")
+    @Operation(summary = "휴가 목록 (결재함): 상태·기간·검색어·부서로 찾기. 팀장은 맡은 부서(하위 포함)만",
+            description = "departmentIds 는 부서 트리에서 체크한 부서(그 부서 소속만, 하위 부서를 펼치지 않음).")
     @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
     @GetMapping
     public ApiResponse<PageResponse<LeaveRequestDtos.Response>> search(
@@ -95,10 +96,12 @@ public class LeaveRequestController {
             @RequestParam(required = false) Set<LeaveRequestStatus> statuses,
             @RequestParam(required = false) LocalDate from,
             @RequestParam(required = false) LocalDate to,
+            @RequestParam(required = false) List<Long> departmentIds,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(PageResponse.from(leaveRequestService.search(SecurityUtils.currentEmployeeId(),
-                keyword, statuses, from, to, Math.max(page, 0), Math.min(Math.max(size, 1), 100))));
+                keyword, statuses, from, to, departmentIds != null ? departmentIds : List.of(),
+                Math.max(page, 0), Math.min(Math.max(size, 1), 100))));
     }
 
     @Operation(summary = "결재 대기 목록")
