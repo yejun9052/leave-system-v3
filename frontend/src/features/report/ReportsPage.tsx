@@ -43,7 +43,9 @@ export default function ReportsPage() {
           <CardTitle className="flex items-center gap-2 text-base">
             <FileSpreadsheet className="h-5 w-5 text-primary" /> 연차 사용 현황
           </CardTitle>
-          <CardDescription>선택한 연도의 부여/사용/잔여 연차를 엑셀로 출력합니다.</CardDescription>
+          <CardDescription>
+            선택한 연도의 연차현황표(부서별 직원, 부여·사용·남은 연차, 사용한 날짜)를 엑셀로 출력합니다.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
