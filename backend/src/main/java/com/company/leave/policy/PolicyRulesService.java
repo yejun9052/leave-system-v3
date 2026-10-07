@@ -77,7 +77,7 @@ public class PolicyRulesService {
     public PolicyRuleDtos.SpecialRule createSpecial(PolicyRuleDtos.SpecialRuleRequest req) {
         validateSpecialDays(req.days());
         SpecialLeaveRule r = new SpecialLeaveRule(req.name(), req.days(), req.leaveTypeCode(),
-                req.sortOrder() != null ? req.sortOrder() : 0);
+                req.sortOrder() != null ? req.sortOrder() : 0, req.annualLimit());
         return PolicyRuleDtos.SpecialRule.from(specialRepository.save(r));
     }
 
@@ -86,8 +86,9 @@ public class PolicyRulesService {
         SpecialLeaveRule r = specialRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
         validateSpecialDays(req.days());
+        // 순서를 보내지 않으면 지금 순서를 그대로 둔다(예전에는 0으로 초기화됐다)
         r.update(req.name(), req.days(), req.leaveTypeCode(),
-                req.sortOrder() != null ? req.sortOrder() : 0);
+                req.sortOrder() != null ? req.sortOrder() : r.getSortOrder(), req.annualLimit());
         return PolicyRuleDtos.SpecialRule.from(r);
     }
 

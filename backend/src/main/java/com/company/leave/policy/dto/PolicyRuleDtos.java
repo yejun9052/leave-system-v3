@@ -28,18 +28,29 @@ public final class PolicyRuleDtos {
     }
 
     // --- 경조사 규칙 ---
-    public record SpecialRule(Long id, String name, BigDecimal days, String leaveTypeCode, int sortOrder) {
+    /** @param annualLimit 연간 사용 횟수(달력 연도). null 이면 제한 없음 */
+    public record SpecialRule(Long id, String name, BigDecimal days, String leaveTypeCode, int sortOrder,
+                              Integer annualLimit) {
         public static SpecialRule from(SpecialLeaveRule r) {
             return new SpecialRule(r.getId(), r.getName(), r.getDays(),
-                    r.getLeaveTypeCode(), r.getSortOrder());
+                    r.getLeaveTypeCode(), r.getSortOrder(), r.getAnnualLimit());
         }
     }
 
+    /**
+     * @param sortOrder   null 이면 추가는 0, 수정은 지금 순서 그대로
+     * @param annualLimit 연간 사용 횟수(1 이상). null 이면 제한 없음
+     */
     public record SpecialRuleRequest(
             @NotBlank String name,
             @NotNull BigDecimal days,
             String leaveTypeCode,
-            Integer sortOrder) {
+            Integer sortOrder,
+            @Min(1) Integer annualLimit) {
+
+        public SpecialRuleRequest(String name, BigDecimal days, String leaveTypeCode, Integer sortOrder) {
+            this(name, days, leaveTypeCode, sortOrder, null);
+        }
     }
 
     // --- 블랙아웃 ---

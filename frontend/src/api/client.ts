@@ -54,6 +54,15 @@ export function unwrap<T>(promise: Promise<{ data: ApiEnvelope<T> }>): Promise<T
   return promise.then((res) => res.data.data);
 }
 
+/** axios 오류에서 서버 오류 코드(ErrorCode 이름)를 뽑아낸다. 없으면 null. */
+export function extractErrorCode(err: unknown): string | null {
+  if (axios.isAxiosError(err)) {
+    const body = err.response?.data as ApiEnvelope<unknown> | undefined;
+    return body?.error?.code ?? null;
+  }
+  return null;
+}
+
 /** axios 오류에서 사용자에게 보여줄 메시지를 뽑아낸다. */
 export function extractErrorMessage(err: unknown, fallback = "요청 처리 중 오류가 발생했습니다."): string {
   if (axios.isAxiosError(err)) {

@@ -35,20 +35,30 @@ public class SpecialLeaveRule {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder = 0;
 
+    /** 연간 사용 횟수(달력 연도, 휴가 시작일 기준). null 이면 제한 없음. 예: 생일 반차 1회 */
+    @Column(name = "annual_limit")
+    private Integer annualLimit;
+
     protected SpecialLeaveRule() {
     }
 
     public SpecialLeaveRule(String name, BigDecimal days, String leaveTypeCode, int sortOrder) {
-        this.name = name;
-        this.days = days;
-        this.leaveTypeCode = leaveTypeCode;
-        this.sortOrder = sortOrder;
+        this(name, days, leaveTypeCode, sortOrder, null);
     }
 
-    public void update(String name, BigDecimal days, String leaveTypeCode, int sortOrder) {
+    public SpecialLeaveRule(String name, BigDecimal days, String leaveTypeCode, int sortOrder, Integer annualLimit) {
         this.name = name;
         this.days = days;
         this.leaveTypeCode = leaveTypeCode;
         this.sortOrder = sortOrder;
+        this.annualLimit = annualLimit;
+    }
+
+    public void update(String name, BigDecimal days, String leaveTypeCode, int sortOrder, Integer annualLimit) {
+        this.name = name;
+        this.days = days;
+        this.leaveTypeCode = leaveTypeCode;
+        this.sortOrder = sortOrder;
+        this.annualLimit = annualLimit;
     }
 }

@@ -65,6 +65,18 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
             """)
     BigDecimal sumPendingDeductedDays(@Param("employeeId") Long employeeId, @Param("year") int year);
 
+    /** 경조사 규정 사용 횟수: 그 직원이 [from, to] 에 시작한, 주어진 상태의 그 규정 신청 수(연간 사용 횟수 검사용). */
+    @Query("""
+            select count(r) from LeaveRequest r
+            where r.employee.id = :employeeId
+              and r.specialRuleId = :ruleId
+              and r.status in :statuses
+              and r.startDate between :from and :to
+            """)
+    long countSpecialRuleUses(@Param("employeeId") Long employeeId, @Param("ruleId") Long ruleId,
+                              @Param("statuses") Collection<LeaveRequestStatus> statuses,
+                              @Param("from") LocalDate from, @Param("to") LocalDate to);
+
     /** 결재 대상: 주어진 사용자들의 신규 신청(PENDING) + 취소 요청(CANCEL_REQUESTED) */
     @Query("""
             select r from LeaveRequest r

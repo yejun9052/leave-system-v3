@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, Trash2, PlayCircle } from "lucide-react";
+import { Pencil, Plus, Save, Trash2, PlayCircle } from "lucide-react";
 import {
   policyApi,
   leaveTypeApi,
@@ -9,6 +9,7 @@ import {
   type Policy,
   type GrantBasis,
   type LeaveTypeInput,
+  type SpecialRule,
 } from "@/api/policy";
 import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
@@ -41,6 +42,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import HolidayTab from "./HolidayTab";
 import PromotionTab from "./PromotionTab";
+import SpecialRuleEditDialog from "./SpecialRuleEditDialog";
 import AutomationTab from "./AutomationTab";
 
 const PORTION_LABEL: Record<LeavePortion, string> = {
@@ -618,6 +620,11 @@ function RulesTab() {
   const [aName, setAName] = useState("");
   const [sName, setSName] = useState("");
   const [sDays, setSDays] = useState(1);
+  /** 연간 사용 횟수: 비우면 제한 없음 */
+  const [sLimit, setSLimit] = useState("");
+  const [editingSpecial, setEditingSpecial] = useState<SpecialRule | null>(null);
+  const sLimitValue = sLimit.trim() === "" ? null : Number(sLimit);
+  const sLimitInvalid = sLimitValue != null && (!Number.isInteger(sLimitValue) || sLimitValue < 1);
 
   const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
   const addAward = useMutation({
@@ -631,8 +638,15 @@ function RulesTab() {
     onError: err,
   });
   const addSpecial = useMutation({
-    mutationFn: () => policyRulesApi.createSpecial({ name: sName, days: sDays, leaveTypeCode: "CONDOLENCE", sortOrder: 0 }),
-    onSuccess: () => { setSName(""); qc.invalidateQueries({ queryKey: ["specialRules"] }); },
+    mutationFn: () =>
+      policyRulesApi.createSpecial({
+        name: sName,
+        days: sDays,
+        leaveTypeCode: "CONDOLENCE",
+        sortOrder: 0,
+        annualLimit: sLimitValue,
+      }),
+    onSuccess: () => { setSName(""); setSLimit(""); qc.invalidateQueries({ queryKey: ["specialRules"] }); },
     onError: err,
   });
   const delSpecial = useMutation({
@@ -681,26 +695,39 @@ function RulesTab() {
               <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="예: 본인 결혼" /></div>
             <div className="space-y-1"><Label className="text-xs">일수</Label>
               <Input type="number" step="0.5" className="w-20" value={sDays} onChange={(e) => setSDays(Number(e.target.value))} /></div>
+            <div className="space-y-1"><Label className="text-xs">연간 횟수</Label>
+              <Input type="number" min={1} className="w-28" value={sLimit} placeholder="제한 없음"
+                onChange={(e) => setSLimit(e.target.value)} /></div>
             <Button
               size="sm"
               onClick={async () => {
                 const ok = await confirm({
                   title: `'${sName}' 경조사 규정을 추가할까요?`,
-                  description: `${sDays}일이 부여되는 규정으로 추가합니다.`,
+                  description: `${sDays}일이 부여되는 규정으로 추가합니다.` +
+                    (sLimitValue != null ? ` 1년(1~12월)에 ${sLimitValue}회까지 쓸 수 있습니다.` : ""),
                   confirmText: "추가",
                 });
                 if (ok) addSpecial.mutate();
               }}
-              disabled={!sName.trim()}
+              disabled={!sName.trim() || sLimitInvalid}
             ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
-          <RuleTable rows={specials.map((s) => ({ id: s.id, cells: [s.name, `${s.days}일`], values: [s.name, s.days] }))}
-            headers={["사유/관계", "일수"]} onDelete={async (id) => {
+          {sLimitInvalid && <p className="text-xs text-destructive">연간 횟수는 1 이상의 정수로 입력해 주세요.</p>}
+          <RuleTable
+            rows={specials.map((s) => ({
+              id: s.id,
+              cells: [s.name, `${s.days}일`, s.annualLimit != null ? `${s.annualLimit}회` : "제한 없음"],
+              values: [s.name, s.days, s.annualLimit ?? Number.MAX_SAFE_INTEGER],
+            }))}
+            headers={["사유/관계", "일수", "연간 횟수"]}
+            onEdit={(id) => setEditingSpecial(specials.find((s) => s.id === id) ?? null)}
+            onDelete={async (id) => {
               const ok = await confirm({ title: "경조사 규정을 삭제할까요?", confirmText: "삭제", destructive: true });
               if (ok) delSpecial.mutate(id);
             }} />
         </CardContent>
       </Card>
+      {editingSpecial && <SpecialRuleEditDialog rule={editingSpecial} onClose={() => setEditingSpecial(null)} />}
     </div>
   );
 }
@@ -764,11 +791,14 @@ function BlackoutTab() {
 function RuleTable({
   headers,
   rows,
+  onEdit,
   onDelete,
 }: {
   headers: string[];
   /** values: 열마다 정렬에 쓸 값(숫자·날짜 등). 없으면 화면 글자로 정렬 */
   rows: { id: number; cells: string[]; values?: SortValue[] }[];
+  /** 있으면 줄마다 수정 버튼 */
+  onEdit?: (id: number) => void;
   onDelete: (id: number) => void;
 }) {
   const accessors = Object.fromEntries(
@@ -792,7 +822,12 @@ function RuleTable({
           <TableRow key={r.id}>
             {r.cells.map((c, i) => <TableCell key={i}>{c}</TableCell>)}
             <TableCell className="text-right">
-              <Button size="icon" variant="ghost" onClick={() => onDelete(r.id)}>
+              {onEdit && (
+                <Button size="icon" variant="ghost" aria-label="수정" onClick={() => onEdit(r.id)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              )}
+              <Button size="icon" variant="ghost" aria-label="삭제" onClick={() => onDelete(r.id)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </TableCell>

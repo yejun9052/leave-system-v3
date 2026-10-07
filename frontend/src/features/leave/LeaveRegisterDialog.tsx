@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search, X } from "lucide-react";
 import { employeeApi } from "@/api/employees";
 import { leaveApi } from "@/api/leave";
-import { extractErrorMessage } from "@/api/client";
+import { extractErrorCode, extractErrorMessage } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,7 +83,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
   }, [typeId, specialRuleId]);
 
   const register = useMutation({
-    mutationFn: () =>
+    mutationFn: (limitAcknowledged: boolean) =>
       leaveApi.register({
         employeeId: employee!.id,
         leaveTypeId: Number(typeId),
@@ -93,6 +93,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
         hours: isHourly ? Number(hours) : undefined,
         specialRuleId: needsRule ? Number(specialRuleId) : undefined,
         halfDayPart: halfDayRule && halfDayPart ? halfDayPart : undefined,
+        limitAcknowledged: limitAcknowledged || undefined,
       }),
     onSuccess: () => {
       toast({ title: "휴가를 등록했습니다. 바로 승인 상태입니다.", variant: "success" });
@@ -102,7 +103,21 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
       qc.invalidateQueries({ queryKey: ["leaveList"] });
       onClose();
     },
-    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
+    onError: async (e) => {
+      // 경조사 규정의 연간 사용 횟수(예: 생일 반차 연 1회)를 넘으면 막지 않고 경고를 확인받아 다시 보낸다
+      if (extractErrorCode(e) === "LEAVE_SPECIAL_LIMIT_NOT_ACKNOWLEDGED") {
+        const ok = await confirm({
+          title: "연간 사용 횟수를 넘는 등록입니다",
+          description: `${extractErrorMessage(e)}
+그래도 등록할까요?`,
+          confirmText: "그래도 등록",
+          destructive: true,
+        });
+        if (ok) register.mutate(true);
+        return;
+      }
+      toast({ title: extractErrorMessage(e), variant: "destructive" });
+    },
   });
 
   const canSubmit =
@@ -129,7 +144,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
         "\n결재 없이 바로 승인되고, 본인과 담당 팀장에게 알림이 갑니다.",
       confirmText: "등록",
     });
-    if (ok) register.mutate();
+    if (ok) register.mutate(false);
   };
 
   return (

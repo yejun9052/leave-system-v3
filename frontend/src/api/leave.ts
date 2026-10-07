@@ -29,6 +29,8 @@ export interface LeaveRegister {
   specialRuleId?: number;
   /** 0.5일 경조사 규정(예: 생일)이면 필수인 오전·오후 */
   halfDayPart?: HalfDayPart;
+  /** 경조사 규정의 연간 사용 횟수를 넘는 등록임을 확인함(넘을 때 서버가 확인을 요구) */
+  limitAcknowledged?: boolean;
 }
 
 export interface LeaveEligibility {

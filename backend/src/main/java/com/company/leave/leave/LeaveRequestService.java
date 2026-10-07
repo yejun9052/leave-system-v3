@@ -150,7 +150,8 @@ public class LeaveRequestService {
      * <ul>
      *   <li>지난 날짜도 가능. 시작일은 근무일이어야 한다(주말·공휴일 불가)</li>
      *   <li>사용 통제(블랙아웃·사전 신청·연속 일수·팀 동시 부재)는 적용하지 않는다</li>
-     *   <li>겹침·잔액(마이너스 연차 정책)·경조사 규정·병가·공가 조건은 신청과 같다. 병가·공가는 남은 연차를 소멸시킨다</li>
+     *   <li>겹침·잔액(마이너스 연차 정책)·경조사 규정·병가·공가 조건은 신청과 같다. 병가·공가는 남은 연차를 소멸시킨다.
+     *       경조사 규정의 연간 사용 횟수를 넘으면 막지 않고, 화면에서 경고를 확인(limitAcknowledged)한 뒤에만 등록한다</li>
      * </ul>
      * 신청자와 담당 팀장에게 알림·메일을 보낸다.
      */
@@ -169,6 +170,10 @@ public class LeaveRequestService {
         }
         Plan plan = plan(employee, type, policy, req.startDate(), req.endDate(), req.hours(), req.specialRuleId(),
                 req.halfDayPart(), false, true);
+        // 경조사 규정의 연간 사용 횟수를 넘으면 막지는 않고, 화면에서 경고를 확인한 뒤에만 등록한다
+        if (plan.limitWarning() != null && !Boolean.TRUE.equals(req.limitAcknowledged())) {
+            throw new BusinessException(ErrorCode.LEAVE_SPECIAL_LIMIT_NOT_ACKNOWLEDGED, plan.limitWarning());
+        }
 
         LeaveRequest request = new LeaveRequest(employee, type, req.startDate(), req.endDate(), plan.days(),
                 plan.deduction(), plan.appliedYear(), req.reason());
@@ -205,10 +210,11 @@ public class LeaveRequestService {
      * @param specialRule 고른 경조사 규정(없으면 null)
      * @param forfeit     승인 시 소멸될 남은 연차(병가·공가, 그 외 0)
      * @param halfDay     종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정), 그 외 null
+     * @param limitWarning 인사관리자 직접 등록이 경조사 규정의 연간 사용 횟수를 넘으면 그 안내(그 외 null)
      */
     private record Plan(BigDecimal days, int workdays, BigDecimal deduction, int appliedYear,
                         BigDecimal nextPeriodDeduction, SpecialLeaveRule specialRule, BigDecimal forfeit,
-                        HalfDayPart halfDay) {
+                        HalfDayPart halfDay, String limitWarning) {
     }
 
     /**
@@ -245,6 +251,7 @@ public class LeaveRequestService {
         SpecialLeaveRule specialRule = preview && specialRuleId == null
                 ? null
                 : resolveSpecialRule(type, specialRuleId, days, halfDayPart);
+        String limitWarning = specialRule == null ? null : checkAnnualLimit(employee, specialRule, start, forced);
 
         validateNoOverlap(employeeId, start, end, portion, days);
 
@@ -283,7 +290,37 @@ public class LeaveRequestService {
             }
         }
         int workdays = workdayCalculator.countWorkdays(start, end, holidays);
-        return new Plan(days, workdays, deduction, appliedYear, nextPart, specialRule, forfeit, halfDayPart);
+        return new Plan(days, workdays, deduction, appliedYear, nextPart, specialRule, forfeit, halfDayPart,
+                limitWarning);
+    }
+
+    /** 연간 사용 횟수에 세는 신청: 결재 대기 · 승인 · 취소 요청 중 */
+    private static final Set<LeaveRequestStatus> SPECIAL_LIMIT_STATUSES = EnumSet.of(
+            LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED);
+
+    /**
+     * 경조사 규정의 연간 사용 횟수 검사(예: 생일 반차 연 1회). 1년은 달력 연도(1~12월), 휴가 시작일 기준.
+     * 직원 신청·미리보기는 넘으면 거부하고, 인사관리자 직접 등록(forced)은 막지 않고 안내 문구를 돌려준다.
+     *
+     * @return 직접 등록이 횟수를 넘을 때의 안내(그 외 null)
+     */
+    private String checkAnnualLimit(Employee employee, SpecialLeaveRule rule, LocalDate start, boolean forced) {
+        Integer limit = rule.getAnnualLimit();
+        if (limit == null) {
+            return null;
+        }
+        int year = start.getYear();
+        long used = requestRepository.countSpecialRuleUses(employee.getId(), rule.getId(), SPECIAL_LIMIT_STATUSES,
+                LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31));
+        if (used < limit) {
+            return null;
+        }
+        String message = rule.getName() + "은(는) 1년(1~12월)에 " + limit + "회까지 쓸 수 있습니다. "
+                + employee.getName() + "님은 " + year + "년에 이미 " + used + "회 신청했습니다.";
+        if (!forced) {
+            throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_LIMIT, message);
+        }
+        return message;
     }
 
     /**
@@ -845,7 +882,7 @@ public class LeaveRequestService {
 
     /**
      * 경조사 규정 확인. 종류에 규정이 연결돼 있으면 하나를 골라야 하고,
-     * 신청 근무일 수(주말·공휴일 제외)가 규정 일수를 넘을 수 없다. 횟수 제한은 없다.
+     * 신청 근무일 수(주말·공휴일 제외)가 규정 일수를 넘을 수 없다. 연간 사용 횟수는 {@link #checkAnnualLimit}.
      * 1일 미만 규정(예: 생일 0.5일)은 오전·오후 반차로만, 오전·오후 반차는 그런 규정에서만 신청할 수 있다.
      *
      * @return 고른 규정(규정이 없는 종류면 null)

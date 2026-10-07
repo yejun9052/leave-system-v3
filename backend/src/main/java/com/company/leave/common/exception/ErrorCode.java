@@ -69,6 +69,9 @@ public enum ErrorCode {
     LEAVE_TYPE_DISABLED(HttpStatus.BAD_REQUEST, "현재 정책에서 사용할 수 없는 휴가 종류입니다."),
     LEAVE_SPECIAL_RULE_INVALID(HttpStatus.BAD_REQUEST, "경조사 규정을 올바르게 선택해 주세요."),
     LEAVE_SPECIAL_RULE_EXCEEDED(HttpStatus.BAD_REQUEST, "규정 일수를 넘겨 신청할 수 없습니다."),
+    LEAVE_SPECIAL_RULE_LIMIT(HttpStatus.BAD_REQUEST, "경조사 규정의 연간 사용 횟수를 넘겨 신청할 수 없습니다."),
+    LEAVE_SPECIAL_LIMIT_NOT_ACKNOWLEDGED(HttpStatus.BAD_REQUEST,
+            "연간 사용 횟수를 넘는 등록입니다. 확인한 뒤 다시 등록해 주세요."),
 
     // 캘린더
     CALENDAR_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "캘린더 일정을 찾을 수 없습니다."),

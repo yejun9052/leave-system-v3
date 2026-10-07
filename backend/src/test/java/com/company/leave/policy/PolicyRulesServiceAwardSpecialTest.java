@@ -167,6 +167,22 @@ class PolicyRulesServiceAwardSpecialTest {
         }
 
         @Test
+        void 정렬순서를_보내지_않고_고치면_지금_순서를_그대로_두고_연간_횟수를_바꾼다() {
+            SpecialLeaveRule rule = new SpecialLeaveRule("생일", new BigDecimal("0.5"), "CONDOLENCE", 7);
+            when(specials.findById(9L)).thenReturn(Optional.of(rule));
+
+            PolicyRuleDtos.SpecialRule updated = service.updateSpecial(9L,
+                    new PolicyRuleDtos.SpecialRuleRequest("생일", new BigDecimal("0.5"), "CONDOLENCE", null, 1));
+
+            assertThat(updated.sortOrder()).isEqualTo(7);
+            assertThat(updated.annualLimit()).isEqualTo(1);
+
+            PolicyRuleDtos.SpecialRule cleared = service.updateSpecial(9L,
+                    new PolicyRuleDtos.SpecialRuleRequest("생일", new BigDecimal("0.5"), "CONDOLENCE", null, null));
+            assertThat(cleared.annualLimit()).as("비우면 제한 없음").isNull();
+        }
+
+        @Test
         void 없는_규정은_고칠_수_없다() {
             when(specials.findById(99L)).thenReturn(Optional.empty());
 

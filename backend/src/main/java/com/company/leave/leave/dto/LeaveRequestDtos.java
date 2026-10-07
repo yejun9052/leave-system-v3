@@ -61,11 +61,18 @@ public final class LeaveRequestDtos {
             @Size(max = 500) String reason,
             @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
             Long specialRuleId,
-            HalfDayPart halfDayPart) {
+            HalfDayPart halfDayPart,
+            /** 경조사 규정의 연간 사용 횟수를 넘는 등록임을 확인했는지(넘을 때 필수) */
+            Boolean limitAcknowledged) {
 
         public Register(Long employeeId, Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
                         Integer hours, Long specialRuleId) {
-            this(employeeId, leaveTypeId, startDate, endDate, reason, hours, specialRuleId, null);
+            this(employeeId, leaveTypeId, startDate, endDate, reason, hours, specialRuleId, null, null);
+        }
+
+        public Register(Long employeeId, Long leaveTypeId, LocalDate startDate, LocalDate endDate, String reason,
+                        Integer hours, Long specialRuleId, HalfDayPart halfDayPart) {
+            this(employeeId, leaveTypeId, startDate, endDate, reason, hours, specialRuleId, halfDayPart, null);
         }
     }
 

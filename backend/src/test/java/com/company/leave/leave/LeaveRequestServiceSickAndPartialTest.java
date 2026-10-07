@@ -475,10 +475,71 @@ class LeaveRequestServiceSickAndPartialTest {
         private final SpecialLeaveRule 본인_결혼 = 규정(1L, "본인 결혼", "5.0");
         private final SpecialLeaveRule 자녀_결혼 = 규정(2L, "자녀 결혼", "1.0");
         private final SpecialLeaveRule 생일 = 규정(3L, "생일", "0.5");
+        /** 연 1회만 쓸 수 있는 생일 반차 규정 */
+        private final SpecialLeaveRule 생일_연1회 = 규정(4L, "생일 반차", "0.5", 1);
+        private static final LocalDate JAN_1 = LocalDate.of(2027, 1, 1);
+        private static final LocalDate DEC_31 = LocalDate.of(2027, 12, 31);
 
         @BeforeEach
         void 규정_연결() {
-            lenient().when(leaveTypeService.specialRulesOf(경조사)).thenReturn(List.of(본인_결혼, 자녀_결혼, 생일));
+            lenient().when(leaveTypeService.specialRulesOf(경조사))
+                    .thenReturn(List.of(본인_결혼, 자녀_결혼, 생일, 생일_연1회));
+        }
+
+        @Test
+        void 연간_사용_횟수를_채운_규정은_신청과_미리보기에서_막는다() {
+            when(requestRepository.countSpecialRuleUses(eq(EMP), eq(4L), any(), eq(JAN_1), eq(DEC_31))).thenReturn(1L);
+
+            assertThatThrownBy(() -> service.create(EMP, new LeaveRequestDtos.Create(경조사.getId(), TUE, TUE, "생일",
+                    null, null, 4L, HalfDayPart.AM)))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_LIMIT);
+                        assertThat(ex.getMessage()).contains("1년(1~12월)에 1회까지").contains("2027년에 이미 1회");
+                    });
+            LeaveRequestDtos.Eligibility preview = service.eligibility(EMP, 경조사.getId(), TUE, TUE, null, 4L,
+                    HalfDayPart.AM);
+            assertThat(preview.allowed()).isFalse();
+            assertThat(preview.reason()).contains("1회까지");
+            assertThat(saved).isEmpty();
+        }
+
+        @Test
+        void 연간_사용_횟수는_그해_1월부터_12월에_시작한_대기_승인_취소_요청_중인_신청을_센다() {
+            service.create(EMP, new LeaveRequestDtos.Create(경조사.getId(), TUE, TUE, "생일", null, null, 4L,
+                    HalfDayPart.AM));
+
+            @SuppressWarnings("unchecked")
+            org.mockito.ArgumentCaptor<java.util.Collection<LeaveRequestStatus>> statuses =
+                    org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+            verify(requestRepository).countSpecialRuleUses(eq(EMP), eq(4L), statuses.capture(), eq(JAN_1), eq(DEC_31));
+            assertThat(statuses.getValue()).containsExactlyInAnyOrder(
+                    LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED);
+            assertThat(saved).hasSize(1);
+        }
+
+        @Test
+        void 인사관리자_직접_등록은_횟수를_넘어도_막지_않고_경고를_확인한_뒤에만_등록한다() {
+            when(requestRepository.countSpecialRuleUses(eq(EMP), eq(4L), any(), eq(JAN_1), eq(DEC_31))).thenReturn(1L);
+
+            assertThatThrownBy(() -> service.register(ADMIN, new LeaveRequestDtos.Register(EMP, 경조사.getId(), TUE, TUE,
+                    "생일", null, 4L, HalfDayPart.PM, null)))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_LIMIT_NOT_ACKNOWLEDGED);
+                        assertThat(ex.getMessage()).contains("홍길동님은 2027년에 이미 1회 신청했습니다");
+                    });
+            assertThat(saved).isEmpty();
+
+            service.register(ADMIN, new LeaveRequestDtos.Register(EMP, 경조사.getId(), TUE, TUE, "생일", null, 4L,
+                    HalfDayPart.PM, true));
+            assertThat(saved.values()).singleElement()
+                    .satisfies(r -> assertThat(r.getSpecialRuleId()).isEqualTo(4L));
+        }
+
+        @Test
+        void 횟수_제한이_없는_규정은_사용_횟수를_세지_않는다() {
+            경조사_신청(TUE, TUE, 자녀_결혼.getId());
+
+            verify(requestRepository, never()).countSpecialRuleUses(any(), any(), any(), any(), any());
         }
 
         @Test
@@ -669,7 +730,11 @@ class LeaveRequestServiceSickAndPartialTest {
         }
 
         private static SpecialLeaveRule 규정(long id, String name, String days) {
-            SpecialLeaveRule rule = new SpecialLeaveRule(name, new BigDecimal(days), "CONDOLENCE", (int) id);
+            return 규정(id, name, days, null);
+        }
+
+        private static SpecialLeaveRule 규정(long id, String name, String days, Integer annualLimit) {
+            SpecialLeaveRule rule = new SpecialLeaveRule(name, new BigDecimal(days), "CONDOLENCE", (int) id, annualLimit);
             ReflectionTestUtils.setField(rule, "id", id);
             return rule;
         }

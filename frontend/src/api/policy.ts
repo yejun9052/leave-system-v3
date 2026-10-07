@@ -48,6 +48,8 @@ export interface SpecialRule {
   days: number;
   leaveTypeCode: string | null;
   sortOrder: number;
+  /** 연간 사용 횟수(1~12월, 휴가 시작일 기준). null 이면 제한 없음. 예: 생일 반차 1회 */
+  annualLimit: number | null;
 }
 export interface Blackout {
   id: number;
