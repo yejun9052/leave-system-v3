@@ -155,6 +155,34 @@ class LeaveReportServiceTest {
     }
 
     @Test
+    void 칸_색과_열_너비_행_높이는_받은_양식과_같다() throws IOException {
+        Employee 김하늘 = employee(1L, "김하늘", null);
+        기간(김하늘, balance(1L, "15", "0"));
+        공휴일();
+        승인(request(김하늘, 연차, LocalDate.of(2024, 6, 3), LocalDate.of(2024, 6, 3), "1", "1"));
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        int row = HEADER_ROW + 1;
+        assertThat(채움(sheet, HEADER_ROW, C)).isEqualTo("FF6FA8DC");
+        assertThat(채움(sheet, HEADER_ROW, FIRST_DAY_COL)).isEqualTo("FF6FA8DC");
+        assertThat(채움(sheet, row, C)).isEqualTo("FFFFFFFF");           // 번호
+        assertThat(채움(sheet, row, C + 3)).isEqualTo("FFEAD1DC");       // 사용
+        assertThat(채움(sheet, row, C + 8)).isEqualTo("FF00FFFF");       // 남은 연차
+        assertThat(채움(sheet, row, C + 9)).isEqualTo("FFF3F3F3");       // 사용 기간
+        assertThat(채움(sheet, row, FIRST_DAY_COL)).isEqualTo("FFCFE2F3");     // 사용일(날짜)
+        assertThat(채움(sheet, row, FIRST_DAY_COL + 1)).isEqualTo("FFCFE2F3"); // 사용일(빈칸)
+        assertThat(sheet.getColumnWidth(0)).isEqualTo(Math.round(7.25f * 256));
+        assertThat(sheet.getColumnWidth(C)).isEqualTo(14 * 256);
+        assertThat(sheet.getColumnWidth(C + 9)).isEqualTo(Math.round(20.75f * 256));
+        assertThat(sheet.getColumnWidth(FIRST_DAY_COL)).isEqualTo(Math.round(14.5f * 256));
+        assertThat(sheet.getColumnWidth(FIRST_DAY_COL + 40)).isEqualTo(Math.round(12.63f * 256));
+        assertThat(sheet.getColumnWidth(C + 2)).as("팀 칸은 양식보다 좁지 않다")
+                .isGreaterThanOrEqualTo(Math.round(7.88f * 256));
+        assertThat(sheet.getDefaultRowHeightInPoints()).isEqualTo(15.75f);
+    }
+
+    @Test
     void 머리줄은_양식_순서이고_사용일은_번호를_붙인_50칸이다() throws IOException {
         when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
 
@@ -338,6 +366,11 @@ class LeaveReportServiceTest {
 
     private static String 글자(Sheet sheet, int row, int col) {
         return sheet.getRow(row).getCell(col).getStringCellValue();
+    }
+
+    /** 칸 채우기 색(ARGB). */
+    private static String 채움(Sheet sheet, int row, int col) {
+        return ((XSSFCellStyle) sheet.getRow(row).getCell(col).getCellStyle()).getFillForegroundColorColor().getARGBHex();
     }
 
     private static String 칸(Sheet sheet, int row, int col) {

@@ -81,6 +81,19 @@ public class LeaveReportService {
     private static final int HEADER_ROW = 6;
     /** 안내 문구를 합치는 범위: B~J열 */
     private static final int NOTICE_LAST_COL = FIRST_COL + 8;
+
+    /** 받은 양식의 열 너비(글자 수): A 여백, B 번호 … K 사용 기간, L~U 사용일 앞 10칸. 그 뒤는 기본 너비 */
+    private static final double[] TEMPLATE_WIDTHS = {7.25, 14.0, 14.13, 7.88, 9.0, 10.38, 10.38, 8.63, 10.25, 11.25,
+            20.75, 14.5, 15.0, 15.0, 13.25, 12.63, 12.63, 13.75, 13.75, 13.75, 13.75};
+    private static final double TEMPLATE_DEFAULT_WIDTH = 12.63;
+    /** 받은 양식의 색 */
+    private static final int PINK_BAR = 0xF4CCCC;
+    private static final int HEADER_BLUE = 0x6FA8DC;
+    private static final int WHITE = 0xFFFFFF;
+    private static final int USED_PINK = 0xEAD1DC;
+    private static final int REMAINING_CYAN = 0x00FFFF;
+    private static final int PERIOD_GRAY = 0xF3F3F3;
+    private static final int DAY_BLUE = 0xCFE2F3;
     private static final DateTimeFormatter PERIOD_FORMAT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     private static final String PATH_SEPARATOR = " › ";
 
@@ -131,8 +144,10 @@ public class LeaveReportService {
                 styled(header.createCell(FIRST_COL + i), styles.header)
                         .setCellValue(i < HEADERS.length ? HEADERS[i] : "");
             }
-            sheet.addMergedRegion(new CellRangeAddress(HEADER_ROW, HEADER_ROW,
-                    FIRST_DAY_COL, FIRST_DAY_COL + dayColumns - 1));
+            CellRangeAddress dayHeader = new CellRangeAddress(HEADER_ROW, HEADER_ROW,
+                    FIRST_DAY_COL, FIRST_DAY_COL + dayColumns - 1);
+            sheet.addMergedRegion(dayHeader);
+            outline(dayHeader, sheet);
 
             int r = HEADER_ROW + 1;
             int groupStart = r;
@@ -149,43 +164,37 @@ public class LeaveReportService {
                     groupTeam = team;
                 }
 
+                // 칸 색은 받은 양식대로: 사용 분홍, 남은 연차 하늘, 사용 기간 회색, 사용일 연파랑, 나머지 흰색
                 Row row = sheet.createRow(r++);
-                styled(row.createCell(FIRST_COL), styles.center).setCellValue(n + 1);
-                styled(row.createCell(FIRST_COL + 1), styles.center).setCellValue(e.getName());
+                styled(row.createCell(FIRST_COL), styles.cell).setCellValue(n + 1);
+                styled(row.createCell(FIRST_COL + 1), styles.cell).setCellValue(e.getName());
                 styled(row.createCell(TEAM_COL), styles.team).setCellValue(team);
-                styled(row.createCell(FIRST_COL + 3), styles.number).setCellValue(
+                styled(row.createCell(FIRST_COL + 3), styles.used).setCellValue(
                         days.stream().map(UsedDay::days).reduce(BigDecimal.ZERO, BigDecimal::add).doubleValue());
-                Cell hire = styled(row.createCell(FIRST_COL + 4), styles.date);
+                Cell hire = styled(row.createCell(FIRST_COL + 4), styles.hireDate);
                 if (e.getHireDate() != null) {
                     hire.setCellValue(e.getHireDate());
                 }
-                styled(row.createCell(FIRST_COL + 5), styles.number).setCellValue(b.getGranted().doubleValue());
-                styled(row.createCell(FIRST_COL + 6), styles.number); // 추가일: 아직 정하지 않아 빈칸
-                styled(row.createCell(FIRST_COL + 7), styles.number).setCellValue(b.getGranted().doubleValue());
-                styled(row.createCell(FIRST_COL + 8), styles.number).setCellValue(b.remaining().doubleValue());
-                styled(row.createCell(FIRST_COL + 9), styles.center).setCellValue(
+                styled(row.createCell(FIRST_COL + 5), styles.cell).setCellValue(b.getGranted().doubleValue());
+                styled(row.createCell(FIRST_COL + 6), styles.cell); // 추가일: 아직 정하지 않아 빈칸
+                styled(row.createCell(FIRST_COL + 7), styles.cell).setCellValue(b.getGranted().doubleValue());
+                styled(row.createCell(FIRST_COL + 8), styles.remaining).setCellValue(b.remaining().doubleValue());
+                styled(row.createCell(FIRST_COL + 9), styles.period).setCellValue(
                         pb.period().start().format(PERIOD_FORMAT) + " ~ " + pb.period().end().format(PERIOD_FORMAT));
                 for (int i = 0; i < dayColumns; i++) {
                     Cell cell = row.createCell(FIRST_DAY_COL + i);
                     if (i >= days.size()) {
-                        styled(cell, styles.center);
+                        styled(cell, styles.day);
                     } else if (days.get(i).mark() == null) {
-                        styled(cell, styles.date).setCellValue(days.get(i).date());
+                        styled(cell, styles.dayDate).setCellValue(days.get(i).date());
                     } else {
-                        styled(cell, styles.center).setCellValue(days.get(i).date() + days.get(i).mark());
+                        styled(cell, styles.day).setCellValue(days.get(i).date() + days.get(i).mark());
                     }
                 }
             }
             mergeTeam(sheet, groupStart, r - 1);
-
-            sheet.setColumnWidth(0, 2 * 256);
-            int[] widths = {6, 12, 30, 7, 12, 7, 7, 9, 9, 24};
-            for (int i = 0; i < widths.length; i++) {
-                sheet.setColumnWidth(FIRST_COL + i, widths[i] * 256);
-            }
-            for (int i = 0; i < dayColumns; i++) {
-                sheet.setColumnWidth(FIRST_DAY_COL + i, 15 * 256);
-            }
+            applyTemplateSize(sheet, dayColumns, rows.stream()
+                    .map(pb -> departmentPath(pb.employee().getDepartment())).toList());
             wb.write(out);
             return out.toByteArray();
         } catch (IOException ex) {
@@ -259,10 +268,7 @@ public class LeaveReportService {
         }
         CellRangeAddress pinkRange = new CellRangeAddress(NOTICE_ROW + 1, NOTICE_ROW + 1, FIRST_COL, NOTICE_LAST_COL);
         sheet.addMergedRegion(pinkRange);
-        RegionUtil.setBorderTop(BorderStyle.THIN, pinkRange, sheet);
-        RegionUtil.setBorderBottom(BorderStyle.THIN, pinkRange, sheet);
-        RegionUtil.setBorderLeft(BorderStyle.THIN, pinkRange, sheet);
-        RegionUtil.setBorderRight(BorderStyle.THIN, pinkRange, sheet);
+        outline(pinkRange, sheet);
 
         sheet.createRow(NOTICE_ROW + 2).createCell(FIRST_COL).setCellValue(NOTE_AWARD);
         sheet.addMergedRegion(new CellRangeAddress(NOTICE_ROW + 2, NOTICE_ROW + 2, FIRST_COL, NOTICE_LAST_COL));
@@ -273,6 +279,39 @@ public class LeaveReportService {
         styled(info.createCell(FIRST_COL + 7), styles.red).setCellValue(CHECK_NEEDED);
         info.createCell(FIRST_DAY_COL).setCellValue(LEGEND_HALF);
         info.createCell(FIRST_DAY_COL + 1).setCellValue(LEGEND_HOURLY);
+    }
+
+    /** 합친 칸 바깥 테두리(가는 선). */
+    private static void outline(CellRangeAddress range, Sheet sheet) {
+        RegionUtil.setBorderTop(BorderStyle.THIN, range, sheet);
+        RegionUtil.setBorderBottom(BorderStyle.THIN, range, sheet);
+        RegionUtil.setBorderLeft(BorderStyle.THIN, range, sheet);
+        RegionUtil.setBorderRight(BorderStyle.THIN, range, sheet);
+    }
+
+    /**
+     * 받은 양식의 열 너비·행 높이(15.75). 사용일은 양식에 있는 25칸까지 양식 너비, 그 뒤는 양식 기본 너비(12.63).
+     * 팀 칸만 부서 경로가 들어가 양식(7.88)보다 넓어질 수 있다: 가장 긴 경로에 맞춘다.
+     */
+    private static void applyTemplateSize(Sheet sheet, int dayColumns, List<String> teams) {
+        sheet.setDefaultRowHeightInPoints(15.75f);
+        for (int c = 0; c < TEMPLATE_WIDTHS.length; c++) {
+            width(sheet, c, TEMPLATE_WIDTHS[c]);
+        }
+        for (int c = TEMPLATE_WIDTHS.length; c < FIRST_DAY_COL + dayColumns; c++) {
+            width(sheet, c, TEMPLATE_DEFAULT_WIDTH);
+        }
+        double team = teams.stream().mapToDouble(LeaveReportService::displayWidth).max().orElse(0) + 2;
+        width(sheet, TEAM_COL, Math.max(TEMPLATE_WIDTHS[TEAM_COL], team));
+    }
+
+    private static void width(Sheet sheet, int col, double chars) {
+        sheet.setColumnWidth(col, (int) Math.round(chars * 256));
+    }
+
+    /** 엑셀 글자 폭 어림: 한글 등 넓은 글자 2, 그 외 1. */
+    private static double displayWidth(String s) {
+        return s.codePoints().mapToDouble(cp -> cp > 0x2E80 ? 2 : 1).sum();
     }
 
     /** 같은 부서가 두 줄 이상이면 팀 칸을 세로로 합친다. */
@@ -330,7 +369,10 @@ public class LeaveReportService {
         return cell;
     }
 
-    /** 칸 서식: 기본 글꼴 Arial 10(받은 양식과 같음), 표는 테두리·가운데 정렬, 날짜 yyyy-mm-dd. */
+    /**
+     * 칸 서식: 받은 양식과 같은 글꼴(Arial 10)·색. 머리줄 파랑, 표 칸은 흰색에 가는 테두리·가운데 정렬,
+     * 사용 분홍, 남은 연차 하늘, 사용 기간 회색, 사용일 연파랑.
+     */
     private static final class Styles {
         final CellStyle notice;
         final CellStyle pinkBar;
@@ -338,39 +380,52 @@ public class LeaveReportService {
         final CellStyle red;
         final CellStyle dayNumber;
         final CellStyle header;
-        final CellStyle center;
+        final CellStyle cell;
         final CellStyle team;
-        final CellStyle number;
-        final CellStyle date;
+        final CellStyle hireDate;
+        final CellStyle used;
+        final CellStyle remaining;
+        final CellStyle period;
+        final CellStyle day;
+        final CellStyle dayDate;
 
         Styles(Workbook wb) {
             Font base = wb.getFontAt(0);
             base.setFontName("Arial");
             base.setFontHeightInPoints((short) 10);
-            Font bold = font(wb, true, 10, null);
             Font big = font(wb, true, 14, null);
             Font redFont = font(wb, false, 10, IndexedColors.RED);
+            short isoDate = wb.createDataFormat().getFormat("yyyy-mm-dd");
 
             notice = wb.createCellStyle();
             notice.setFont(big);
-            pinkBar = wb.createCellStyle();
-            ((XSSFCellStyle) pinkBar).setFillForegroundColor(
-                    new XSSFColor(new byte[] {(byte) 0xF4, (byte) 0xCC, (byte) 0xCC}, null));
-            pinkBar.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            pinkBar = filled(wb.createCellStyle(), PINK_BAR);
             plainDate = wb.createCellStyle();
-            plainDate.setDataFormat(wb.createDataFormat().getFormat("yyyy-mm-dd"));
+            plainDate.setDataFormat(isoDate);
             red = wb.createCellStyle();
             red.setFont(redFont);
             dayNumber = wb.createCellStyle();
             dayNumber.setAlignment(HorizontalAlignment.CENTER);
-            header = bordered(wb);
-            header.setFont(bold);
-            center = bordered(wb);
-            team = bordered(wb);
+
+            header = filled(bordered(wb), HEADER_BLUE);
+            cell = filled(bordered(wb), WHITE);
+            team = filled(bordered(wb), WHITE);
             team.setWrapText(true);
-            number = bordered(wb);
-            date = bordered(wb);
-            date.setDataFormat(wb.createDataFormat().getFormat("yyyy-mm-dd"));
+            hireDate = filled(bordered(wb), WHITE);
+            hireDate.setDataFormat(wb.createDataFormat().getFormat("yyyy.mm.dd"));
+            used = filled(bordered(wb), USED_PINK);
+            remaining = filled(bordered(wb), REMAINING_CYAN);
+            period = filled(bordered(wb), PERIOD_GRAY);
+            day = filled(bordered(wb), DAY_BLUE);
+            dayDate = filled(bordered(wb), DAY_BLUE);
+            dayDate.setDataFormat(isoDate);
+        }
+
+        private static CellStyle filled(CellStyle s, int rgb) {
+            ((XSSFCellStyle) s).setFillForegroundColor(new XSSFColor(
+                    new byte[] {(byte) (rgb >> 16), (byte) (rgb >> 8), (byte) rgb}, null));
+            s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            return s;
         }
 
         private static Font font(Workbook wb, boolean bold, int points, IndexedColors color) {
