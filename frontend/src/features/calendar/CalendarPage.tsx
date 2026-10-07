@@ -13,6 +13,7 @@ import {
   type EventScopeOption,
 } from "@/api/calendar";
 import { departmentApi } from "@/api/departments";
+import { leaveApi } from "@/api/leave";
 import { policyRulesApi } from "@/api/policy";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,9 @@ type ViewScope = "ALL" | "SCHEDULE" | "DEPARTMENT" | "PERSONAL";
 
 /** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
 const HOLIDAY_COLOR = "#ef4444";
+
+/** 내 연차 기간 시작일·사용 기한 표시 색(휴가 종류 색과 겹치지 않게) */
+const PERIOD_COLOR = "#0f766e";
 
 /** 일정 범위 선택지의 Select 값: "COMPANY" 또는 "DEPARTMENT:3" */
 function scopeKey(scope: string, departmentId: number | null | undefined): string {
@@ -121,6 +125,24 @@ export default function CalendarPage() {
     () => events.filter((e) => inView(e, view, me ? { id: me.id, departmentId: me.departmentId } : null)),
     [events, view, me],
   );
+
+  // 내 연차 기간의 시작일과 사용 기한(마지막 날). 본인 것만, "전체"·"개인" 탭에서 보인다
+  const { data: myBalance } = useQuery({
+    queryKey: ["myBalance"],
+    queryFn: () => leaveApi.myBalance(),
+    enabled: !!me,
+  });
+  const periodMarks = useMemo(
+    () =>
+      myBalance
+        ? [
+            { id: "P-start", date: myBalance.periodStart, title: "내 연차 기간 시작" },
+            { id: "P-end", date: myBalance.periodEnd, title: "내 연차 사용 기한" },
+          ]
+        : [],
+    [myBalance],
+  );
+  const showPeriod = view === "ALL" || view === "PERSONAL";
 
   // 신청 시작일 검사용 공휴일(보이는 달 범위만 불러오지만, 누를 수 있는 날짜도 그 범위 안이다)
   const holidays = useMemo(
@@ -276,6 +298,19 @@ export default function CalendarPage() {
       editable: false,
     });
   }
+  if (showPeriod) {
+    for (const p of periodMarks) {
+      calendarEvents.push({
+        id: p.id,
+        title: p.title,
+        start: p.date,
+        allDay: true,
+        backgroundColor: PERIOD_COLOR,
+        borderColor: PERIOD_COLOR,
+        editable: false,
+      });
+    }
+  }
   if (selection) {
     // 신청할 기간을 배경색으로 강조(배경 이벤트는 날짜 클릭을 막지 않는다)
     calendarEvents.push({
@@ -317,14 +352,16 @@ export default function CalendarPage() {
       add(e.start, e.allDay ? addDays(e.end, -1) : e.end, { kind, title: e.title });
     }
     for (const b of blackouts) add(b.startDate, b.endDate, { kind: "BLACKOUT", title: `연차 제한 · ${b.name}` });
-    const order: DayMark["kind"][] = ["HOLIDAY", "BLACKOUT", "LEAVE", "EVENT"];
+    for (const p of periodMarks) add(p.date, p.date, { kind: "PERIOD", title: p.title });
+    const order: DayMark["kind"][] = ["HOLIDAY", "BLACKOUT", "PERIOD", "LEAVE", "EVENT"];
     for (const list of map.values()) list.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
     return map;
-  }, [isMobile, viewMonth, events, blackouts, query]);
+  }, [isMobile, viewMonth, events, blackouts, periodMarks, query]);
 
   const focusedBlackouts = blackouts
     .filter((b) => b.startDate <= focused && b.endDate >= focused)
     .map((b) => b.name);
+  const focusedPeriodMarks = periodMarks.filter((p) => p.date === focused).map((p) => p.title);
 
   /** 모바일 요약 카드 탭: 수정할 수 있는 회사 일정은 데스크톱처럼 수정 창, 그 밖은 그날 상세 */
   const onOpenSummaryItem = (eventId: string | null) => {
@@ -391,6 +428,7 @@ export default function CalendarPage() {
             canApply={canApply}
             query={query}
             blackoutNames={focusedBlackouts}
+            periodNames={focusedPeriodMarks}
             onApply={applyFrom}
             onOpenItem={onOpenSummaryItem}
           />

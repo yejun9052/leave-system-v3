@@ -6,13 +6,14 @@ import { monthGridDates, shiftMonth, todayString, weekdayLabel } from "./useDate
 
 /** 칸 아래 점·읽어 주기용 일정 표시. 점 색: 공휴일·연차 제한 빨강, 휴가 primary, 회사 일정 주황 */
 export interface DayMark {
-  kind: "HOLIDAY" | "BLACKOUT" | "LEAVE" | "EVENT";
+  kind: "HOLIDAY" | "BLACKOUT" | "PERIOD" | "LEAVE" | "EVENT";
   title: string;
 }
 
 const DOT_CLASS: Record<DayMark["kind"], string> = {
   HOLIDAY: "bg-red-500",
   BLACKOUT: "bg-red-500",
+  PERIOD: "bg-teal-700",
   LEAVE: "bg-primary",
   EVENT: "bg-orange-500",
 };

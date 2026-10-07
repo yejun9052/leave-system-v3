@@ -29,6 +29,7 @@ export default function MobileDaySummary({
   canApply,
   query,
   blackoutNames,
+  periodNames,
   onApply,
   onOpenItem,
 }: {
@@ -37,6 +38,8 @@ export default function MobileDaySummary({
   query: string;
   /** 그날 걸린 블랙아웃(연차 사용 제한) 이름 */
   blackoutNames: string[];
+  /** 그날이 내 연차 기간 시작일·사용 기한이면 그 표시 */
+  periodNames: string[];
   onApply: (date: string) => void;
   /** 카드 탭: 회사 일정이면 eventId, 그 밖은 null(그날 상세) */
   onOpenItem: (eventId: string | null) => void;
@@ -54,6 +57,9 @@ export default function MobileDaySummary({
   }
   blackoutNames.forEach((name, i) =>
     items.push({ key: `blackout-${i}`, dot: "bg-red-500", title: `연차 제한 · ${name}`, eventId: null }),
+  );
+  periodNames.forEach((name, i) =>
+    items.push({ key: `period-${i}`, dot: "bg-teal-700", title: name, eventId: null }),
   );
   for (const l of data?.leaves ?? []) {
     if (q && !l.employeeName.includes(q)) continue;
