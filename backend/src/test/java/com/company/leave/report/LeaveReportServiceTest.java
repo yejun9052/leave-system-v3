@@ -15,6 +15,7 @@ import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
+import com.company.leave.leave.domain.HalfDayPart;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveType;
@@ -115,7 +116,8 @@ class LeaveReportServiceTest {
 
         assertThat(sheet.getRow(0)).isNull();
         for (int r = 1; r <= sheet.getLastRowNum(); r++) {
-            assertThat(값(sheet.getRow(r).getCell(0))).as("%d행 A열", r + 1).isEmpty();
+            Row row = sheet.getRow(r);
+            assertThat(row == null ? "" : 값(row.getCell(0))).as("%d행 A열", r + 1).isEmpty();
         }
         assertThat(sheet.getRow(1).getFirstCellNum()).isEqualTo((short) C);
         assertThat(칸(sheet, HEADER_ROW + 1, C + 1)).isEqualTo("김하늘");
@@ -194,7 +196,7 @@ class LeaveReportServiceTest {
         assertThat(칸(sheet, NUMBER_ROW, FIRST_DAY_COL + 49)).isEqualTo("50.0");
         assertThat(sheet.getMergedRegions()).contains(
                 new CellRangeAddress(HEADER_ROW, HEADER_ROW, FIRST_DAY_COL, FIRST_DAY_COL + 49));
-        assertThat(sheet.getLastRowNum()).isEqualTo(HEADER_ROW);
+        assertThat(이름들(sheet)).isEmpty();
     }
 
     @Test
@@ -280,11 +282,7 @@ class LeaveReportServiceTest {
         Sheet sheet = 시트(service.exportUsage(2024));
 
         int first = HEADER_ROW + 1;
-        List<String> names = new ArrayList<>();
-        for (int r = first; r <= sheet.getLastRowNum(); r++) {
-            names.add(칸(sheet, r, C + 1));
-        }
-        assertThat(names).containsExactly("대표", "가온", "나래", "하윤", "무소속");
+        assertThat(이름들(sheet)).containsExactly("대표", "가온", "나래", "하윤", "무소속");
         assertThat(칸(sheet, first, C + 2)).isEqualTo("MLsoft");
         assertThat(칸(sheet, first + 1, C + 2)).isEqualTo("MLsoft › 연구소 › 개발팀");
         assertThat(칸(sheet, first + 3, C + 2)).isEqualTo("MLsoft › 연구소 › 기획팀");
@@ -320,11 +318,7 @@ class LeaveReportServiceTest {
 
         Sheet sheet = 시트(service.exportUsage(2024));
 
-        List<String> names = new ArrayList<>();
-        for (int r = HEADER_ROW + 1; r <= sheet.getLastRowNum(); r++) {
-            names.add(칸(sheet, r, C + 1));
-        }
-        assertThat(names).containsExactly("다온", "라온", "가람", "나비", "고참");
+        assertThat(이름들(sheet)).containsExactly("다온", "라온", "가람", "나비", "고참");
     }
 
     @Test
@@ -348,6 +342,52 @@ class LeaveReportServiceTest {
         Sheet sheet = 시트(service.exportUsage(2024, List.of(1L), List.of(3L)));
 
         assertThat(이름들(sheet)).containsExactly("소장", "기획");
+    }
+
+    @Test
+    void 연차_현황표_아래_세_줄을_띄우고_그해_승인된_경조사_규정_휴가를_고른_대상만_시작일_순으로_쓴다() throws IOException {
+        Department 개발팀 = department(1L, "개발팀", null, 0);
+        Employee 가온 = employee(1L, "가온", 개발팀);
+        Employee 다른팀 = employee(2L, "다른팀", null);
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of(
+                new LeaveBalanceService.PeriodBalance(가온, Y2024, balance(1L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(다른팀, Y2024, balance(2L, "15", "0"))));
+        공휴일();
+        LeaveRequest 생일 = request(가온, 경조사, LocalDate.of(2024, 5, 8), LocalDate.of(2024, 5, 8), "0.5", "0");
+        생일.attachSpecialRule(9L, "생일", new BigDecimal("0.5"));
+        생일.markHalfDay(HalfDayPart.AM);
+        LeaveRequest 결혼 = request(가온, 경조사, LocalDate.of(2024, 3, 4), LocalDate.of(2024, 3, 8), "5", "0");
+        결혼.attachSpecialRule(1L, "본인 결혼", new BigDecimal("5"));
+        LeaveRequest 작년_생일 = request(가온, 경조사, LocalDate.of(2023, 12, 29), LocalDate.of(2023, 12, 29), "0.5", "0");
+        작년_생일.attachSpecialRule(9L, "생일", new BigDecimal("0.5"));
+        LeaveRequest 다른팀_결혼 = request(다른팀, 경조사, LocalDate.of(2024, 6, 3), LocalDate.of(2024, 6, 7), "5", "0");
+        다른팀_결혼.attachSpecialRule(1L, "본인 결혼", new BigDecimal("5"));
+        승인(생일, 결혼, 작년_생일, 다른팀_결혼,
+                request(가온, 연차, LocalDate.of(2024, 7, 1), LocalDate.of(2024, 7, 1), "1", "1"));
+
+        Sheet sheet = 시트(service.exportUsage(2024, List.of(1L), List.of()));
+
+        int title = 경조사_제목_줄(sheet);
+        int lastEmployeeRow = HEADER_ROW + 이름들(sheet).size();
+        assertThat(title).as("빈 줄 3개 뒤 제목").isEqualTo(lastEmployeeRow + 4);
+        assertThat(칸들(sheet.getRow(title + 1)).subList(C, C + 10)).containsExactly(
+                "번호", "이름", "부서", "경조사 규정", "", "", "사용일", "", "", "일수");
+        assertThat(칸들(sheet.getRow(title + 2)).subList(C, C + 10)).containsExactly(
+                "1.0", "가온", "개발팀", "본인 결혼", "", "", "2024-03-04 ~ 2024-03-08", "", "", "5.0");
+        assertThat(칸들(sheet.getRow(title + 3)).subList(C, C + 10)).containsExactly(
+                "2.0", "가온", "개발팀", "생일 · 오전 반차", "", "", "2024-05-08", "", "", "0.5");
+        assertThat(sheet.getRow(title + 4)).as("작년에 시작한 휴가·고르지 않은 직원·연차는 없음").isNull();
+    }
+
+    @Test
+    void 경조사_휴가가_없으면_없다고_한_줄_쓴다() throws IOException {
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        int title = 경조사_제목_줄(sheet);
+        assertThat(title).isPositive();
+        assertThat(칸(sheet, title + 2, C)).isEqualTo("해당 연도에 승인된 경조사 휴가가 없습니다.");
     }
 
     @Test
@@ -438,13 +478,24 @@ class LeaveReportServiceTest {
         return sheet.getRow(row).getCell(col).getStringCellValue();
     }
 
-    /** 직원 줄의 이름(위에서부터). */
+    /** 직원 줄의 이름(위에서부터). 연차 현황표 아래 빈 줄에서 멈춘다(그 아래는 경조사 표). */
     private static List<String> 이름들(Sheet sheet) {
         List<String> names = new ArrayList<>();
-        for (int r = HEADER_ROW + 1; r <= sheet.getLastRowNum(); r++) {
+        for (int r = HEADER_ROW + 1; sheet.getRow(r) != null; r++) {
             names.add(칸(sheet, r, C + 1));
         }
         return names;
+    }
+
+    /** 경조사 표 제목 줄 번호(없으면 -1). */
+    private static int 경조사_제목_줄(Sheet sheet) {
+        for (int r = HEADER_ROW + 1; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row != null && "경조사 사용 내역".equals(값(row.getCell(C)))) {
+                return r;
+            }
+        }
+        return -1;
     }
 
     /** 칸 채우기 색(ARGB). */

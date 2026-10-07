@@ -10,6 +10,7 @@ import com.company.leave.leave.LeaveBalanceService;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
+import com.company.leave.leave.domain.HalfDayPart;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.repository.LeaveRequestRepository;
@@ -53,6 +54,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>사용일: 연차처럼 차감하는 종류(연차·반차·시간차 등)의 승인된 휴가만. 경조사·병가·공가, 결재 대기·취소 요청 중은 넣지 않는다</li>
  *   <li>종일은 날짜, 반차는 "날짜(*)", 시간차는 "날짜(2h)". 여러 날 휴가는 주말·공휴일을 뺀 날마다 한 칸</li>
  *   <li>사용 = 사용일 칸 합계, 연차 = 부여, 추가일은 아직 정하지 않아 빈칸, 남은 연차 = 시스템 잔여(이월·소멸 반영)</li>
+ *   <li>아래에 "경조사 사용 내역": 그해에 시작한 승인된 경조사 규정 휴가(생일 반차 포함)</li>
  * </ul>
  */
 @Service
@@ -71,6 +73,10 @@ public class LeaveReportService {
     static final String LEGEND_HALF = "반차 : (*)";
     static final String LEGEND_HOURLY = "시간차 : (2h)";
     static final String NO_DEPARTMENT = "부서 없음";
+    static final String CONDOLENCE_TITLE = "경조사 사용 내역";
+    static final String CONDOLENCE_NONE = "해당 연도에 승인된 경조사 휴가가 없습니다.";
+    /** 연차 현황표 마지막 줄 바로 다음 줄부터 빈 줄 3개를 두고 경조사 표 제목 */
+    private static final int CONDOLENCE_GAP = 3;
 
     /** 받은 양식처럼 A열과 1행은 비워 두고 B2 부터 쓴다. */
     private static final int FIRST_COL = 1;
@@ -209,6 +215,7 @@ public class LeaveReportService {
                 }
             }
             mergeTeam(sheet, groupStart, r - 1);
+            writeCondolences(sheet, styles, r + CONDOLENCE_GAP, condolences(year, selected));
             applyTemplateSize(sheet, dayColumns, rows.stream()
                     .map(pb -> departmentPath(pb.employee().getDepartment())).toList());
             wb.write(out);
@@ -295,6 +302,69 @@ public class LeaveReportService {
         styled(info.createCell(FIRST_COL + 7), styles.red).setCellValue(CHECK_NEEDED);
         info.createCell(FIRST_DAY_COL).setCellValue(LEGEND_HALF);
         info.createCell(FIRST_DAY_COL + 1).setCellValue(LEGEND_HOURLY);
+    }
+
+    /**
+     * 경조사 사용 내역: 그해(1~12월)에 시작한 승인된 경조사 규정 휴가. 고른 대상만, 관리 전용 계정 제외.
+     * 시작일 순, 같으면 이름순.
+     */
+    private List<LeaveRequest> condolences(int year, Predicate<Employee> selected) {
+        LocalDate from = LocalDate.of(year, 1, 1);
+        LocalDate to = LocalDate.of(year, 12, 31);
+        return requestRepository.findApprovedBetween(from, to).stream()
+                .filter(r -> r.getSpecialRuleName() != null)
+                .filter(r -> !r.getStartDate().isBefore(from) && !r.getStartDate().isAfter(to))
+                .filter(r -> !r.getEmployee().isSystemAccount() && selected.test(r.getEmployee()))
+                .sorted(Comparator.comparing(LeaveRequest::getStartDate)
+                        .thenComparing(r -> r.getEmployee().getName()))
+                .toList();
+    }
+
+    /**
+     * 연차 현황표 아래의 "경조사 사용 내역" 표. 열: 번호 · 이름 · 부서 · 경조사 규정 · 사용일 · 일수.
+     * 규정과 사용일은 위 표의 좁은 열을 세 칸씩 합쳐 쓴다(위 표 너비를 바꾸지 않으려고).
+     */
+    private static void writeCondolences(Sheet sheet, Styles styles, int top, List<LeaveRequest> requests) {
+        styled(sheet.createRow(top).createCell(FIRST_COL), styles.sectionTitle).setCellValue(CONDOLENCE_TITLE);
+        Row header = sheet.createRow(top + 1);
+        String[] labels = {"번호", "이름", "부서", "경조사 규정", "", "", "사용일", "", "", "일수"};
+        for (int i = 0; i < labels.length; i++) {
+            styled(header.createCell(FIRST_COL + i), styles.header).setCellValue(labels[i]);
+        }
+        mergeCondolenceRow(sheet, top + 1);
+
+        int r = top + 2;
+        if (requests.isEmpty()) {
+            Row row = sheet.createRow(r);
+            for (int i = 0; i < labels.length; i++) {
+                styled(row.createCell(FIRST_COL + i), styles.cell);
+            }
+            row.getCell(FIRST_COL).setCellValue(CONDOLENCE_NONE);
+            sheet.addMergedRegion(new CellRangeAddress(r, r, FIRST_COL, FIRST_COL + labels.length - 1));
+            return;
+        }
+        for (int n = 0; n < requests.size(); n++, r++) {
+            LeaveRequest req = requests.get(n);
+            Row row = sheet.createRow(r);
+            for (int i = 0; i < labels.length; i++) {
+                styled(row.createCell(FIRST_COL + i), styles.cell);
+            }
+            row.getCell(FIRST_COL).setCellValue(n + 1);
+            row.getCell(FIRST_COL + 1).setCellValue(req.getEmployee().getName());
+            row.getCell(FIRST_COL + 2).setCellValue(departmentPath(req.getEmployee().getDepartment()));
+            row.getCell(FIRST_COL + 3).setCellValue(req.getSpecialRuleName()
+                    + (req.getHalfDayPart() != null ? " · " + (req.getHalfDayPart() == HalfDayPart.AM ? "오전" : "오후") + " 반차" : ""));
+            row.getCell(FIRST_COL + 6).setCellValue(req.getStartDate().equals(req.getEndDate())
+                    ? req.getStartDate().toString() : req.getStartDate() + " ~ " + req.getEndDate());
+            row.getCell(FIRST_COL + 9).setCellValue(req.getDays().doubleValue());
+            mergeCondolenceRow(sheet, r);
+        }
+    }
+
+    /** 경조사 표 한 줄: 규정(E~G), 사용일(H~J)을 세 칸씩 합친다. */
+    private static void mergeCondolenceRow(Sheet sheet, int row) {
+        sheet.addMergedRegion(new CellRangeAddress(row, row, FIRST_COL + 3, FIRST_COL + 5));
+        sheet.addMergedRegion(new CellRangeAddress(row, row, FIRST_COL + 6, FIRST_COL + 8));
     }
 
     /** 고른 부서 소속이거나 고른 사용자. 아무것도 고르지 않으면 모두. */
@@ -402,6 +472,7 @@ public class LeaveReportService {
      */
     private static final class Styles {
         final CellStyle notice;
+        final CellStyle sectionTitle;
         final CellStyle pinkBar;
         final CellStyle plainDate;
         final CellStyle red;
@@ -426,6 +497,8 @@ public class LeaveReportService {
 
             notice = wb.createCellStyle();
             notice.setFont(big);
+            sectionTitle = wb.createCellStyle();
+            sectionTitle.setFont(font(wb, true, 12, null));
             pinkBar = filled(wb.createCellStyle(), PINK_BAR);
             plainDate = wb.createCellStyle();
             plainDate.setDataFormat(isoDate);
