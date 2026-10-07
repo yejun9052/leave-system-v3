@@ -56,8 +56,10 @@ class LeaveReportServiceTest {
     /** 2024년: 1월 1일 ~ 12월 31일 기간. 3월 1일(금)은 공휴일 */
     private static final LeavePeriodCalculator.Period Y2024 =
             new LeavePeriodCalculator.Period(2024, LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31));
-    private static final int HEADER_ROW = 3;
-    private static final int FIRST_DAY_COL = 10;
+    /** A열은 비워 두고 B열부터 쓴다 */
+    private static final int C = 1;
+    private static final int HEADER_ROW = 4;
+    private static final int FIRST_DAY_COL = C + 10;
 
     @Mock private LeaveBalanceService balanceService;
     @Mock private LeaveRequestRepository requestRepository;
@@ -82,7 +84,7 @@ class LeaveReportServiceTest {
 
         verify(balanceService).balancesAsOf(TODAY, false, false);
         assertThat(sheet.getSheetName()).isEqualTo(String.valueOf(TODAY.getYear()));
-        assertThat(글자(sheet, 0, 0)).isEqualTo(TODAY.getYear() + " 연차현황 (" + TODAY + " 기준)");
+        assertThat(글자(sheet, 1, C)).isEqualTo(TODAY.getYear() + " 연차현황 (" + TODAY + " 기준)");
     }
 
     @Test
@@ -93,7 +95,24 @@ class LeaveReportServiceTest {
 
         verify(balanceService).balancesAsOf(LocalDate.of(2024, 12, 31), false, false);
         assertThat(sheet.getSheetName()).isEqualTo("2024");
-        assertThat(글자(sheet, 0, 0)).isEqualTo("2024 연차현황 (2024-12-31 기준)");
+        assertThat(글자(sheet, 1, C)).isEqualTo("2024 연차현황 (2024-12-31 기준)");
+    }
+
+    @Test
+    void 받은_양식처럼_A열과_1행은_비워_두고_B2부터_쓴다() throws IOException {
+        Employee 김하늘 = employee(1L, "김하늘", null);
+        기간(김하늘, balance(1L, "15", "0"));
+        공휴일();
+        승인();
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        assertThat(sheet.getRow(0)).isNull();
+        for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+            assertThat(값(sheet.getRow(r).getCell(0))).as("%d행 A열", r + 1).isEmpty();
+        }
+        assertThat(sheet.getRow(1).getFirstCellNum()).isEqualTo((short) C);
+        assertThat(칸(sheet, HEADER_ROW + 1, C + 1)).isEqualTo("김하늘");
     }
 
     @Test
@@ -102,8 +121,8 @@ class LeaveReportServiceTest {
 
         Sheet sheet = 시트(service.exportUsage(2024));
 
-        assertThat(글자(sheet, 1, 0)).isEqualTo("반차 : (*) · 시간차 : (시간, 예: 2h)");
-        assertThat(칸들(sheet.getRow(HEADER_ROW)).subList(0, 11)).containsExactly(
+        assertThat(글자(sheet, 2, C)).isEqualTo("반차 : (*) · 시간차 : (시간, 예: 2h)");
+        assertThat(칸들(sheet.getRow(HEADER_ROW)).subList(C, C + 11)).containsExactly(
                 "번호", "이름", "팀", "사용", "입사일", "연차", "추가일", "전체 연차", "남은 연차", "사용 기간", "사용일");
         assertThat(칸(sheet, HEADER_ROW - 1, FIRST_DAY_COL)).isEqualTo("1.0");
         assertThat(칸(sheet, HEADER_ROW - 1, FIRST_DAY_COL + 49)).isEqualTo("50.0");
@@ -128,7 +147,7 @@ class LeaveReportServiceTest {
         int row = HEADER_ROW + 1;
         assertThat(칸들(sheet.getRow(row)).subList(FIRST_DAY_COL, FIRST_DAY_COL + 5)).containsExactly(
                 "2024-02-29", "2024-03-04", "2024-05-08(*)", "2024-06-03(2h)", "");
-        assertThat(칸(sheet, row, 3)).isEqualTo("2.75");
+        assertThat(칸(sheet, row, C + 3)).isEqualTo("2.75");
     }
 
     @Test
@@ -150,8 +169,8 @@ class LeaveReportServiceTest {
 
         int row = HEADER_ROW + 1;
         assertThat(칸들(sheet.getRow(row)).subList(FIRST_DAY_COL, FIRST_DAY_COL + 2)).containsExactly("2024-04-01", "");
-        assertThat(칸(sheet, row, 3)).isEqualTo("1.0");
-        assertThat(칸(sheet, row, 9)).isEqualTo("2024.04.01 ~ 2025.03.31");
+        assertThat(칸(sheet, row, C + 3)).isEqualTo("1.0");
+        assertThat(칸(sheet, row, C + 9)).isEqualTo("2024.04.01 ~ 2025.03.31");
     }
 
     @Test
@@ -167,7 +186,7 @@ class LeaveReportServiceTest {
         Sheet sheet = 시트(service.exportUsage(2024));
 
         int row = HEADER_ROW + 1;
-        assertThat(칸들(sheet.getRow(row)).subList(0, 10)).containsExactly(
+        assertThat(칸들(sheet.getRow(row)).subList(C, C + 10)).containsExactly(
                 "1.0", "이도윤", "부서 없음", "0.0", "2021-07-05", "15.0", "", "15.0", "-1.0",
                 "2024.01.01 ~ 2024.12.31");
     }
@@ -197,17 +216,17 @@ class LeaveReportServiceTest {
         int first = HEADER_ROW + 1;
         List<String> names = new ArrayList<>();
         for (int r = first; r <= sheet.getLastRowNum(); r++) {
-            names.add(칸(sheet, r, 1));
+            names.add(칸(sheet, r, C + 1));
         }
         assertThat(names).containsExactly("대표", "가온", "나래", "하윤", "무소속");
-        assertThat(칸(sheet, first, 2)).isEqualTo("MLsoft");
-        assertThat(칸(sheet, first + 1, 2)).isEqualTo("MLsoft › 연구소 › 개발팀");
-        assertThat(칸(sheet, first + 3, 2)).isEqualTo("MLsoft › 연구소 › 기획팀");
-        assertThat(칸(sheet, first + 4, 2)).isEqualTo("부서 없음");
-        assertThat(칸(sheet, first + 4, 0)).isEqualTo("5.0");
+        assertThat(칸(sheet, first, C + 2)).isEqualTo("MLsoft");
+        assertThat(칸(sheet, first + 1, C + 2)).isEqualTo("MLsoft › 연구소 › 개발팀");
+        assertThat(칸(sheet, first + 3, C + 2)).isEqualTo("MLsoft › 연구소 › 기획팀");
+        assertThat(칸(sheet, first + 4, C + 2)).isEqualTo("부서 없음");
+        assertThat(칸(sheet, first + 4, C)).isEqualTo("5.0");
         assertThat(sheet.getMergedRegions())
-                .contains(new CellRangeAddress(first + 1, first + 2, 2, 2))
-                .noneMatch(m -> m.getFirstColumn() == 2 && m.getFirstRow() != first + 1);
+                .contains(new CellRangeAddress(first + 1, first + 2, C + 2, C + 2))
+                .noneMatch(m -> m.getFirstColumn() == C + 2 && m.getFirstRow() != first + 1);
     }
 
     @Test
@@ -222,7 +241,7 @@ class LeaveReportServiceTest {
 
         assertThat(칸(sheet, HEADER_ROW - 1, FIRST_DAY_COL + 64)).isEqualTo("65.0");
         assertThat(칸(sheet, HEADER_ROW + 1, FIRST_DAY_COL + 64)).isEqualTo("2024-03-29");
-        assertThat(칸(sheet, HEADER_ROW + 1, 3)).isEqualTo("65.0");
+        assertThat(칸(sheet, HEADER_ROW + 1, C + 3)).isEqualTo("65.0");
     }
 
     // --- helpers ---

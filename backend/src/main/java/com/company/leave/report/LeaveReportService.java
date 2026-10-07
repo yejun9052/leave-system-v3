@@ -58,11 +58,14 @@ public class LeaveReportService {
     static final String LEGEND = "반차 : (*) · 시간차 : (시간, 예: 2h)";
     static final String NO_DEPARTMENT = "부서 없음";
 
-    private static final int TEAM_COL = 2;
-    private static final int FIRST_DAY_COL = 10;
-    /** 0: 제목, 1: 범례, 2: 사용일 번호, 3: 머리줄, 4~: 직원 */
-    private static final int NUMBER_ROW = 2;
-    private static final int HEADER_ROW = 3;
+    /** 받은 양식처럼 A열과 1행은 비워 두고 B2 부터 쓴다. */
+    private static final int FIRST_COL = 1;
+    private static final int TEAM_COL = FIRST_COL + 2;
+    private static final int FIRST_DAY_COL = FIRST_COL + HEADERS.length - 1;
+    /** 1: 제목, 2: 범례, 3: 사용일 번호, 4: 머리줄, 5~: 직원 (0행은 비움) */
+    private static final int TITLE_ROW = 1;
+    private static final int NUMBER_ROW = 3;
+    private static final int HEADER_ROW = 4;
     private static final DateTimeFormatter PERIOD_FORMAT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     private static final String PATH_SEPARATOR = " › ";
 
@@ -103,18 +106,18 @@ public class LeaveReportService {
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles styles = new Styles(wb);
             Sheet sheet = wb.createSheet(String.valueOf(year));
-            Cell title = sheet.createRow(0).createCell(0);
+            Cell title = sheet.createRow(TITLE_ROW).createCell(FIRST_COL);
             title.setCellValue(year + " 연차현황 (" + asOf + " 기준)");
             title.setCellStyle(styles.title);
-            sheet.createRow(1).createCell(0).setCellValue(LEGEND);
+            sheet.createRow(TITLE_ROW + 1).createCell(FIRST_COL).setCellValue(LEGEND);
 
             Row numbers = sheet.createRow(NUMBER_ROW);
             for (int i = 0; i < dayColumns; i++) {
                 styled(numbers.createCell(FIRST_DAY_COL + i), styles.header).setCellValue(i + 1);
             }
             Row header = sheet.createRow(HEADER_ROW);
-            for (int i = 0; i < FIRST_DAY_COL + dayColumns; i++) {
-                styled(header.createCell(i), styles.header)
+            for (int i = 0; i < HEADERS.length - 1 + dayColumns; i++) {
+                styled(header.createCell(FIRST_COL + i), styles.header)
                         .setCellValue(i < HEADERS.length ? HEADERS[i] : "");
             }
             sheet.addMergedRegion(new CellRangeAddress(HEADER_ROW, HEADER_ROW,
@@ -136,20 +139,20 @@ public class LeaveReportService {
                 }
 
                 Row row = sheet.createRow(r++);
-                styled(row.createCell(0), styles.center).setCellValue(n + 1);
-                styled(row.createCell(1), styles.center).setCellValue(e.getName());
+                styled(row.createCell(FIRST_COL), styles.center).setCellValue(n + 1);
+                styled(row.createCell(FIRST_COL + 1), styles.center).setCellValue(e.getName());
                 styled(row.createCell(TEAM_COL), styles.team).setCellValue(team);
-                styled(row.createCell(3), styles.number).setCellValue(
+                styled(row.createCell(FIRST_COL + 3), styles.number).setCellValue(
                         days.stream().map(UsedDay::days).reduce(BigDecimal.ZERO, BigDecimal::add).doubleValue());
-                Cell hire = styled(row.createCell(4), styles.date);
+                Cell hire = styled(row.createCell(FIRST_COL + 4), styles.date);
                 if (e.getHireDate() != null) {
                     hire.setCellValue(e.getHireDate());
                 }
-                styled(row.createCell(5), styles.number).setCellValue(b.getGranted().doubleValue());
-                styled(row.createCell(6), styles.number); // 추가일: 아직 정하지 않아 빈칸
-                styled(row.createCell(7), styles.number).setCellValue(b.getGranted().doubleValue());
-                styled(row.createCell(8), styles.number).setCellValue(b.remaining().doubleValue());
-                styled(row.createCell(9), styles.center).setCellValue(
+                styled(row.createCell(FIRST_COL + 5), styles.number).setCellValue(b.getGranted().doubleValue());
+                styled(row.createCell(FIRST_COL + 6), styles.number); // 추가일: 아직 정하지 않아 빈칸
+                styled(row.createCell(FIRST_COL + 7), styles.number).setCellValue(b.getGranted().doubleValue());
+                styled(row.createCell(FIRST_COL + 8), styles.number).setCellValue(b.remaining().doubleValue());
+                styled(row.createCell(FIRST_COL + 9), styles.center).setCellValue(
                         pb.period().start().format(PERIOD_FORMAT) + " ~ " + pb.period().end().format(PERIOD_FORMAT));
                 for (int i = 0; i < dayColumns; i++) {
                     Cell cell = row.createCell(FIRST_DAY_COL + i);
@@ -164,9 +167,10 @@ public class LeaveReportService {
             }
             mergeTeam(sheet, groupStart, r - 1);
 
+            sheet.setColumnWidth(0, 2 * 256);
             int[] widths = {6, 12, 30, 7, 12, 7, 7, 9, 9, 24};
             for (int i = 0; i < widths.length; i++) {
-                sheet.setColumnWidth(i, widths[i] * 256);
+                sheet.setColumnWidth(FIRST_COL + i, widths[i] * 256);
             }
             for (int i = 0; i < dayColumns; i++) {
                 sheet.setColumnWidth(FIRST_DAY_COL + i, 15 * 256);
