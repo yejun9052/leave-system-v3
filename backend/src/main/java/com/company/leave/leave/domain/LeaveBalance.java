@@ -81,8 +81,14 @@ public class LeaveBalance extends BaseTimeEntity {
         this.carriedOver = carriedOver;
     }
 
-    public void setExpired(BigDecimal expired) {
-        this.expired = expired;
+    /** 기간이 끝나 남은 연차 중 days 만큼 소멸(이월하지 못한 몫). */
+    public void expire(BigDecimal days) {
+        this.expired = this.expired.add(days);
+    }
+
+    /** 남은 연차 전부 소멸(이월 미허용, 오래된 기간 정리). */
+    public void expireRemaining() {
+        expire(remaining());
     }
 
     /** 남은 연차 소멸(병가·공가 승인 시). */

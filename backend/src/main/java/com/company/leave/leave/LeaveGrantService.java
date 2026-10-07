@@ -139,14 +139,14 @@ public class LeaveGrantService {
             if (policy.isCarryOverEnabled()) {
                 BigDecimal carry = prevRemaining.min(policy.getMaxCarryOverDays());
                 current.setCarriedOver(carry);
-                prev.setExpired(prev.getExpired().add(prevRemaining.subtract(carry)));
+                prev.expire(prevRemaining.subtract(carry));
             } else {
                 // 이월 미허용: 전 기간 잔여 전부 소멸
-                prev.setExpired(prev.getExpired().add(prevRemaining));
+                prev.expireRemaining();
             }
         });
         balanceRepository.findByEmployeeIdOrderByYearDesc(employeeId).stream()
                 .filter(b -> b.getYear() < year - 1 && b.remaining().signum() > 0)
-                .forEach(old -> old.setExpired(old.getExpired().add(old.remaining())));
+                .forEach(LeaveBalance::expireRemaining);
     }
 }
