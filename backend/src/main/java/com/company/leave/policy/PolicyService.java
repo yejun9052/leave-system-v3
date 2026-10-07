@@ -34,6 +34,7 @@ public class PolicyService {
     public PolicyDtos.Response update(PolicyDtos.UpdateRequest req) {
         LeavePolicy policy = getActivePolicy();
         policy.apply(req.toSettings());
+        policy.changeBlackoutConflictMode(req.blackoutConflictMode());
         return PolicyDtos.Response.from(policy);
     }
 

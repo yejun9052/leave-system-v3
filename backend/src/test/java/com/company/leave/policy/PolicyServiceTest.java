@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.policy.domain.BlackoutConflictMode;
 import com.company.leave.policy.domain.GrantBasis;
 import com.company.leave.policy.domain.LeavePolicy;
 import com.company.leave.policy.dto.PolicyDtos;
@@ -86,6 +87,23 @@ class PolicyServiceTest {
                 0, 0, 0, false, BigDecimal.ZERO, null));
 
         assertThat(r.nextPeriodReservationEnabled()).isTrue();
+    }
+
+    @Test
+    void 금지_기간_처리_방식은_기본이_승인된_휴가만_유지이고_보내면_바꾸며_보내지_않으면_그대로다() {
+        LeavePolicy policy = LeavePolicy.createDefault();
+        when(policyRepository.findFirstByActiveTrueOrderByIdAsc()).thenReturn(Optional.of(policy));
+        assertThat(policy.getBlackoutConflictMode()).isEqualTo(BlackoutConflictMode.KEEP_APPROVED);
+
+        PolicyDtos.Response changed = service.update(new PolicyDtos.UpdateRequest(GrantBasis.HIRE_DATE, 1, 1,
+                new BigDecimal("15"), 2, BigDecimal.ONE, new BigDecimal("25"), true, 11, false, true, false,
+                0, 0, 0, false, BigDecimal.ZERO, true, BlackoutConflictMode.CANCEL_ALL));
+        PolicyDtos.Response kept = service.update(new PolicyDtos.UpdateRequest(GrantBasis.HIRE_DATE, 1, 1,
+                new BigDecimal("15"), 2, BigDecimal.ONE, new BigDecimal("25"), true, 11, false, true, false,
+                0, 0, 0, false, BigDecimal.ZERO, true));
+
+        assertThat(changed.blackoutConflictMode()).isEqualTo(BlackoutConflictMode.CANCEL_ALL);
+        assertThat(kept.blackoutConflictMode()).isEqualTo(BlackoutConflictMode.CANCEL_ALL);
     }
 
     @Test

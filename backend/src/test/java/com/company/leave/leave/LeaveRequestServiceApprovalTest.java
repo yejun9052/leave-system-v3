@@ -12,6 +12,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.company.leave.audit.AuditService;
@@ -38,6 +39,7 @@ import com.company.leave.mail.AccountMailProperties;
 import com.company.leave.mail.LeaveMail;
 import com.company.leave.notification.NotificationService;
 import com.company.leave.policy.PolicyService;
+import com.company.leave.policy.domain.BlackoutConflictMode;
 import com.company.leave.policy.domain.LeavePolicy;
 import com.company.leave.policy.repository.BlackoutPeriodRepository;
 import java.math.BigDecimal;
@@ -857,6 +859,142 @@ class LeaveRequestServiceApprovalTest {
         ReflectionTestUtils.setField(employee, "id", id);
         employees.put(id, employee);
         return employee;
+    }
+
+    @Nested
+    @DisplayName("연차 사용 금지 기간 등록 시 기존 휴가 처리")
+    @DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
+    class 금지_기간_등록 {
+
+        /** 금지 기간 2027-05-03(월) ~ 05-07(금). TUE(05-04)가 안에 있다 */
+        private static final LocalDate MON = LocalDate.of(2027, 5, 3);
+        private static final LocalDate FRI = LocalDate.of(2027, 5, 7);
+        private final List<LeaveRequestService.DateRange> 전체 = List.of(new LeaveRequestService.DateRange(MON, FRI));
+
+        private void 겹치는_휴가(LeaveRequest... found) {
+            when(requestRepository.findByStatusInOverlapping(any(), eq(MON), eq(FRI))).thenReturn(List.of(found));
+        }
+
+        private List<LeaveMail> 보낸_메일() {
+            ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
+            verify(eventPublisher, Mockito.atLeast(0)).publishEvent(events.capture());
+            return events.getAllValues().stream()
+                    .filter(LeaveMail.class::isInstance).map(LeaveMail.class::cast).toList();
+        }
+
+        @Test
+        void 승인된_휴가만_유지_정책이면_결재_대기는_자동_반려하고_승인은_그대로_둔다() {
+            LeaveRequest 대기 = 대기_신청(파트원);
+            LeaveRequest 승인 = 승인된_휴가(개발팀원, TUE);
+            겹치는_휴가(대기, 승인);
+
+            LeaveRequestService.BlackoutPlan plan = service.applyBlackout("릴리스", MON, FRI, 전체,
+                    BlackoutConflictMode.KEEP_APPROVED, 인사관리자.getId());
+
+            assertThat(대기.getStatus()).isEqualTo(LeaveRequestStatus.REJECTED);
+            assertThat(대기.getRejectReason()).isEqualTo("연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)");
+            assertThat(대기.getApprover()).as("처리자는 금지 기간을 등록한 관리자").isSameAs(인사관리자);
+            assertThat(승인.getStatus()).isEqualTo(LeaveRequestStatus.APPROVED);
+            assertThat(plan.kept()).containsExactly(승인);
+            // 당사자에게 반려 메일·알림, 감사 로그
+            assertThat(보낸_메일()).singleElement().satisfies(m -> {
+                assertThat(m.to()).containsExactly("e13@company.com");
+                assertThat(m.text()).contains("반려 사유: 연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)");
+            });
+            verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_REJECTED"), anyString(), anyString(), anyString());
+            verify(auditService).record(eq("blackout_reject"), eq("leave-requests"), eq(String.valueOf(대기.getId())),
+                    anyString(), eq(true));
+        }
+
+        @Test
+        void 모두_취소_정책이면_승인과_취소_요청_중인_휴가도_자동_취소하고_연차를_돌려주며_담당_팀장을_참조로_건다() {
+            LeaveRequest 승인 = 승인된_휴가(파트원, TUE);
+            LeaveRequest 취소요청 = 승인된_휴가(개발팀원, TUE);
+            취소요청.requestCancel("변경");
+            balance.addUsed(new BigDecimal("2"));
+            겹치는_휴가(승인, 취소요청);
+
+            LeaveRequestService.BlackoutPlan plan = service.applyBlackout("릴리스", MON, FRI, 전체,
+                    BlackoutConflictMode.CANCEL_ALL, 인사관리자.getId());
+
+            assertThat(plan.cancel()).containsExactly(승인, 취소요청);
+            assertThat(승인.getStatus()).isEqualTo(LeaveRequestStatus.CANCELLED);
+            assertThat(취소요청.getStatus()).isEqualTo(LeaveRequestStatus.CANCELLED);
+            assertThat(승인.getCancelReason()).startsWith("연차 사용 금지 기간 지정 (릴리스");
+            assertThat(balance.getUsed()).as("두 건의 차감 환원").isEqualByComparingTo("0");
+            verify(calendarEventRepository).deleteByLeaveRequestId(승인.getId());
+            assertThat(보낸_메일()).filteredOn(m -> m.to().contains("e13@company.com")).singleElement()
+                    .satisfies(m -> {
+                        assertThat(m.cc()).containsExactly("e7@company.com");
+                        assertThat(m.text()).contains("취소 사유: 연차 사용 금지 기간 지정 (릴리스");
+                    });
+            verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_FORCE_CANCELLED"), anyString(), anyString(),
+                    anyString());
+            verify(auditService, Mockito.times(2)).record(eq("blackout_cancel"), eq("leave-requests"), anyString(),
+                    anyString(), eq(true));
+        }
+
+        @Test
+        void 금지_기간에도_신청할_수_있는_종류는_처리하지_않고_목록에도_넣지_않는다() {
+            LeaveType 경조사 = new LeaveType("CONDOLENCE", "경조사", BigDecimal.ZERO, true,
+                    com.company.leave.leave.domain.DayPortion.FULL,
+                    com.company.leave.leave.domain.AnnualDeductionMode.NONE, "#000", 4).allowDuringBlackout(true);
+            LeaveRequest 경조사_대기 = new LeaveRequest(파트원, 경조사, TUE, TUE, BigDecimal.ONE, BigDecimal.ZERO, 2027, "결혼");
+            겹치는_휴가(경조사_대기);
+
+            LeaveRequestService.BlackoutPlan plan = service.applyBlackout("릴리스", MON, FRI, 전체,
+                    BlackoutConflictMode.CANCEL_ALL, 인사관리자.getId());
+
+            assertThat(경조사_대기.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(plan.reject()).isEmpty();
+            assertThat(plan.kept()).isEmpty();
+        }
+
+        @Test
+        void 늘려_수정할_때는_새로_늘어난_날짜와_겹치는_휴가만_처리하고_원래_기간_휴가는_유지_목록으로_둔다() {
+            LeaveRequest 원래_기간_대기 = 대기_신청(파트원); // 05-04
+            LeaveRequest 원래_기간_승인 = 승인된_휴가(개발팀원, TUE);
+            LeaveRequest 늘어난_날_승인 = 승인된_휴가(총무팀원, FRI);
+            겹치는_휴가(원래_기간_대기, 원래_기간_승인, 늘어난_날_승인);
+            // 원래 05-03 ~ 05-05 → 05-03 ~ 05-07: 새로 늘어난 날짜는 05-06 ~ 05-07
+            List<LeaveRequestService.DateRange> 늘어난_날짜 =
+                    List.of(new LeaveRequestService.DateRange(LocalDate.of(2027, 5, 6), FRI));
+
+            LeaveRequestService.BlackoutPlan plan = service.applyBlackout("릴리스", MON, FRI, 늘어난_날짜,
+                    BlackoutConflictMode.CANCEL_ALL, 인사관리자.getId());
+
+            assertThat(plan.cancel()).containsExactly(늘어난_날_승인);
+            assertThat(plan.reject()).isEmpty();
+            assertThat(plan.kept()).containsExactly(원래_기간_대기, 원래_기간_승인);
+            assertThat(원래_기간_승인.getStatus()).isEqualTo(LeaveRequestStatus.APPROVED);
+            assertThat(원래_기간_대기.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+        }
+
+        @Test
+        void 일부만_겹쳐도_신청_건_전체를_처리하고_겹치지_않는_근무일은_다시_신청하라고_안내한다() {
+            // 04-29(목) ~ 05-04(화): 금지 기간 밖 근무일은 04-29, 04-30 (05-01·02 주말)
+            LeaveRequest 걸친_대기 = 대기_신청(파트원);
+            ReflectionTestUtils.setField(걸친_대기, "startDate", LocalDate.of(2027, 4, 29));
+            겹치는_휴가(걸친_대기);
+
+            service.applyBlackout("릴리스", MON, FRI, 전체, BlackoutConflictMode.KEEP_APPROVED, 인사관리자.getId());
+
+            assertThat(걸친_대기.getStatus()).isEqualTo(LeaveRequestStatus.REJECTED);
+            assertThat(걸친_대기.getRejectReason()).isEqualTo("연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)."
+                    + " 금지 기간과 겹치지 않는 날(4/29, 4/30)이 필요하면 다시 신청해 주세요.");
+        }
+
+        @Test
+        void 미리보기는_같은_계산으로_나누기만_하고_저장하거나_알리지_않는다() {
+            LeaveRequest 대기 = 대기_신청(파트원);
+            겹치는_휴가(대기);
+
+            LeaveRequestService.BlackoutPlan plan = service.planBlackout(MON, FRI, 전체, BlackoutConflictMode.KEEP_APPROVED);
+
+            assertThat(plan.reject()).containsExactly(대기);
+            assertThat(대기.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            verifyNoInteractions(notificationService, auditService);
+        }
     }
 
     private LeaveRequest 대기_신청(Employee employee) {

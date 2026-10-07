@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.leave.LeaveRequestService;
 import com.company.leave.notification.AnnouncementMessenger;
 import com.company.leave.policy.domain.ServiceAwardRule;
 import com.company.leave.policy.domain.SpecialLeaveRule;
@@ -35,6 +36,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PolicyRulesServiceAwardSpecialTest {
 
     @Mock private ServiceAwardRuleRepository awards;
+    @Mock private LeaveRequestService leaveRequestService;
+    @Mock private PolicyService policyService;
     @Mock private SpecialLeaveRuleRepository specials;
     @Mock private BlackoutPeriodRepository blackouts;
     @Mock private AnnouncementMessenger messenger;
@@ -43,7 +46,7 @@ class PolicyRulesServiceAwardSpecialTest {
 
     @BeforeEach
     void setUp() {
-        service = new PolicyRulesService(awards, specials, blackouts, messenger);
+        service = new PolicyRulesService(awards, specials, blackouts, messenger, leaveRequestService, policyService);
     }
 
     @Nested

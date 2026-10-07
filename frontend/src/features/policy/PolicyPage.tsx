@@ -10,6 +10,9 @@ import {
   type GrantBasis,
   type LeaveTypeInput,
   type SpecialRule,
+  type Blackout,
+  type BlackoutConflictMode,
+  BLACKOUT_CONFLICT_LABEL,
 } from "@/api/policy";
 import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
@@ -40,9 +43,11 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
+import { cn } from "@/lib/utils";
 import HolidayTab from "./HolidayTab";
 import PromotionTab from "./PromotionTab";
 import SpecialRuleEditDialog from "./SpecialRuleEditDialog";
+import BlackoutSaveDialog from "./BlackoutSaveDialog";
 import AutomationTab from "./AutomationTab";
 
 const PORTION_LABEL: Record<LeavePortion, string> = {
@@ -291,6 +296,43 @@ function PolicyTab() {
             <Label>최대 연속 사용일 (0 = 무제한)</Label>
             <Input type="number" min={0} value={form.maxConsecutiveDays}
               onChange={(e) => set("maxConsecutiveDays", Number(e.target.value))} />
+          </div>
+          <div className="space-y-2">
+            <Label>사용 금지 기간을 등록할 때 겹치는 기존 휴가</Label>
+            <div className="grid gap-2">
+              {(Object.keys(BLACKOUT_CONFLICT_LABEL) as BlackoutConflictMode[]).map((mode) => (
+                <label
+                  key={mode}
+                  className={cn(
+                    "flex cursor-pointer gap-3 rounded-md border p-3 text-sm",
+                    form.blackoutConflictMode === mode && "border-primary bg-primary/5",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="blackoutConflictMode"
+                    className="mt-0.5"
+                    checked={form.blackoutConflictMode === mode}
+                    onChange={() => set("blackoutConflictMode", mode)}
+                  />
+                  <span>
+                    <span className="font-medium">
+                      {BLACKOUT_CONFLICT_LABEL[mode]}
+                      {mode === "KEEP_APPROVED" && " (기본)"}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {mode === "KEEP_APPROVED"
+                        ? "승인된 휴가(취소 요청 중 포함)는 그대로 두고, 결재 대기 휴가만 자동 반려합니다."
+                        : "승인된 휴가(취소 요청 중 포함)도 자동 취소하고 연차를 돌려주며, 결재 대기 휴가는 자동 반려합니다."}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              경조사·공가처럼 금지 기간에도 신청할 수 있는 종류는 처리하지 않습니다. 처리된 휴가마다 당사자에게 메일과 알림이
+              갑니다. 정책을 바꿔도 이미 등록된 금지 기간의 휴가는 다시 처리하지 않습니다.
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -741,13 +783,10 @@ function BlackoutTab() {
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const [name, setName] = useState("");
+  /** 추가·수정 확인 창: 저장 전에 겹치는 휴가와 처리 결과를 보여 준다 */
+  const [saving, setSaving] = useState<{ editing?: Blackout; initial?: Omit<Blackout, "id"> } | null>(null);
   const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
 
-  const add = useMutation({
-    mutationFn: () => policyRulesApi.createBlackout({ startDate: start, endDate: end, name }),
-    onSuccess: () => { setName(""); qc.invalidateQueries({ queryKey: ["blackouts"] }); },
-    onError: err,
-  });
   const del = useMutation({
     mutationFn: (id: number) => policyRulesApi.removeBlackout(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["blackouts"] }),
@@ -767,23 +806,35 @@ function BlackoutTab() {
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
           <Button
             size="sm"
-            onClick={async () => {
-              const ok = await confirm({
-                title: `'${name}' 사용 금지 기간을 추가할까요?`,
-                description: `${start} ~ ${end} 기간에는 연차를 신청할 수 없게 됩니다.`,
-                confirmText: "추가",
-              });
-              if (ok) add.mutate();
-            }}
+            onClick={() => setSaving({ initial: { startDate: start, endDate: end, name: name.trim() } })}
             disabled={!name.trim()}
           ><Plus className="h-4 w-4" /> 추가</Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          추가하거나 기간을 늘리면 겹치는 기존 휴가를 정책(연차 정책 탭 › 사용 통제)대로 처리합니다. 저장 전에 명단을 보여
+          드립니다.
+        </p>
         <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name], values: [`${b.startDate} ${b.endDate}`, b.name] }))}
-          headers={["기간", "명칭"]} onDelete={async (id) => {
+          headers={["기간", "명칭"]}
+          onEdit={(id) => {
+            const editing = rows.find((b) => b.id === id);
+            if (editing) setSaving({ editing });
+          }}
+          onDelete={async (id) => {
             const ok = await confirm({ title: "사용 금지 기간을 삭제할까요?", confirmText: "삭제", destructive: true });
             if (ok) del.mutate(id);
           }} />
       </CardContent>
+      {saving && (
+        <BlackoutSaveDialog
+          editing={saving.editing}
+          initial={saving.initial}
+          onClose={() => {
+            if (saving.initial) setName("");
+            setSaving(null);
+          }}
+        />
+      )}
     </Card>
   );
 }

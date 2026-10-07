@@ -2,9 +2,12 @@ package com.company.leave.policy;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.leave.LeaveRequestService;
+import com.company.leave.leave.LeaveRequestService.DateRange;
 import com.company.leave.mail.AnnouncementMailTemplates.Change;
 import com.company.leave.mail.AnnouncementMailTemplates.Schedule;
 import com.company.leave.notification.AnnouncementMessenger;
+import com.company.leave.policy.domain.BlackoutConflictMode;
 import com.company.leave.policy.domain.BlackoutPeriod;
 import com.company.leave.policy.domain.ServiceAwardRule;
 import com.company.leave.policy.domain.SpecialLeaveRule;
@@ -13,6 +16,8 @@ import com.company.leave.policy.repository.BlackoutPeriodRepository;
 import com.company.leave.policy.repository.ServiceAwardRuleRepository;
 import com.company.leave.policy.repository.SpecialLeaveRuleRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +28,8 @@ public class PolicyRulesService {
     private static final BigDecimal HALF_DAY = new BigDecimal("0.5");
 
     private final ServiceAwardRuleRepository awardRepository;
+    private final LeaveRequestService leaveRequestService;
+    private final PolicyService policyService;
     private final SpecialLeaveRuleRepository specialRepository;
     private final BlackoutPeriodRepository blackoutRepository;
     private final AnnouncementMessenger announcementMessenger;
@@ -30,11 +37,15 @@ public class PolicyRulesService {
     public PolicyRulesService(ServiceAwardRuleRepository awardRepository,
                               SpecialLeaveRuleRepository specialRepository,
                               BlackoutPeriodRepository blackoutRepository,
-                              AnnouncementMessenger announcementMessenger) {
+                              AnnouncementMessenger announcementMessenger,
+                              LeaveRequestService leaveRequestService,
+                              PolicyService policyService) {
         this.awardRepository = awardRepository;
         this.specialRepository = specialRepository;
         this.blackoutRepository = blackoutRepository;
         this.announcementMessenger = announcementMessenger;
+        this.leaveRequestService = leaveRequestService;
+        this.policyService = policyService;
     }
 
     // --- 장기근속 포상 ---
@@ -117,25 +128,82 @@ public class PolicyRulesService {
                 .map(PolicyRuleDtos.Blackout::from).toList();
     }
 
-    /** 추가·변경·삭제 모두 재직 중인 전 직원에게 알림 + 메일(처리한 본인 제외, {@link AnnouncementMessenger}). */
+    /**
+     * 금지 기간 등록·수정 전 미리보기: 저장하면 자동 반려·취소될 휴가와 그대로 남는 휴가(저장하지 않음).
+     *
+     * @param editingId 수정하는 금지 기간(새로 등록이면 null). 수정이면 새로 늘어난 날짜만 처리 대상이다
+     */
+    @Transactional(readOnly = true)
+    public PolicyRuleDtos.BlackoutImpact blackoutImpact(LocalDate start, LocalDate end, Long editingId) {
+        validateBlackoutRange(start, end);
+        List<DateRange> segments = List.of(new DateRange(start, end));
+        if (editingId != null) {
+            BlackoutPeriod b = blackoutRepository.findById(editingId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+            segments = addedDates(b.getStartDate(), b.getEndDate(), start, end);
+        }
+        BlackoutConflictMode mode = conflictMode();
+        return PolicyRuleDtos.BlackoutImpact.of(mode, editingId != null && !segments.isEmpty(),
+                leaveRequestService.planBlackout(start, end, segments, mode));
+    }
+
+    /**
+     * 추가·변경·삭제 모두 재직 중인 전 직원에게 알림 + 메일(처리한 본인 제외, {@link AnnouncementMessenger}).
+     * 추가하면 금지 기간과 겹치는 휴가를 정책대로 처리한다({@link LeaveRequestService#applyBlackout}, 같은 트랜잭션).
+     */
     @Transactional
     public PolicyRuleDtos.Blackout createBlackout(PolicyRuleDtos.BlackoutRequest req, Long actorId) {
-        if (req.endDate().isBefore(req.startDate())) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT, "종료일이 시작일보다 빠릅니다.");
-        }
+        validateBlackoutRange(req.startDate(), req.endDate());
         BlackoutPeriod saved = blackoutRepository.save(new BlackoutPeriod(req.startDate(), req.endDate(), req.name()));
+        leaveRequestService.applyBlackout(saved.getName(), saved.getStartDate(), saved.getEndDate(),
+                List.of(new DateRange(saved.getStartDate(), saved.getEndDate())), conflictMode(), actorId);
         announcementMessenger.blackout(Change.CREATED, schedule(saved), null, actorId);
         return PolicyRuleDtos.Blackout.from(saved);
     }
 
+    /**
+     * 수정. 기간을 늘렸으면 새로 늘어난 날짜와 겹치는 휴가만 지금 정책대로 처리한다. 원래 기간에 있던 휴가(예전 정책으로
+     * 유지된 것)는 건드리지 않는다(화면이 경고와 함께 명단을 보여 준다). 이름만 바꾸거나 기간을 줄이면 처리하지 않는다.
+     */
     @Transactional
     public PolicyRuleDtos.Blackout updateBlackout(Long id, PolicyRuleDtos.BlackoutRequest req, Long actorId) {
         BlackoutPeriod b = blackoutRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        validateBlackoutRange(req.startDate(), req.endDate());
         Schedule before = schedule(b);
+        List<DateRange> added = addedDates(b.getStartDate(), b.getEndDate(), req.startDate(), req.endDate());
         b.update(req.startDate(), req.endDate(), req.name());
+        if (!added.isEmpty()) {
+            leaveRequestService.applyBlackout(b.getName(), b.getStartDate(), b.getEndDate(), added, conflictMode(),
+                    actorId);
+        }
         announcementMessenger.blackout(Change.UPDATED, schedule(b), before, actorId);
         return PolicyRuleDtos.Blackout.from(b);
+    }
+
+    private static void validateBlackoutRange(LocalDate start, LocalDate end) {
+        if (start == null || end == null || end.isBefore(start)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "종료일이 시작일보다 빠릅니다.");
+        }
+    }
+
+    private BlackoutConflictMode conflictMode() {
+        return policyService.getActivePolicy().getBlackoutConflictMode();
+    }
+
+    /** 새 기간 [newStart, newEnd] 중 원래 기간 [oldStart, oldEnd] 에 없던 날짜 구간(앞·뒤 최대 두 구간). */
+    static List<DateRange> addedDates(LocalDate oldStart, LocalDate oldEnd, LocalDate newStart, LocalDate newEnd) {
+        if (newEnd.isBefore(oldStart) || newStart.isAfter(oldEnd)) {
+            return List.of(new DateRange(newStart, newEnd));
+        }
+        List<DateRange> added = new ArrayList<>();
+        if (newStart.isBefore(oldStart)) {
+            added.add(new DateRange(newStart, oldStart.minusDays(1)));
+        }
+        if (newEnd.isAfter(oldEnd)) {
+            added.add(new DateRange(oldEnd.plusDays(1), newEnd));
+        }
+        return added;
     }
 
     @Transactional

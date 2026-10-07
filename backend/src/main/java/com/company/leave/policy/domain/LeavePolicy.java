@@ -103,6 +103,11 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "next_period_reservation_enabled", nullable = false)
     private boolean nextPeriodReservationEnabled = true;
 
+    /** 금지 기간을 등록·늘려 수정할 때 겹치는 기존 휴가 처리 방식. 연차 정책 화면에서 고른다 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "blackout_conflict_mode", nullable = false, length = 20)
+    private BlackoutConflictMode blackoutConflictMode = BlackoutConflictMode.KEEP_APPROVED;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -133,6 +138,13 @@ public class LeavePolicy extends BaseTimeEntity {
         this.carryOverEnabled = s.carryOverEnabled();
         this.maxCarryOverDays = s.maxCarryOverDays() != null ? s.maxCarryOverDays() : BigDecimal.ZERO;
         this.nextPeriodReservationEnabled = s.nextPeriodReservationEnabled();
+    }
+
+    /** 금지 기간 등록 시 기존 휴가 처리 방식 변경. null 이면 그대로 둔다. */
+    public void changeBlackoutConflictMode(BlackoutConflictMode mode) {
+        if (mode != null) {
+            this.blackoutConflictMode = mode;
+        }
     }
 
     /** 정책 설정 값 캐리어. */

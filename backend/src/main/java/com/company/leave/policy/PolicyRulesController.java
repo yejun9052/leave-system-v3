@@ -5,6 +5,7 @@ import com.company.leave.policy.dto.PolicyRuleDtos;
 import com.company.leave.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "PolicyRules", description = "정책 규칙 (포상/경조사/블랙아웃)")
@@ -87,6 +89,15 @@ public class PolicyRulesController {
     @GetMapping("/blackouts")
     public ApiResponse<List<PolicyRuleDtos.Blackout>> blackouts() {
         return ApiResponse.ok(service.listBlackouts());
+    }
+
+    /** 등록·수정 전 미리보기: 저장하면 자동 반려·취소될 휴가와 그대로 남는 휴가. id 는 수정하는 금지 기간(새로 등록이면 비움) */
+    @PreAuthorize(MANAGER)
+    @GetMapping("/blackouts/impact")
+    public ApiResponse<PolicyRuleDtos.BlackoutImpact> blackoutImpact(
+            @RequestParam LocalDate startDate, @RequestParam LocalDate endDate,
+            @RequestParam(required = false) Long id) {
+        return ApiResponse.ok(service.blackoutImpact(startDate, endDate, id));
     }
 
     @PreAuthorize(MANAGER)

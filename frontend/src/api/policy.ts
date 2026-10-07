@@ -1,5 +1,5 @@
 import { api, unwrap } from "./client";
-import type { AnnualDeductionMode, LeavePortion, LeaveType } from "@/types";
+import type { AnnualDeductionMode, LeavePortion, LeaveRequestStatus, LeaveType } from "@/types";
 
 export type GrantBasis = "HIRE_DATE" | "FISCAL_YEAR";
 
@@ -28,6 +28,37 @@ export interface Policy {
   maxCarryOverDays: number;
   /** 다음 연차 기간(다음 기산일 이후) 날짜의 연차 신청 허용 */
   nextPeriodReservationEnabled: boolean;
+  /** 금지 기간을 등록·늘려 수정할 때 겹치는 기존 휴가 처리 방식 */
+  blackoutConflictMode: BlackoutConflictMode;
+}
+
+/** 금지 기간 등록 시 기존 휴가 처리: 승인된 휴가만 유지(기본) / 모두 취소. 결재 대기는 둘 다 자동 반려 */
+export type BlackoutConflictMode = "KEEP_APPROVED" | "CANCEL_ALL";
+
+export const BLACKOUT_CONFLICT_LABEL: Record<BlackoutConflictMode, string> = {
+  KEEP_APPROVED: "승인된 휴가만 유지",
+  CANCEL_ALL: "모두 취소",
+};
+
+/** 금지 기간 등록·수정 전 미리보기의 휴가 한 건. action: 자동 반려 / 자동 취소 / 유지 */
+export interface BlackoutImpactItem {
+  requestId: number;
+  employeeName: string;
+  departmentName: string | null;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: LeaveRequestStatus;
+  action: "REJECT" | "CANCEL" | "KEEP";
+}
+
+/** 저장하면 affected 를 처리하고 kept 는 그대로 둔다. extended: 기간을 늘려 수정하는 경우 */
+export interface BlackoutImpact {
+  mode: BlackoutConflictMode;
+  extended: boolean;
+  affected: BlackoutImpactItem[];
+  kept: BlackoutImpactItem[];
 }
 
 export const policyApi = {
@@ -77,6 +108,9 @@ export const policyRulesApi = {
   updateBlackout: (id: number, b: Omit<Blackout, "id">) =>
     unwrap<Blackout>(api.put(`/policy/blackouts/${id}`, b)),
   removeBlackout: (id: number) => unwrap<void>(api.delete(`/policy/blackouts/${id}`)),
+  /** 등록·수정 전 미리보기(저장하지 않음). id: 수정하는 금지 기간 */
+  blackoutImpact: (startDate: string, endDate: string, id?: number) =>
+    unwrap<BlackoutImpact>(api.get("/policy/blackouts/impact", { params: { startDate, endDate, id } })),
 };
 
 /** 촉진 대상: 사용 기한이 N개월 안이고 남은 연차가 있는 재직자 */
