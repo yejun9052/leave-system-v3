@@ -46,7 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 연차 사용 현황 리포트 (엑셀). 연구소 연차현황표 양식: 직원마다 한 줄, 부서별로 팀 칸을 묶고 사용한 날을 한 칸씩 적는다.
+ * 연차 사용 현황 리포트 (엑셀). 연구소 연차현황표 양식: 직원마다 한 줄, 부서별로 팀 칸을 묶고(부서 안은 입사일 순) 사용한 날을 한 칸씩 적는다.
  * <ul>
  *   <li>사용일: 연차처럼 차감하는 종류(연차·반차·시간차 등)의 승인된 휴가만. 경조사·병가·공가, 결재 대기·취소 요청 중은 넣지 않는다</li>
  *   <li>종일은 날짜, 반차는 "날짜(*)", 시간차는 "날짜(2h)". 여러 날 휴가는 주말·공휴일을 뺀 날마다 한 칸</li>
@@ -123,8 +123,10 @@ public class LeaveReportService {
         LocalDate today = LocalDate.now();
         LocalDate asOf = year == today.getYear() ? today : LocalDate.of(year, 12, 31);
         List<LeaveBalanceService.PeriodBalance> rows = new ArrayList<>(balanceService.balancesAsOf(asOf, false, false));
+        // 부서별로 묶고, 부서 안에서는 입사일이 빠른 순(입사일 없으면 뒤), 같으면 이름순
         rows.sort(Comparator.comparing((LeaveBalanceService.PeriodBalance pb) -> pb.employee().getDepartment(),
                         LeaveReportService::compareDepartments)
+                .thenComparing(pb -> pb.employee().getHireDate(), Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(pb -> pb.employee().getName()));
         Map<Long, List<UsedDay>> usedDays = usedDays(rows);
 

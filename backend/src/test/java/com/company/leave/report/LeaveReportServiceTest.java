@@ -296,6 +296,38 @@ class LeaveReportServiceTest {
     }
 
     @Test
+    void 같은_부서_안에서는_입사일이_빠른_순이고_같으면_이름순_입사일_없으면_뒤다() throws IOException {
+        Department 연구소 = department(1L, "연구소", null, 0);
+        Department 개발팀 = department(2L, "개발팀", 연구소, 0);
+        Department 기획팀 = department(3L, "기획팀", 연구소, 1);
+        Employee 가람 = employee(1L, "가람", 개발팀);
+        Employee 나비 = employee(2L, "나비", 개발팀);
+        Employee 라온 = employee(3L, "라온", 개발팀);
+        Employee 다온 = employee(4L, "다온", 개발팀);
+        Employee 고참 = employee(5L, "고참", 기획팀);
+        ReflectionTestUtils.setField(가람, "hireDate", LocalDate.of(2023, 1, 2));
+        ReflectionTestUtils.setField(라온, "hireDate", LocalDate.of(2020, 3, 2));
+        ReflectionTestUtils.setField(다온, "hireDate", LocalDate.of(2020, 3, 2));
+        ReflectionTestUtils.setField(고참, "hireDate", LocalDate.of(2010, 1, 4)); // 가장 빨라도 부서 순서가 먼저
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of(
+                new LeaveBalanceService.PeriodBalance(가람, Y2024, balance(1L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(고참, Y2024, balance(5L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(나비, Y2024, balance(2L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(라온, Y2024, balance(3L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(다온, Y2024, balance(4L, "15", "0"))));
+        공휴일();
+        승인();
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        List<String> names = new ArrayList<>();
+        for (int r = HEADER_ROW + 1; r <= sheet.getLastRowNum(); r++) {
+            names.add(칸(sheet, r, C + 1));
+        }
+        assertThat(names).containsExactly("다온", "라온", "가람", "나비", "고참");
+    }
+
+    @Test
     void 사용일이_50일보다_많으면_칸을_그만큼_늘린다() throws IOException {
         Employee 최유나 = employee(1L, "최유나", null);
         기간(최유나, balance(1L, "60", "0"));
