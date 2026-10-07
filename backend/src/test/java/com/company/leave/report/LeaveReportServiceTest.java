@@ -32,6 +32,9 @@ import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFColor;
+import org.apache.poi.xssf.usermodel.XSSFFont;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,7 +61,10 @@ class LeaveReportServiceTest {
             new LeavePeriodCalculator.Period(2024, LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31));
     /** A열은 비워 두고 B열부터 쓴다 */
     private static final int C = 1;
-    private static final int HEADER_ROW = 4;
+    /** 받은 양식처럼 5행 오른쪽에 사용일 번호, 6행에 기준일·확인필요·범례, 7행이 머리줄 */
+    private static final int NUMBER_ROW = 4;
+    private static final int INFO_ROW = 5;
+    private static final int HEADER_ROW = 6;
     private static final int FIRST_DAY_COL = C + 10;
 
     @Mock private LeaveBalanceService balanceService;
@@ -84,7 +90,7 @@ class LeaveReportServiceTest {
 
         verify(balanceService).balancesAsOf(TODAY, false, false);
         assertThat(sheet.getSheetName()).isEqualTo(String.valueOf(TODAY.getYear()));
-        assertThat(글자(sheet, 1, C)).isEqualTo(TODAY.getYear() + " 연차현황 (" + TODAY + " 기준)");
+        assertThat(칸(sheet, INFO_ROW, C)).isEqualTo(TODAY.toString());
     }
 
     @Test
@@ -95,7 +101,7 @@ class LeaveReportServiceTest {
 
         verify(balanceService).balancesAsOf(LocalDate.of(2024, 12, 31), false, false);
         assertThat(sheet.getSheetName()).isEqualTo("2024");
-        assertThat(글자(sheet, 1, C)).isEqualTo("2024 연차현황 (2024-12-31 기준)");
+        assertThat(칸(sheet, INFO_ROW, C)).isEqualTo("2024-12-31");
     }
 
     @Test
@@ -117,16 +123,47 @@ class LeaveReportServiceTest {
     }
 
     @Test
+    void 맨_위_안내는_받은_양식과_같은_자리에_같은_문구로_쓴다() throws IOException {
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        // 2행: 굵은 14pt 안내, B~J 합침
+        assertThat(글자(sheet, 1, C)).isEqualTo("근속이 1년 미만인 경우 연차 관리 유념해주기 바랍니다.");
+        XSSFFont noticeFont = ((XSSFCellStyle) sheet.getRow(1).getCell(C).getCellStyle()).getFont();
+        assertThat(noticeFont.getBold()).isTrue();
+        assertThat(noticeFont.getFontHeightInPoints()).isEqualTo((short) 14);
+        // 3행: 분홍(F4CCCC) 칸, B~J 합침
+        XSSFColor pink = ((XSSFCellStyle) sheet.getRow(2).getCell(C).getCellStyle()).getFillForegroundColorColor();
+        assertThat(pink.getARGBHex()).isEqualTo("FFF4CCCC");
+        // 4~5행: 안내 두 줄(4행은 B~J 합침)
+        assertThat(글자(sheet, 3, C))
+                .isEqualTo("* 3년이상 근무한 사람은 2년당 1개의 추가 연차가 발생함 (3년 => 16개, 5년 => 17개)");
+        assertThat(글자(sheet, 4, C)).isEqualTo(
+                "* 2019년 변경사항 : 신입의 경우 1개월 만근시 1개의 연차가 주어지고, 1년 만근하면 15개가 추가로 주어집니다. ");
+        // 6행: B 기준일, I 확인필요(빨강), L 반차 범례, M 시간차 범례
+        assertThat(칸(sheet, INFO_ROW, C)).isEqualTo("2024-12-31");
+        assertThat(칸(sheet, INFO_ROW, C + 7)).isEqualTo("확인필요");
+        assertThat(((XSSFCellStyle) sheet.getRow(INFO_ROW).getCell(C + 7).getCellStyle()).getFont().getXSSFColor()
+                .getARGBHex()).isEqualTo("FFFF0000");
+        assertThat(칸(sheet, INFO_ROW, FIRST_DAY_COL)).isEqualTo("반차 : (*)");
+        assertThat(칸(sheet, INFO_ROW, FIRST_DAY_COL + 1)).isEqualTo("시간차 : (2h)");
+        assertThat(sheet.getMergedRegions()).contains(
+                new CellRangeAddress(1, 1, C, C + 8),
+                new CellRangeAddress(2, 2, C, C + 8),
+                new CellRangeAddress(3, 3, C, C + 8));
+    }
+
+    @Test
     void 머리줄은_양식_순서이고_사용일은_번호를_붙인_50칸이다() throws IOException {
         when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
 
         Sheet sheet = 시트(service.exportUsage(2024));
 
-        assertThat(글자(sheet, 2, C)).isEqualTo("반차 : (*) · 시간차 : (시간, 예: 2h)");
         assertThat(칸들(sheet.getRow(HEADER_ROW)).subList(C, C + 11)).containsExactly(
                 "번호", "이름", "팀", "사용", "입사일", "연차", "추가일", "전체 연차", "남은 연차", "사용 기간", "사용일");
-        assertThat(칸(sheet, HEADER_ROW - 1, FIRST_DAY_COL)).isEqualTo("1.0");
-        assertThat(칸(sheet, HEADER_ROW - 1, FIRST_DAY_COL + 49)).isEqualTo("50.0");
+        assertThat(칸(sheet, NUMBER_ROW, FIRST_DAY_COL)).isEqualTo("1.0");
+        assertThat(칸(sheet, NUMBER_ROW, FIRST_DAY_COL + 49)).isEqualTo("50.0");
         assertThat(sheet.getMergedRegions()).contains(
                 new CellRangeAddress(HEADER_ROW, HEADER_ROW, FIRST_DAY_COL, FIRST_DAY_COL + 49));
         assertThat(sheet.getLastRowNum()).isEqualTo(HEADER_ROW);
@@ -240,7 +277,7 @@ class LeaveReportServiceTest {
 
         Sheet sheet = 시트(service.exportUsage(2024));
 
-        assertThat(칸(sheet, HEADER_ROW - 1, FIRST_DAY_COL + 64)).isEqualTo("65.0");
+        assertThat(칸(sheet, NUMBER_ROW, FIRST_DAY_COL + 64)).isEqualTo("65.0");
         assertThat(칸(sheet, HEADER_ROW + 1, FIRST_DAY_COL + 64)).isEqualTo("2024-03-29");
         assertThat(칸(sheet, HEADER_ROW + 1, C + 3)).isEqualTo("65.0");
     }

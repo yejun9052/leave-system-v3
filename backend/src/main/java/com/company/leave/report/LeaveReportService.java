@@ -29,13 +29,18 @@ import java.util.stream.Collectors;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.ss.util.RegionUtil;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,17 +60,27 @@ public class LeaveReportService {
     static final int MIN_DAY_COLUMNS = 50;
     static final String[] HEADERS =
             {"번호", "이름", "팀", "사용", "입사일", "연차", "추가일", "전체 연차", "남은 연차", "사용 기간", "사용일"};
-    static final String LEGEND = "반차 : (*) · 시간차 : (시간, 예: 2h)";
+    /** 받은 양식 맨 위 안내 문구(그대로 옮김). */
+    static final String NOTICE = "근속이 1년 미만인 경우 연차 관리 유념해주기 바랍니다.";
+    static final String NOTE_AWARD = "* 3년이상 근무한 사람은 2년당 1개의 추가 연차가 발생함 (3년 => 16개, 5년 => 17개)";
+    static final String NOTE_2019 =
+            "* 2019년 변경사항 : 신입의 경우 1개월 만근시 1개의 연차가 주어지고, 1년 만근하면 15개가 추가로 주어집니다. ";
+    static final String CHECK_NEEDED = "확인필요";
+    static final String LEGEND_HALF = "반차 : (*)";
+    static final String LEGEND_HOURLY = "시간차 : (2h)";
     static final String NO_DEPARTMENT = "부서 없음";
 
     /** 받은 양식처럼 A열과 1행은 비워 두고 B2 부터 쓴다. */
     private static final int FIRST_COL = 1;
     private static final int TEAM_COL = FIRST_COL + 2;
     private static final int FIRST_DAY_COL = FIRST_COL + HEADERS.length - 1;
-    /** 1: 제목, 2: 범례, 3: 사용일 번호, 4: 머리줄, 5~: 직원 (0행은 비움) */
-    private static final int TITLE_ROW = 1;
-    private static final int NUMBER_ROW = 3;
-    private static final int HEADER_ROW = 4;
+    /** 받은 양식의 행: 2 안내, 3 분홍 칸, 4~5 안내(5행 오른쪽은 사용일 번호), 6 기준일·확인필요·범례, 7 머리줄, 8~ 직원 */
+    private static final int NOTICE_ROW = 1;
+    private static final int NUMBER_ROW = 4;
+    private static final int INFO_ROW = 5;
+    private static final int HEADER_ROW = 6;
+    /** 안내 문구를 합치는 범위: B~J열 */
+    private static final int NOTICE_LAST_COL = FIRST_COL + 8;
     private static final DateTimeFormatter PERIOD_FORMAT = DateTimeFormatter.ofPattern("yyyy.MM.dd");
     private static final String PATH_SEPARATOR = " › ";
 
@@ -106,14 +121,10 @@ public class LeaveReportService {
         try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles styles = new Styles(wb);
             Sheet sheet = wb.createSheet(String.valueOf(year));
-            Cell title = sheet.createRow(TITLE_ROW).createCell(FIRST_COL);
-            title.setCellValue(year + " 연차현황 (" + asOf + " 기준)");
-            title.setCellStyle(styles.title);
-            sheet.createRow(TITLE_ROW + 1).createCell(FIRST_COL).setCellValue(LEGEND);
-
-            Row numbers = sheet.createRow(NUMBER_ROW);
+            writeNotices(sheet, styles, asOf);
+            Row numbers = sheet.getRow(NUMBER_ROW);
             for (int i = 0; i < dayColumns; i++) {
-                styled(numbers.createCell(FIRST_DAY_COL + i), styles.header).setCellValue(i + 1);
+                styled(numbers.createCell(FIRST_DAY_COL + i), styles.dayNumber).setCellValue(i + 1);
             }
             Row header = sheet.createRow(HEADER_ROW);
             for (int i = 0; i < HEADERS.length - 1 + dayColumns; i++) {
@@ -234,6 +245,36 @@ public class LeaveReportService {
         return result;
     }
 
+    /**
+     * 받은 양식의 맨 위(2~6행)를 그대로: 굵은 안내, 분홍 칸, 안내 두 줄, 기준일·확인필요·범례.
+     * 양식의 =TODAY() 자리에는 보고서 기준일(올해는 오늘)을 쓴다.
+     */
+    private static void writeNotices(Sheet sheet, Styles styles, LocalDate asOf) {
+        styled(sheet.createRow(NOTICE_ROW).createCell(FIRST_COL), styles.notice).setCellValue(NOTICE);
+        sheet.addMergedRegion(new CellRangeAddress(NOTICE_ROW, NOTICE_ROW, FIRST_COL, NOTICE_LAST_COL));
+
+        Row pink = sheet.createRow(NOTICE_ROW + 1);
+        for (int c = FIRST_COL; c <= NOTICE_LAST_COL; c++) {
+            styled(pink.createCell(c), styles.pinkBar);
+        }
+        CellRangeAddress pinkRange = new CellRangeAddress(NOTICE_ROW + 1, NOTICE_ROW + 1, FIRST_COL, NOTICE_LAST_COL);
+        sheet.addMergedRegion(pinkRange);
+        RegionUtil.setBorderTop(BorderStyle.THIN, pinkRange, sheet);
+        RegionUtil.setBorderBottom(BorderStyle.THIN, pinkRange, sheet);
+        RegionUtil.setBorderLeft(BorderStyle.THIN, pinkRange, sheet);
+        RegionUtil.setBorderRight(BorderStyle.THIN, pinkRange, sheet);
+
+        sheet.createRow(NOTICE_ROW + 2).createCell(FIRST_COL).setCellValue(NOTE_AWARD);
+        sheet.addMergedRegion(new CellRangeAddress(NOTICE_ROW + 2, NOTICE_ROW + 2, FIRST_COL, NOTICE_LAST_COL));
+        sheet.createRow(NUMBER_ROW).createCell(FIRST_COL).setCellValue(NOTE_2019);
+
+        Row info = sheet.createRow(INFO_ROW);
+        styled(info.createCell(FIRST_COL), styles.plainDate).setCellValue(asOf);
+        styled(info.createCell(FIRST_COL + 7), styles.red).setCellValue(CHECK_NEEDED);
+        info.createCell(FIRST_DAY_COL).setCellValue(LEGEND_HALF);
+        info.createCell(FIRST_DAY_COL + 1).setCellValue(LEGEND_HOURLY);
+    }
+
     /** 같은 부서가 두 줄 이상이면 팀 칸을 세로로 합친다. */
     private static void mergeTeam(Sheet sheet, int first, int last) {
         if (last > first) {
@@ -289,9 +330,13 @@ public class LeaveReportService {
         return cell;
     }
 
-    /** 칸 서식: 테두리, 가운데 정렬, 날짜 yyyy-mm-dd. */
+    /** 칸 서식: 기본 글꼴 Arial 10(받은 양식과 같음), 표는 테두리·가운데 정렬, 날짜 yyyy-mm-dd. */
     private static final class Styles {
-        final CellStyle title;
+        final CellStyle notice;
+        final CellStyle pinkBar;
+        final CellStyle plainDate;
+        final CellStyle red;
+        final CellStyle dayNumber;
         final CellStyle header;
         final CellStyle center;
         final CellStyle team;
@@ -299,14 +344,25 @@ public class LeaveReportService {
         final CellStyle date;
 
         Styles(Workbook wb) {
-            Font bold = wb.createFont();
-            bold.setBold(true);
-            Font big = wb.createFont();
-            big.setBold(true);
-            big.setFontHeightInPoints((short) 14);
+            Font base = wb.getFontAt(0);
+            base.setFontName("Arial");
+            base.setFontHeightInPoints((short) 10);
+            Font bold = font(wb, true, 10, null);
+            Font big = font(wb, true, 14, null);
+            Font redFont = font(wb, false, 10, IndexedColors.RED);
 
-            title = wb.createCellStyle();
-            title.setFont(big);
+            notice = wb.createCellStyle();
+            notice.setFont(big);
+            pinkBar = wb.createCellStyle();
+            ((XSSFCellStyle) pinkBar).setFillForegroundColor(
+                    new XSSFColor(new byte[] {(byte) 0xF4, (byte) 0xCC, (byte) 0xCC}, null));
+            pinkBar.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            plainDate = wb.createCellStyle();
+            plainDate.setDataFormat(wb.createDataFormat().getFormat("yyyy-mm-dd"));
+            red = wb.createCellStyle();
+            red.setFont(redFont);
+            dayNumber = wb.createCellStyle();
+            dayNumber.setAlignment(HorizontalAlignment.CENTER);
             header = bordered(wb);
             header.setFont(bold);
             center = bordered(wb);
@@ -315,6 +371,17 @@ public class LeaveReportService {
             number = bordered(wb);
             date = bordered(wb);
             date.setDataFormat(wb.createDataFormat().getFormat("yyyy-mm-dd"));
+        }
+
+        private static Font font(Workbook wb, boolean bold, int points, IndexedColors color) {
+            Font f = wb.createFont();
+            f.setFontName("Arial");
+            f.setFontHeightInPoints((short) points);
+            f.setBold(bold);
+            if (color != null) {
+                f.setColor(color.getIndex());
+            }
+            return f;
         }
 
         private static CellStyle bordered(Workbook wb) {
