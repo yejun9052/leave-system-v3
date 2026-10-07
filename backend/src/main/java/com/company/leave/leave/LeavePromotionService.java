@@ -132,15 +132,24 @@ public class LeavePromotionService {
     /**
      * {@link #targets(int)} 중 검색어에 맞는 직원. 검색어는 공백으로 나눈 단어가 모두 이름이나 부서에 맞아야 하고,
      * 상위 부서 이름으로 찾으면 하위 부서 직원도 나온다(다른 목록 검색과 같은 규칙).
+     * <p>
+     * 예: 오늘 2026-10-07, 6개월 → 기준일 2027-04-07. 사용 기한 2027-02-28·남은 5일 → 대상,
+     * 사용 기한 2027-06-30 → 제외(기준일 뒤), 사용 기한 2026-12-31·남은 0일 → 제외.
      */
     @Transactional(readOnly = true)
     public List<Target> targets(int months, String keyword) {
+        // 화면에서 고른 개월 수를 1~6 으로 맞춘다(0 → 1, 7 → 6)
         int m = Math.max(1, Math.min(MAX_MONTHS, months));
         LocalDate today = LocalDate.now();
+        // 기준일 = 오늘 + m개월. 말일은 그 달 말일로 맞춰진다(8/31 + 6개월 = 2/28)
         LocalDate limit = today.plusMonths(m);
         Predicate<Employee> matches = keywordFilter(keyword);
+        // 재직자 전원(관리 전용 계정 포함)의 오늘이 속한 연차 기간과 그 잔액. 잔액 행이 없는 직원은 빠진다.
+        // period().end() 가 사용 기한(입사일 기준 또는 회계연도 기준, LeavePeriodCalculator 가 계산)
         List<LeaveBalanceService.PeriodBalance> candidates = balanceService.balancesAsOf(today, true, true).stream()
+                // 사용 기한 <= 기준일(같은 날 포함). isBefore 로 쓰면 딱 m개월 남은 직원이 빠진다
                 .filter(pb -> !pb.period().end().isAfter(limit))
+                // 남은 연차 = 부여 + 이월 - 사용 - 소멸. 결재 대기분은 빼지 않는다(화면에 pending 으로 따로 표시)
                 .filter(pb -> pb.balance().remaining().signum() > 0)
                 .filter(pb -> matches.test(pb.employee()))
                 .toList();
