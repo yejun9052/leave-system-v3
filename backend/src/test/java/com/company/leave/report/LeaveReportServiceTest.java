@@ -328,6 +328,44 @@ class LeaveReportServiceTest {
     }
 
     @Test
+    void 고른_부서_소속과_고른_사용자만_합쳐서_출력하고_하위_부서는_따로_펼치지_않는다() throws IOException {
+        Department 연구소 = department(1L, "연구소", null, 0);
+        Department 개발팀 = department(2L, "개발팀", 연구소, 0);
+        Department 기획팀 = department(3L, "기획팀", null, 1);
+        Employee 소장 = employee(1L, "소장", 연구소);
+        Employee 개발 = employee(2L, "개발", 개발팀);
+        Employee 기획 = employee(3L, "기획", 기획팀);
+        Employee 다른기획 = employee(4L, "다른기획", 기획팀);
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of(
+                new LeaveBalanceService.PeriodBalance(소장, Y2024, balance(1L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(개발, Y2024, balance(2L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(기획, Y2024, balance(3L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(다른기획, Y2024, balance(4L, "15", "0"))));
+        공휴일();
+        승인();
+
+        // 연구소(하위 개발팀은 체크 안 함) + 기획 한 명
+        Sheet sheet = 시트(service.exportUsage(2024, List.of(1L), List.of(3L)));
+
+        assertThat(이름들(sheet)).containsExactly("소장", "기획");
+    }
+
+    @Test
+    void 사용자만_고르면_그_사용자만_나온다() throws IOException {
+        Employee 가 = employee(1L, "가", null);
+        Employee 나 = employee(2L, "나", null);
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of(
+                new LeaveBalanceService.PeriodBalance(가, Y2024, balance(1L, "15", "0")),
+                new LeaveBalanceService.PeriodBalance(나, Y2024, balance(2L, "15", "0"))));
+        공휴일();
+        승인();
+
+        Sheet sheet = 시트(service.exportUsage(2024, List.of(), List.of(2L)));
+
+        assertThat(이름들(sheet)).containsExactly("나");
+    }
+
+    @Test
     void 사용일이_50일보다_많으면_칸을_그만큼_늘린다() throws IOException {
         Employee 최유나 = employee(1L, "최유나", null);
         기간(최유나, balance(1L, "60", "0"));
@@ -398,6 +436,15 @@ class LeaveReportServiceTest {
 
     private static String 글자(Sheet sheet, int row, int col) {
         return sheet.getRow(row).getCell(col).getStringCellValue();
+    }
+
+    /** 직원 줄의 이름(위에서부터). */
+    private static List<String> 이름들(Sheet sheet) {
+        List<String> names = new ArrayList<>();
+        for (int r = HEADER_ROW + 1; r <= sheet.getLastRowNum(); r++) {
+            names.add(칸(sheet, r, C + 1));
+        }
+        return names;
     }
 
     /** 칸 채우기 색(ARGB). */

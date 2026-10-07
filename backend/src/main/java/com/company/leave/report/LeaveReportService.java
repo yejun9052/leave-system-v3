@@ -20,11 +20,13 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
@@ -120,9 +122,21 @@ public class LeaveReportService {
      */
     @Transactional(readOnly = true)
     public byte[] exportUsage(int year) {
+        return exportUsage(year, List.of(), List.of());
+    }
+
+    /**
+     * 고른 대상만 출력. 고른 부서에 소속된 직원과 고른 사용자를 합친다. 둘 다 비면 전체.
+     * 부서는 화면에서 체크한 부서 그대로다(하위 부서는 화면이 체크해서 보내며, 여기서 따로 펼치지 않는다).
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportUsage(int year, Collection<Long> departmentIds, Collection<Long> employeeIds) {
         LocalDate today = LocalDate.now();
         LocalDate asOf = year == today.getYear() ? today : LocalDate.of(year, 12, 31);
-        List<LeaveBalanceService.PeriodBalance> rows = new ArrayList<>(balanceService.balancesAsOf(asOf, false, false));
+        Predicate<Employee> selected = selection(departmentIds, employeeIds);
+        List<LeaveBalanceService.PeriodBalance> rows = balanceService.balancesAsOf(asOf, false, false).stream()
+                .filter(pb -> selected.test(pb.employee()))
+                .collect(Collectors.toCollection(ArrayList::new));
         // 부서별로 묶고, 부서 안에서는 입사일이 빠른 순(입사일 없으면 뒤), 같으면 이름순
         rows.sort(Comparator.comparing((LeaveBalanceService.PeriodBalance pb) -> pb.employee().getDepartment(),
                         LeaveReportService::compareDepartments)
@@ -281,6 +295,17 @@ public class LeaveReportService {
         styled(info.createCell(FIRST_COL + 7), styles.red).setCellValue(CHECK_NEEDED);
         info.createCell(FIRST_DAY_COL).setCellValue(LEGEND_HALF);
         info.createCell(FIRST_DAY_COL + 1).setCellValue(LEGEND_HOURLY);
+    }
+
+    /** 고른 부서 소속이거나 고른 사용자. 아무것도 고르지 않으면 모두. */
+    private static Predicate<Employee> selection(Collection<Long> departmentIds, Collection<Long> employeeIds) {
+        Set<Long> departments = departmentIds == null ? Set.of() : Set.copyOf(departmentIds);
+        Set<Long> employees = employeeIds == null ? Set.of() : Set.copyOf(employeeIds);
+        if (departments.isEmpty() && employees.isEmpty()) {
+            return e -> true;
+        }
+        return e -> employees.contains(e.getId())
+                || (e.getDepartmentId() != null && departments.contains(e.getDepartmentId()));
     }
 
     /** 합친 칸 바깥 테두리(가는 선). */

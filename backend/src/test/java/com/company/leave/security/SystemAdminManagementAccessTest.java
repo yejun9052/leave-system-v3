@@ -29,6 +29,7 @@ import com.company.leave.policy.PolicyController;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.report.LeaveReportService;
 import com.company.leave.report.ReportController;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -143,10 +144,19 @@ class SystemAdminManagementAccessTest {
 
     @Test
     void 시스템_관리자는_보고서를_내려받을_수_있다() throws Exception {
-        when(reports.exportUsage(2027)).thenReturn(new byte[] {1, 2, 3});
+        when(reports.exportUsage(2027, List.of(), List.of())).thenReturn(new byte[] {1, 2, 3});
         mvc.perform(get("/api/reports/leave-usage/export").param("year", "2027"))
                 .andExpect(status().isOk());
-        verify(reports).exportUsage(2027);
+        verify(reports).exportUsage(2027, List.of(), List.of());
+    }
+
+    @Test
+    void 보고서는_고른_부서와_사용자를_그대로_넘긴다() throws Exception {
+        when(reports.exportUsage(2027, List.of(3L, 4L), List.of(9L))).thenReturn(new byte[] {1});
+        mvc.perform(get("/api/reports/leave-usage/export").param("year", "2027")
+                        .param("departmentIds", "3", "4").param("employeeIds", "9"))
+                .andExpect(status().isOk());
+        verify(reports).exportUsage(2027, List.of(3L, 4L), List.of(9L));
     }
 
     @Test

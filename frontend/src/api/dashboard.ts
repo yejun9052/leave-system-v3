@@ -25,5 +25,11 @@ export const dashboardApi = {
 };
 
 export const reportApi = {
-  usageExportUrl: (year: number) => `/api/reports/leave-usage/export?year=${year}`,
+  /** 부서·사용자를 고르면 그 대상만(둘을 합침), 아무것도 고르지 않으면 전체 */
+  usageExportUrl: (year: number, departmentIds: number[] = [], employeeIds: number[] = []) => {
+    const params = new URLSearchParams({ year: String(year) });
+    departmentIds.forEach((id) => params.append("departmentIds", String(id)));
+    employeeIds.forEach((id) => params.append("employeeIds", String(id)));
+    return `/api/reports/leave-usage/export?${params}`;
+  },
 };
