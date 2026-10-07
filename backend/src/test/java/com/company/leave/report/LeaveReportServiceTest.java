@@ -113,6 +113,7 @@ class LeaveReportServiceTest {
         }
         assertThat(sheet.getRow(1).getFirstCellNum()).isEqualTo((short) C);
         assertThat(칸(sheet, HEADER_ROW + 1, C + 1)).isEqualTo("김하늘");
+        assertThat(sheet.getPaneInformation()).as("양식처럼 틀 고정 없음").isNull();
     }
 
     @Test

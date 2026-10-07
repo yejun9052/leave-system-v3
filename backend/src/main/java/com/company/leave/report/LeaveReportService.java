@@ -175,7 +175,6 @@ public class LeaveReportService {
             for (int i = 0; i < dayColumns; i++) {
                 sheet.setColumnWidth(FIRST_DAY_COL + i, 15 * 256);
             }
-            sheet.createFreezePane(TEAM_COL + 1, HEADER_ROW + 1);
             wb.write(out);
             return out.toByteArray();
         } catch (IOException ex) {
