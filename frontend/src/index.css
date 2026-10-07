@@ -66,6 +66,12 @@
   --fc-today-bg-color: hsl(var(--accent));
   --fc-page-bg-color: transparent;
 }
+/* "+더보기" 팝업: 위의 page-bg 가 투명이라 팝업도 투명해져 뒤 일정과 겹쳐 보인다. 팝업만 불투명하게 */
+.fc .fc-popover {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
+}
 .fc .fc-toolbar-title {
   font-size: 1.1rem;
   font-weight: 600;
