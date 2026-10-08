@@ -111,7 +111,8 @@ export default function ReportsPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <section className="space-y-2">
-              <div className="flex items-center justify-between">
+              {/* 높이 고정: "선택 해제" 버튼(h-7)이 나타나도 아래 목록이 밀리지 않게 */}
+              <div className="flex h-7 items-center justify-between">
                 <Label>부서</Label>
                 {departmentIds.size > 0 && (
                   <Button variant="ghost" size="sm" className="h-7" onClick={() => setDepartmentIds(new Set())}>
@@ -128,7 +129,7 @@ export default function ReportsPage() {
             </section>
 
             <section className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex h-7 items-center justify-between">
                 <Label>사용자</Label>
                 {employeeIds.size > 0 && (
                   <Button variant="ghost" size="sm" className="h-7" onClick={() => setEmployeeIds(new Set())}>
