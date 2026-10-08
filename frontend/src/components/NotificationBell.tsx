@@ -19,6 +19,21 @@ export function useUnreadNotifications(): number {
 
 type AppNotification = Awaited<ReturnType<typeof notificationApi.list>>[number];
 
+// 알림 제목 색: 승인·등록은 초록, 반려·취소는 빨강, 결재 대기(신청·취소 요청)는 노랑
+const APPROVED_TYPES = new Set(["LEAVE_APPROVED", "LEAVE_APPROVED_INFO", "LEAVE_REGISTERED"]);
+const REJECTED_TYPES = new Set([
+  "LEAVE_REJECTED", "LEAVE_WITHDRAWN", "LEAVE_CANCELLED_BY_HR", "LEAVE_CANCEL_APPROVED", "LEAVE_CANCELLED_INFO",
+  "LEAVE_CANCEL_REJECTED", "LEAVE_FORCE_CANCELLED",
+]);
+const PENDING_TYPES = new Set(["LEAVE_SUBMITTED", "LEAVE_REQUESTED", "LEAVE_CANCEL_REQUESTED"]);
+
+function titleColor(type: string): string {
+  if (APPROVED_TYPES.has(type)) return "text-green-700";
+  if (REJECTED_TYPES.has(type)) return "text-red-600";
+  if (PENDING_TYPES.has(type)) return "text-amber-600";
+  return "";
+}
+
 /** 알림을 눌렀을 때 갈 곳과 버튼 이름. 결재 요청·취소 요청은 눈에 띄게 보여 준다. */
 function actionOf(n: AppNotification): { to: string; label: string; primary?: boolean } | null {
   // 서버가 정한 앱 안의 주소만 따라간다
@@ -97,7 +112,7 @@ export default function NotificationBell({ open, onOpenChange }: {
                 const action = actionOf(n);
                 const body = (
                   <>
-                    <p className="font-medium">{n.title}</p>
+                    <p className={cn("font-medium", titleColor(n.type))}>{n.title}</p>
                     {n.message && <p className="text-xs text-muted-foreground">{n.message}</p>}
                     <div className="mt-1.5 flex items-center justify-between gap-2">
                       <span className="text-[11px] text-muted-foreground">{formatDateTime(n.createdAt)}</span>
