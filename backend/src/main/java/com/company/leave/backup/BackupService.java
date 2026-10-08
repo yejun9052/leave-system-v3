@@ -6,7 +6,10 @@ import com.company.leave.backup.BackupDtos.Overview;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -17,6 +20,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +37,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * DB 백업(pg_dump). 백업 폴더(app.backup.dir) 아래에만 쓰고, 한 번에 하나만 실행한다.
@@ -40,6 +47,7 @@ import org.springframework.util.StringUtils;
  *   <li>.tmp 이름으로 쓰고 성공하면 이름을 바꾼다. 실패하면 만들다 만 파일을 지운다(목록에 미완성 파일이 보이지 않게)</li>
  *   <li>세션 테이블은 구조만 남긴다(복원했을 때 예전 로그인이 살아나지 않게)</li>
  *   <li>DB 비밀번호는 명령 인자가 아닌 환경변수 PGPASSWORD 로 넘긴다(프로세스 목록 노출 방지)</li>
+ *   <li>백업마다 같은 이름의 .json(만든 시각·종류·DB 버전·크기·SHA-256)을 함께 만든다({@link BackupInfo})</li>
  * </ul>
  */
 @Service
@@ -47,16 +55,22 @@ public class BackupService {
 
     private static final Logger log = LoggerFactory.getLogger(BackupService.class);
 
-    static final Pattern FILE_NAME = Pattern.compile("annual_leave_(\\d{8}_\\d{6})_(manual|auto)\\.dump");
+    static final Pattern FILE_NAME = Pattern.compile("annual_leave_(\\d{8}_\\d{6})_(manual|auto|pre-restore)\\.dump");
+    /** import/ 폴더 파일 이름: 영문·숫자·._- 만, .dump 로 끝나고 100자 이하. */
+    static final Pattern IMPORT_NAME = Pattern.compile("[A-Za-z0-9_-][A-Za-z0-9._-]{0,94}\\.dump");
     static final Duration TIMEOUT = Duration.ofMinutes(10);
-    /** 가져올 백업을 두는 하위 폴더(4단계). 목록에는 보이지 않는다. */
+    /** 서버 관리자가 외부 백업 파일을 직접 넣는 하위 폴더. 목록에 "가져온 파일"로 보이고 복원할 수 있다. */
     static final String IMPORT_DIR = "import";
     private static final List<String> SESSION_TABLES = List.of("spring_session", "spring_session_attributes");
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final Path dir;
+    private final Path importDir;
+    private final BackupProperties props;
     private final String pgDump;
+    private final DbVersionSource dbVersion;
+    private final ObjectMapper json;
     private final DbTarget db;
     private final BackupProcessRunner runner;
     private final Clock clock;
@@ -81,19 +95,25 @@ public class BackupService {
     }
 
     @Autowired
-    public BackupService(BackupProperties props, BackupProcessRunner runner,
+    public BackupService(BackupProperties props, BackupProcessRunner runner, DbVersionSource dbVersion,
+                         ObjectMapper json,
                          @Value("${spring.datasource.url:}") String jdbcUrl,
                          @Value("${spring.datasource.username:}") String username,
                          @Value("${spring.datasource.password:}") String password) {
-        this(props, runner, parse(jdbcUrl, username, password), Clock.system(SEOUL));
+        this(props, runner, parse(jdbcUrl, username, password), Clock.system(SEOUL), dbVersion, json);
     }
 
-    BackupService(BackupProperties props, BackupProcessRunner runner, DbTarget db, Clock clock) {
+    BackupService(BackupProperties props, BackupProcessRunner runner, DbTarget db, Clock clock,
+                  DbVersionSource dbVersion, ObjectMapper json) {
         if (props == null || !StringUtils.hasText(props.dir())) {
             throw new IllegalStateException("app.backup.dir 설정이 필요합니다.");
         }
         this.dir = Path.of(props.dir()).toAbsolutePath().normalize();
+        this.importDir = dir.resolve(IMPORT_DIR);
+        this.props = props;
         this.pgDump = props.pgDump();
+        this.dbVersion = dbVersion;
+        this.json = json;
         this.db = db;
         this.runner = runner;
         this.clock = clock;
@@ -126,7 +146,8 @@ public class BackupService {
             throw failed("DB 접속 주소(spring.datasource.url)를 읽을 수 없습니다.");
         }
         prepareDirs();
-        String name = "annual_leave_" + LocalDateTime.now(clock).format(STAMP) + "_" + kind.code() + ".dump";
+        LocalDateTime createdAt = LocalDateTime.now(clock).withNano(0);
+        String name = "annual_leave_" + createdAt.format(STAMP) + "_" + kind.code() + ".dump";
         Path target = dir.resolve(name);
         if (Files.exists(target)) {
             throw failed("같은 시각의 백업 파일이 이미 있습니다. 잠시 후 다시 시도하세요.");
@@ -144,6 +165,7 @@ public class BackupService {
         } finally {
             deleteQuietly(tmp);
         }
+        writeInfo(target, kind, createdAt);
         BackupFile file = toBackupFile(target)
                 .orElseThrow(() -> failed("만든 파일을 읽을 수 없습니다: " + target));
         log.info("백업 완료: {} ({} bytes)", file.fileName(), file.size());
@@ -171,7 +193,8 @@ public class BackupService {
     /** 백업 탭: 폴더·남은 공간·진행 여부와 백업 목록(최신순). */
     public Overview overview() {
         prepareDirs();
-        return new Overview(dir.toString(), dir.toFile().getUsableSpace(), running.get(), listBackups());
+        return new Overview(dir.toString(), dir.toFile().getUsableSpace(), running.get(), listBackups(), listImports(),
+                dbVersion.current());
     }
 
     /** 백업 폴더의 백업 파일(최신순). */
@@ -187,6 +210,20 @@ public class BackupService {
         }
     }
 
+    /** import/ 폴더의 가져온 파일(최신순). 만든 시각은 파일 수정 시각. */
+    private List<BackupFile> listImports() {
+        try (Stream<Path> paths = Files.list(importDir)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(p -> IMPORT_NAME.matcher(p.getFileName().toString()).matches())
+                    .map(this::toImportFile)
+                    .flatMap(Optional::stream)
+                    .sorted(Comparator.comparing(BackupFile::createdAt).thenComparing(BackupFile::fileName).reversed())
+                    .toList();
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.BACKUP_FAILED, "가져온 파일 폴더를 읽을 수 없습니다: " + importDir);
+        }
+    }
+
     /**
      * 자동 백업 보관 정리({@link BackupRetention}). 새 자동 백업이 성공한 뒤에만 부른다.
      * 수동·복원 전 백업은 지우지 않는다. 지우지 못한 파일은 건너뛰고 로그만 남긴다.
@@ -198,6 +235,7 @@ public class BackupService {
         for (BackupFile old : BackupRetention.toDelete(listBackups(), keepDaily, keepWeekly, keepMonthly)) {
             try {
                 Files.deleteIfExists(dir.resolve(old.fileName()));
+                Files.deleteIfExists(infoPath(dir.resolve(old.fileName())));
                 deleted.add(old.fileName());
             } catch (IOException e) {
                 log.warn("오래된 자동 백업 삭제 실패: {} ({})", old.fileName(), e.getMessage());
@@ -214,6 +252,7 @@ public class BackupService {
         Path file = resolve(fileName);
         try {
             Files.delete(file);
+            Files.deleteIfExists(infoPath(file));
         } catch (IOException e) {
             throw new BusinessException(ErrorCode.BACKUP_FAILED, "백업 파일을 지우지 못했습니다: " + fileName);
         }
@@ -234,6 +273,124 @@ public class BackupService {
         return file;
     }
 
+    /** import/ 폴더의 가져온 파일. 이름 규칙을 지키고 import/ 바로 아래에 있어야 한다(경로 조작 방지). */
+    public Path resolveImport(String fileName) {
+        if (fileName == null || !IMPORT_NAME.matcher(fileName).matches()) {
+            throw new BusinessException(ErrorCode.BACKUP_INVALID_NAME);
+        }
+        Path file = importDir.resolve(fileName).normalize();
+        if (!importDir.equals(file.getParent()) || !Files.isRegularFile(file)) {
+            throw new BusinessException(ErrorCode.BACKUP_NOT_FOUND);
+        }
+        return file;
+    }
+
+    /** 백업 정보 파일 경로: 같은 이름의 .json. */
+    static Path infoPath(Path dump) {
+        return dump.resolveSibling(dump.getFileName().toString().replaceFirst("\\.dump$", ".json"));
+    }
+
+    /** 백업 정보 파일. 없거나 읽을 수 없으면 비어 있다. */
+    Optional<BackupInfo> readInfo(Path dump) {
+        Path info = infoPath(dump);
+        if (!Files.isRegularFile(info)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(json.readValue(Files.readString(info), BackupInfo.class));
+        } catch (IOException | JacksonException e) {
+            log.warn("백업 정보 파일을 읽을 수 없음: {} ({})", info, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /** 백업 정보 파일 작성. 실패해도 백업은 성공으로 둔다(복원할 때 백업 안에서 버전을 확인한다). */
+    private void writeInfo(Path dump, Kind kind, LocalDateTime createdAt) {
+        Path info = infoPath(dump);
+        Path tmp = info.resolveSibling(info.getFileName() + ".tmp");
+        try {
+            BackupInfo content = new BackupInfo(dump.getFileName().toString(), createdAt.toString(), kind.code(),
+                    dbVersion.current(), Files.size(dump), sha256(dump));
+            Files.writeString(tmp, json.writerWithDefaultPrettyPrinter().writeValueAsString(content));
+            Files.move(tmp, info, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | RuntimeException e) {
+            log.warn("백업 정보 파일을 만들지 못했습니다: {} ({})", info, e.getMessage());
+            deleteQuietly(tmp);
+        }
+    }
+
+    /** 파일 SHA-256(16진수 소문자). */
+    static String sha256(Path file) throws IOException {
+        try (InputStream in = Files.newInputStream(file)) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                digest.update(buf, 0, n);
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * 정보 파일이 없는 백업(1단계 백업, 가져온 파일)의 DB 버전: 백업 안의 flyway_schema_history 를 꺼내 읽는다.
+     *
+     * @return 성공한 마이그레이션 중 가장 높은 버전. 기록이 없으면 null
+     * @throws BusinessException 백업 파일을 읽을 수 없을 때(BACKUP_INVALID_FILE)
+     */
+    String dbVersionInDump(Path dump) {
+        BackupProcessRunner.Result result = runTool(List.of(props.tool("pg_restore"), "--data-only",
+                "--table=flyway_schema_history", "-f", "-", dump.toString()), Map.of(), Duration.ofMinutes(2));
+        if (result.exitCode() != 0) {
+            log.warn("백업 안의 DB 버전 확인 실패(종료 코드 {}): {}", result.exitCode(), result.output());
+            throw new BusinessException(ErrorCode.BACKUP_INVALID_FILE);
+        }
+        return flywayVersionIn(result.output());
+    }
+
+    /** pg_restore 가 꺼낸 COPY 블록에서 성공한(success = t) 마이그레이션의 가장 높은 버전. */
+    static String flywayVersionIn(String sql) {
+        String[] lines = sql.split("\\R");
+        String best = null;
+        for (int i = 0; i < lines.length; i++) {
+            if (!lines[i].startsWith("COPY ") || !lines[i].contains("flyway_schema_history")) {
+                continue;
+            }
+            List<String> columns = Arrays.stream(lines[i].substring(lines[i].indexOf('(') + 1, lines[i].indexOf(')'))
+                    .split(",")).map(String::strip).toList();
+            int version = columns.indexOf("version");
+            int success = columns.indexOf("success");
+            for (int j = i + 1; j < lines.length && !lines[j].equals("\\."); j++) {
+                String[] row = lines[j].split("\t", -1);
+                if (row.length <= Math.max(version, success) || !"t".equals(row[success])
+                        || "\\N".equals(row[version])) {
+                    continue;
+                }
+                if (best == null || DbVersionSource.compare(row[version], best) > 0) {
+                    best = row[version];
+                }
+            }
+        }
+        return best;
+    }
+
+    /** PostgreSQL 클라이언트 도구 실행(시작 실패·시간 초과는 BACKUP_FAILED). */
+    BackupProcessRunner.Result runTool(List<String> command, Map<String, String> env, Duration timeout) {
+        try {
+            return runner.run(command, env, timeout);
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.BACKUP_FAILED,
+                    command.get(0) + " 를 실행할 수 없습니다. 설치 경로(app.backup.pg-bin)를 확인하세요. " + e.getMessage());
+        } catch (TimeoutException e) {
+            throw new BusinessException(ErrorCode.BACKUP_FAILED, "제한 시간(" + timeout.toMinutes() + "분)을 넘겨 중단했습니다.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.BACKUP_FAILED, "작업이 중단되었습니다.");
+        }
+    }
+
     private void prepareDirs() {
         try {
             Files.createDirectories(dir.resolve(IMPORT_DIR));
@@ -249,8 +406,19 @@ public class BackupService {
         }
         try {
             return Optional.of(new BackupFile(path.getFileName().toString(), LocalDateTime.parse(m.group(1), STAMP),
-                    Files.size(path), Kind.ofCode(m.group(2))));
+                    Files.size(path), Kind.ofCode(m.group(2)), readInfo(path).map(BackupInfo::dbVersion).orElse(null)));
         } catch (DateTimeParseException | IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<BackupFile> toImportFile(Path path) {
+        try {
+            LocalDateTime modified = LocalDateTime.ofInstant(Files.getLastModifiedTime(path).toInstant(), SEOUL)
+                    .withNano(0);
+            return Optional.of(new BackupFile(path.getFileName().toString(), modified, Files.size(path), Kind.IMPORTED,
+                    readInfo(path).map(BackupInfo::dbVersion).orElse(null)));
+        } catch (IOException e) {
             return Optional.empty();
         }
     }

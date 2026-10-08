@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 public class BackupProcessRunner {
 
     /** 출력은 오류 안내용이라 앞부분만 보관한다. */
-    private static final int MAX_OUTPUT = 8 * 1024;
+    private static final int MAX_OUTPUT = 64 * 1024;
 
     /**
      * @param exitCode 종료 코드(0 = 성공)

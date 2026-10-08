@@ -13,10 +13,16 @@ public final class BackupDtos {
     private BackupDtos() {
     }
 
-    /** 백업 종류. 파일 이름 끝에 code 가 붙는다. */
+    /**
+     * 백업 종류. 파일 이름 끝에 code 가 붙는다. IMPORTED 는 서버 관리자가 import/ 폴더에 직접 넣은 외부 파일
+     * (이름 규칙이 따로 있고 화면에서 지울 수 없다).
+     */
     public enum Kind {
         MANUAL("manual"),
-        AUTO("auto");
+        AUTO("auto"),
+        /** 복원하기 직전 자동으로 만든 백업 */
+        PRE_RESTORE("pre-restore"),
+        IMPORTED("import");
 
         private final String code;
 
@@ -39,10 +45,15 @@ public final class BackupDtos {
     }
 
     /**
-     * @param createdAt 파일 이름에 적힌 만든 시각
+     * @param createdAt 파일 이름에 적힌 만든 시각(가져온 파일은 파일 수정 시각)
      * @param size      바이트
+     * @param dbVersion 백업 정보 파일(.json)에 적힌 DB 버전. 정보 파일이 없으면 null(복원할 때 백업 안에서 확인)
      */
-    public record BackupFile(String fileName, LocalDateTime createdAt, long size, Kind kind) {
+    public record BackupFile(String fileName, LocalDateTime createdAt, long size, Kind kind, String dbVersion) {
+
+        public BackupFile(String fileName, LocalDateTime createdAt, long size, Kind kind) {
+            this(fileName, createdAt, size, kind, null);
+        }
     }
 
     /**
@@ -52,8 +63,11 @@ public final class BackupDtos {
      * @param usableBytes 그 폴더가 있는 디스크의 남은 공간
      * @param running     지금 백업이 진행 중인지
      * @param files       최신순
+     * @param imports     import/ 폴더의 가져온 파일(최신순)
+     * @param dbVersion   지금 앱 DB 버전
      */
-    public record Overview(String dir, long usableBytes, boolean running, List<BackupFile> files) {
+    public record Overview(String dir, long usableBytes, boolean running, List<BackupFile> files,
+                           List<BackupFile> imports, String dbVersion) {
     }
 
     /**

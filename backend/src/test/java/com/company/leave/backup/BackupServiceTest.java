@@ -2,6 +2,7 @@ package com.company.leave.backup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.company.leave.backup.BackupDtos.BackupFile;
 import com.company.leave.backup.BackupDtos.Kind;
@@ -29,6 +30,8 @@ import org.junit.jupiter.api.DisplayNameGeneration;
 import org.junit.jupiter.api.DisplayNameGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 /** 백업: 파일 이름 검증, pg_dump 실행·실패 처리, 동시 실행 거부, 목록. pg_dump 는 가짜로 바꿔 실행하지 않는다. */
 @DisplayName("백업 서비스")
@@ -40,6 +43,8 @@ class BackupServiceTest {
             Clock.fixed(ZonedDateTime.of(2026, 10, 8, 9, 30, 0, 0, SEOUL).toInstant(), SEOUL);
     private static final DbTarget DB = new DbTarget("localhost", 5432, "annual_leave", "leave", "secret-pw");
     private static final String NAME = "annual_leave_20261008_093000_manual.dump";
+    private static final ObjectMapper JSON = JsonMapper.builder().build();
+    private static final String INFO = "annual_leave_20261008_093000_manual.json";
 
     @TempDir
     Path dir;
@@ -62,7 +67,10 @@ class BackupServiceTest {
             this.command = command;
             this.env = env;
             beforeWrite();
-            Files.writeString(Path.of(command.get(command.indexOf("-f") + 1)), "PGDMP");
+            String out = command.get(command.indexOf("-f") + 1);
+            if (!out.equals("-")) {
+                Files.writeString(Path.of(out), "PGDMP");
+            }
             return new Result(exitCode, output);
         }
 
@@ -71,7 +79,7 @@ class BackupServiceTest {
     }
 
     private BackupService service(BackupProcessRunner runner) {
-        return new BackupService(new BackupProperties(dir.toString(), ""), runner, DB, CLOCK);
+        return new BackupService(new BackupProperties(dir.toString(), ""), runner, DB, CLOCK, () -> "9", JSON);
     }
 
     private static List<String> namesIn(Path dir) throws IOException {
@@ -117,7 +125,7 @@ class BackupServiceTest {
         assertThat(file.createdAt()).isEqualTo(LocalDateTime.of(2026, 10, 8, 9, 30, 0));
         assertThat(file.kind()).isEqualTo(Kind.MANUAL);
         assertThat(file.size()).isEqualTo(5);
-        assertThat(namesIn(dir)).containsExactlyInAnyOrder(NAME, BackupService.IMPORT_DIR);
+        assertThat(namesIn(dir)).containsExactlyInAnyOrder(NAME, INFO, BackupService.IMPORT_DIR);
         assertThat(runner.command.get(runner.command.indexOf("-f") + 1)).endsWith(NAME + ".tmp");
     }
 
@@ -210,7 +218,7 @@ class BackupServiceTest {
     void 목록은_백업_파일만_최신순으로_보여_주고_폴더가_없으면_만든다() throws IOException {
         Path backups = dir.resolve("backups");
         BackupService service = new BackupService(new BackupProperties(backups.toString(), ""),
-                new FakeRunner(0, ""), DB, CLOCK);
+                new FakeRunner(0, ""), DB, CLOCK, () -> "9", JSON);
         assertThat(service.overview().files()).isEmpty();
         assertThat(backups.resolve(BackupService.IMPORT_DIR)).isDirectory();
 
@@ -259,6 +267,106 @@ class BackupServiceTest {
         assertThatThrownBy(() -> service.delete(NAME))
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_NOT_FOUND));
+    }
+
+    @Test
+    void 백업할_때_같은_이름의_정보_파일에_만든_시각_종류_DB_버전_크기_체크섬을_남긴다() throws Exception {
+        service(new FakeRunner(0, "")).backup(Kind.MANUAL);
+
+        BackupInfo info = JSON.readValue(Files.readString(dir.resolve(INFO)), BackupInfo.class);
+        assertThat(info).isEqualTo(new BackupInfo(NAME, "2026-10-08T09:30", "manual", "9", 5,
+                BackupService.sha256(dir.resolve(NAME))));
+        assertThat(info.sha256()).hasSize(64);
+    }
+
+    @Test
+    void 목록에_정보_파일의_DB_버전을_붙이고_정보_파일이_없으면_비워_둔다() throws IOException {
+        BackupService service = service(new FakeRunner(0, ""));
+        service.backup(Kind.MANUAL);
+        Files.writeString(dir.resolve("annual_leave_20261001_020000_auto.dump"), "old");
+
+        assertThat(service.overview().files()).extracting(BackupFile::fileName, BackupFile::dbVersion)
+                .containsExactly(tuple(NAME, "9"),
+                        tuple("annual_leave_20261001_020000_auto.dump", null));
+        assertThat(service.overview().dbVersion()).isEqualTo("9");
+    }
+
+    @Test
+    void 복원_전_백업은_정해진_이름으로_인식한다() throws IOException {
+        Files.writeString(dir.resolve("annual_leave_20261008_100000_pre-restore.dump"), "PGDMP");
+
+        assertThat(service(new FakeRunner(0, "")).overview().files()).extracting(BackupFile::kind)
+                .containsExactly(Kind.PRE_RESTORE);
+    }
+
+    @Test
+    void 삭제와_보관_정리는_정보_파일도_함께_지운다() throws IOException {
+        BackupService service = service(new FakeRunner(0, ""));
+        service.backup(Kind.MANUAL);
+
+        service.delete(NAME);
+
+        assertThat(namesIn(dir)).containsExactly(BackupService.IMPORT_DIR);
+    }
+
+    @Test
+    void import_폴더의_파일은_가져온_파일로_보이고_이름_규칙에_맞는_것만_보인다() throws IOException {
+        BackupService service = service(new FakeRunner(0, ""));
+        service.overview();
+        Path imports = dir.resolve(BackupService.IMPORT_DIR);
+        Files.writeString(imports.resolve("old-server_2026.dump"), "PGDMP");
+        Files.writeString(imports.resolve("memo.txt"), "x");
+        Files.writeString(imports.resolve(".hidden.dump"), "x");
+
+        assertThat(service.overview().imports()).extracting(BackupFile::fileName, BackupFile::kind)
+                .containsExactly(tuple("old-server_2026.dump", Kind.IMPORTED));
+        assertThat(service.overview().files()).isEmpty();
+        assertThat(service.resolveImport("old-server_2026.dump")).isEqualTo(imports.resolve("old-server_2026.dump"));
+    }
+
+    @Test
+    void 가져온_파일도_import_폴더_밖은_찾지_않는다() throws IOException {
+        BackupService service = service(new FakeRunner(0, ""));
+        Files.writeString(dir.resolve(NAME), "PGDMP");
+        for (String bad : List.of("../" + NAME, "..\\" + NAME, "a/b.dump", "x.sql", ".x.dump")) {
+            assertThatThrownBy(() -> service.resolveImport(bad)).as(bad)
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_INVALID_NAME));
+        }
+        assertThatThrownBy(() -> service.resolveImport(NAME))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_NOT_FOUND));
+    }
+
+    @Test
+    void 정보_파일이_없으면_백업_안의_flyway_기록에서_가장_높은_성공_버전을_읽는다() {
+        String copy = """
+                --
+                -- PostgreSQL database dump
+                --
+                COPY public.flyway_schema_history (installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success) FROM stdin;
+                1\t1\tbaseline\tSQL\tV1__baseline.sql\t1\tleave\t2026-10-06 10:00:00\t50\tt
+                2\t2\tleave type\tSQL\tV2__a.sql\t2\tleave\t2026-10-06 10:00:00\t5\tt
+                3\t10\tbroken\tSQL\tV10__b.sql\t3\tleave\t2026-10-06 10:00:00\t5\tf
+                4\t9\tbackup settings\tSQL\tV9__c.sql\t4\tleave\t2026-10-06 10:00:00\t5\tt
+                5\t\\N\t<< Flyway Baseline >>\tBASELINE\t\\N\t\\N\tleave\t2026-10-06 10:00:00\t0\tt
+                \\.
+
+                """;
+
+        assertThat(BackupService.flywayVersionIn(copy)).isEqualTo("9");
+        assertThat(BackupService.flywayVersionIn("-- empty")).isNull();
+    }
+
+    @Test
+    void 백업_안의_버전을_읽다가_pg_restore가_실패하면_올바른_백업_파일이_아니다() throws IOException {
+        Files.writeString(dir.resolve(NAME), "broken");
+        FakeRunner failing = new FakeRunner(1, "pg_restore: error: input file does not appear to be a valid archive");
+
+        assertThatThrownBy(() -> service(failing).dbVersionInDump(dir.resolve(NAME)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_INVALID_FILE));
+        assertThat(failing.command).contains("--data-only", "--table=flyway_schema_history", "-f", "-");
     }
 
     @Test

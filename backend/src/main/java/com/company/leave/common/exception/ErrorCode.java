@@ -81,6 +81,7 @@ public enum ErrorCode {
     BACKUP_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "백업에 실패했습니다."),
     BACKUP_NOT_FOUND(HttpStatus.NOT_FOUND, "백업 파일을 찾을 수 없습니다."),
     BACKUP_INVALID_NAME(HttpStatus.BAD_REQUEST, "백업 파일 이름이 올바르지 않습니다."),
+    BACKUP_INVALID_FILE(HttpStatus.BAD_REQUEST, "백업 파일이 손상되었거나 올바른 백업 파일이 아닙니다."),
 
     // 라이선스
     LICENSE_INVALID(HttpStatus.FORBIDDEN, "유효한 라이선스가 없습니다. 관리자에게 문의하세요."),
