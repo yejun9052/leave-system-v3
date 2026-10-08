@@ -72,6 +72,7 @@ export default function MyLeavesPage() {
       });
       qc.invalidateQueries({ queryKey: ["myRequests"] });
       qc.invalidateQueries({ queryKey: ["myBalance"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
@@ -214,6 +215,7 @@ export default function MyLeavesPage() {
         setOpen(false);
         qc.invalidateQueries({ queryKey: ["myRequests"] });
         qc.invalidateQueries({ queryKey: ["myBalance"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
       }} />}
     </div>
   );

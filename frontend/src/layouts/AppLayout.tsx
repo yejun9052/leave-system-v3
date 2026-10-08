@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
   LayoutDashboard,
@@ -10,12 +11,15 @@ import {
   Settings,
   BarChart3,
   ShieldCheck,
+  CalendarCheck,
   LogOut,
   Menu,
   UserRound,
   X,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { dashboardApi } from "@/api/dashboard";
+import { formatDays } from "@/lib/leaveFormat";
 import { ROLE_LABEL, type Role } from "@/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -72,6 +76,7 @@ export default function AppLayout() {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r bg-background lg:flex">
         <Brand />
         <NavList items={visibleNav} onNavigate={() => setMobileOpen(false)} />
+        <SidebarSummary onNavigate={() => setMobileOpen(false)} />
         <div className="border-t p-3">
           <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, primaryRoleLabel(user?.roles)].filter(Boolean).join(" · ")} />
         </div>
@@ -89,6 +94,7 @@ export default function AppLayout() {
               </Button>
             </div>
             <NavList items={visibleNav} onNavigate={() => setMobileOpen(false)} />
+            <SidebarSummary onNavigate={() => setMobileOpen(false)} />
             <div className="border-t p-3">
               <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, primaryRoleLabel(user?.roles)].filter(Boolean).join(" · ")} />
             </div>
@@ -128,7 +134,7 @@ export default function AppLayout() {
 // 메뉴·로고는 AppLayout 밖에 둔다. 안에서 만들면 다시 그릴 때마다 새 컴포넌트가 되어 통째로 다시 만들어진다.
 function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate: () => void }) {
   return (
-    <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
+    <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-2">
       {items.map((item) => (
         <NavLink
           key={item.to}
@@ -150,6 +156,54 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate: () => vo
         </NavLink>
       ))}
     </nav>
+  );
+}
+
+/**
+ * 메뉴 아래 내 요약: 잔여 연차와 결재 대기(내 신청). 대시보드와 같은 데이터를 함께 쓴다(["dashboard", "me"]).
+ * 비밀번호를 바꿔야 하는 동안에는 서버가 막으므로 부르지 않는다.
+ */
+function SidebarSummary({ onNavigate }: { onNavigate: () => void }) {
+  const user = useAuthStore((s) => s.user);
+  const { data } = useQuery({
+    queryKey: ["dashboard", "me"],
+    queryFn: dashboardApi.personal,
+    enabled: !!user && !user.passwordChangeRequired,
+  });
+  if (!data) return null;
+  const b = data.balance;
+  const pending = data.pendingCount;
+  return (
+    <div className="space-y-2 px-3 pb-3">
+      <Link to="/my-leaves" onClick={onNavigate}
+        className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3 transition-colors hover:bg-primary/10">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <CalendarCheck className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">잔여 연차</p>
+          <p className="text-lg font-bold leading-tight text-primary">{formatDays(b.remaining)}일</p>
+          <p className="truncate text-xs text-muted-foreground">
+            이번 기간 부여 {formatDays(b.granted + b.carriedOver)}일
+          </p>
+        </div>
+      </Link>
+      <Link to="/my-leaves" onClick={onNavigate}
+        className="flex items-center gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-accent">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground/70">
+          <Inbox className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">결재 대기</p>
+          <p className="text-lg font-bold leading-tight">{pending}건</p>
+          <p className="flex items-center truncate text-xs text-muted-foreground">
+            {pending > 0 ? (
+              <><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" />내 신청 승인 대기</>
+            ) : "대기 중인 신청 없음"}
+          </p>
+        </div>
+      </Link>
+    </div>
   );
 }
 
