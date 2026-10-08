@@ -85,7 +85,7 @@ class RestoreIntegrationTest {
         jdbc = new JdbcTemplate(ds);
         jdbc.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
         jdbc.execute("DROP ROLE IF EXISTS restore_probe");
-        // 백업은 V8 시절에 만든다(복원한 뒤 V9 로 다시 올라가는지 보려고)
+        // 백업은 V8 시절에 만든다(복원한 뒤 지금 버전(V10)까지 다시 올라가는지 보려고)
         Flyway.configure().dataSource(ds).locations("classpath:db/migration").target("8").load().migrate();
         flyway = Flyway.configure().dataSource(ds).locations("classpath:db/migration").load();
         FlywayDbVersion version = new FlywayDbVersion(flyway);
@@ -112,7 +112,7 @@ class RestoreIntegrationTest {
     void 데이터를_바꾼_뒤_복원하면_원래대로_돌아오고_낮은_버전_백업은_지금_버전으로_올린다() throws Exception {
         BackupFile backup = backups.backup(Kind.MANUAL);
         assertThat(backups.readInfo(dir.resolve(backup.fileName())).orElseThrow().dbVersion()).isEqualTo("8");
-        // 앱을 업데이트(V9)하고 데이터를 바꾸고 로그인 세션이 생김
+        // 앱을 업데이트(V9·V10)하고 데이터를 바꾸고 로그인 세션이 생김
         flyway.migrate();
         jdbc.update("DELETE FROM blackout_periods");
         jdbc.update("INSERT INTO blackout_periods (start_date, end_date, name) VALUES ('2027-01-01', '2027-01-02', '바뀐 데이터')");
@@ -123,16 +123,29 @@ class RestoreIntegrationTest {
 
         assertThat(blackoutNames()).containsExactly("원래 데이터");
         assertThat(result.fromVersion()).isEqualTo("8");
-        assertThat(result.toVersion()).isEqualTo("9");
-        assertThat(result.migrationsApplied()).isEqualTo(1);
-        // 백업에 없던 V9 표는 지워졌다가 마이그레이션으로 기본값과 함께 다시 생김
+        assertThat(result.toVersion()).isEqualTo("10");
+        assertThat(result.migrationsApplied()).isEqualTo(2);
+        // 백업에 없던 V9 표(V10 에서 보관 기간 칸으로 바뀜)는 지워졌다가 마이그레이션으로 기본값과 함께 다시 생김
         assertThat(jdbc.queryForObject("SELECT enabled FROM backup_settings", Boolean.class)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT keep_months FROM backup_settings", Integer.class)).isEqualTo(6);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM spring_session", Integer.class)).isZero();
         assertThat(count(Kind.PRE_RESTORE)).isEqualTo(1);
         assertThat(maintenance.isActive()).isFalse();
         try (Stream<Path> files = Files.list(dir)) {
             assertThat(files.map(p -> p.getFileName().toString())).noneMatch(n -> n.endsWith(".tmp"));
         }
+    }
+
+    @Test
+    void V10_은_저장된_월간_보관_개수를_보관_기간으로_옮기고_예전_칸을_지운다() {
+        Flyway.configure().dataSource(jdbc.getDataSource()).locations("classpath:db/migration").target("9").load().migrate();
+        jdbc.update("UPDATE backup_settings SET keep_monthly = 12");
+
+        flyway.migrate();
+
+        assertThat(jdbc.queryForObject("SELECT keep_months FROM backup_settings", Integer.class)).isEqualTo(12);
+        assertThat(jdbc.queryForList("SELECT column_name FROM information_schema.columns WHERE table_name = 'backup_settings'", String.class))
+                .contains("keep_months").doesNotContain("keep_daily", "keep_weekly", "keep_monthly");
     }
 
     @Test
@@ -187,7 +200,7 @@ class RestoreIntegrationTest {
         RestoreService.Check check = restore.check("from-old-server.dump", Source.IMPORT);
 
         assertThat(check.dbVersion()).isEqualTo("8");
-        assertThat(check.currentVersion()).isEqualTo("9");
+        assertThat(check.currentVersion()).isEqualTo("10");
         assertThat(check.checksumVerified()).isFalse();
         assertThat(check.kind()).isEqualTo(Kind.IMPORTED);
     }

@@ -86,7 +86,7 @@ class AutoBackupSchedulerTest {
     }
 
     private static SettingsRequest request(boolean enabled, Frequency frequency, LocalTime time, int hours) {
-        return new SettingsRequest(enabled, frequency, 3, time, hours, 7, 4, 6);
+        return new SettingsRequest(enabled, frequency, 3, time, hours, 6);
     }
 
     @Test
@@ -138,12 +138,12 @@ class AutoBackupSchedulerTest {
         doAnswer(i -> ((Supplier<String>) i.getArgument(1)).get())
                 .when(recorder).run(eq(JobRunRecorder.BACKUP_AUTO), any());
 
-        when(backupService.cleanupAuto(7, 4, 6)).thenReturn(List.of("annual_leave_20260901_020000_auto.dump"));
+        when(backupService.cleanupAuto(6)).thenReturn(List.of("annual_leave_20260301_020000_auto.dump"));
 
         scheduler.runAuto();
 
         verify(backupService).backup(Kind.AUTO);
-        verify(backupService).cleanupAuto(7, 4, 6);
+        verify(backupService).cleanupAuto(6);
         verify(messenger, never()).autoBackupFailed(anyString());
     }
 
@@ -168,8 +168,7 @@ class AutoBackupSchedulerTest {
         scheduler.runAuto();
 
         verify(messenger).autoBackupFailed("백업에 실패했습니다. pg_dump 종료 코드 1");
-        verify(backupService, never()).cleanupAuto(anyInt(),
-                anyInt(), anyInt());
+        verify(backupService, never()).cleanupAuto(anyInt());
     }
 
     @Test

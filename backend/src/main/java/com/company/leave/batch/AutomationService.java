@@ -69,7 +69,7 @@ public class AutomationService {
                                 + "안내 메일과 앱 알림을 보냅니다.",
                         policy.isPromotionEnabled() ? State.ON : State.OFF),
                 job(runs, JobRunRecorder.BACKUP_AUTO, "자동 백업", backup.schedule().label(),
-                        "DB 전체를 서버 백업 폴더에 파일로 저장하고, 보관 개수를 넘은 오래된 자동 백업을 지웁니다. 실패하면 "
+                        "DB 전체를 서버 백업 폴더에 파일로 저장하고, 보관 기간이 지난 자동 백업을 지웁니다. 실패하면 "
                                 + "시스템 관리자·인사관리자에게 알림과 메일을 보냅니다. 설정은 백업 탭에서 바꿉니다.",
                         backup.isEnabled() ? State.ON : State.OFF));
         return new Overview(policy.isPromotionEnabled(), policy.getPromotionMonths(),

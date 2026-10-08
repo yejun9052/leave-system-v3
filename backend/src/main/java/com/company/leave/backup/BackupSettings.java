@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.time.LocalTime;
 import lombok.Getter;
 
-/** 자동 백업 설정(한 줄, id = 1). 주기·시각과 일간·주간·월간 보관 개수. */
+/** 자동 백업 설정(한 줄, id = 1). 주기·시각과 보관 기간(개월). */
 @Entity
 @Table(name = "backup_settings")
 @Getter
@@ -43,14 +43,9 @@ public class BackupSettings {
     @Column(name = "interval_hours", nullable = false)
     private int intervalHours;
 
-    @Column(name = "keep_daily", nullable = false)
-    private int keepDaily;
-
-    @Column(name = "keep_weekly", nullable = false)
-    private int keepWeekly;
-
-    @Column(name = "keep_monthly", nullable = false)
-    private int keepMonthly;
+    /** 최근 N개월 동안의 자동 백업은 모두 보관(1~24). */
+    @Column(name = "keep_months", nullable = false)
+    private int keepMonths;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
@@ -58,24 +53,22 @@ public class BackupSettings {
     protected BackupSettings() {
     }
 
-    /** 기본값(마이그레이션과 같음): 켜짐, 매일 02:00, 보관 7일·4주·6개월. */
+    /** 기본값(마이그레이션과 같음): 켜짐, 매일 02:00, 6개월 보관. */
     public static BackupSettings defaults() {
         BackupSettings s = new BackupSettings();
         s.id = ID;
-        s.update(true, Frequency.DAILY, 1, LocalTime.of(2, 0), 6, 7, 4, 6);
+        s.update(true, Frequency.DAILY, 1, LocalTime.of(2, 0), 6, 6);
         return s;
     }
 
     public void update(boolean enabled, Frequency frequency, int dayOfWeek, LocalTime runTime, int intervalHours,
-                       int keepDaily, int keepWeekly, int keepMonthly) {
+                       int keepMonths) {
         this.enabled = enabled;
         this.frequency = frequency;
         this.dayOfWeek = dayOfWeek;
         this.runTime = runTime.withSecond(0).withNano(0);
         this.intervalHours = intervalHours;
-        this.keepDaily = keepDaily;
-        this.keepWeekly = keepWeekly;
-        this.keepMonthly = keepMonthly;
+        this.keepMonths = keepMonths;
         this.updatedAt = Instant.now();
     }
 

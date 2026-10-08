@@ -55,7 +55,7 @@ public class BackupSettingsService {
         BackupSettings settings = repository.findById(BackupSettings.ID)
                 .orElseGet(() -> repository.save(BackupSettings.defaults()));
         settings.update(req.enabled(), req.frequency(), req.dayOfWeek(), req.runTime(), req.intervalHours(),
-                req.keepDaily(), req.keepWeekly(), req.keepMonthly());
+                req.keepMonths());
         events.publishEvent(new Changed());
         return toResponse(settings);
     }
@@ -67,6 +67,6 @@ public class BackupSettingsService {
                 .map(job -> job + "과 같은 시각에 실행됩니다. 서로 겹치지 않는 시각을 권장합니다.")
                 .toList();
         return new Settings(s.isEnabled(), s.getFrequency(), s.getDayOfWeek(), s.getRunTime(), s.getIntervalHours(),
-                s.getKeepDaily(), s.getKeepWeekly(), s.getKeepMonthly(), schedule.label(), next, warnings);
+                s.getKeepMonths(), schedule.label(), next, warnings);
     }
 }

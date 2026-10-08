@@ -56,7 +56,7 @@ class BackupControllerAccessTest {
     private static final String NAME = "annual_leave_20261008_093000_manual.dump";
     private static final String SETTINGS = """
             {"enabled":true,"frequency":"WEEKLY","dayOfWeek":1,"runTime":"03:30","intervalHours":6,
-             "keepDaily":7,"keepWeekly":4,"keepMonthly":6}
+             "keepMonths":6}
             """;
     private static final String RESTORE = "/api/backups/" + NAME + "/restore";
     private static final String CONFIRM = "{\"confirm\":\"복원\"}";
@@ -190,7 +190,7 @@ class BackupControllerAccessTest {
     void 범위를_벗어난_설정은_400이다() throws Exception {
         authenticate(Set.of(Role.SYSTEM_ADMIN));
         mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON)
-                .content(SETTINGS.replace("\"keepDaily\":7", "\"keepDaily\":61"))).andExpect(status().isBadRequest());
+                .content(SETTINGS.replace("\"keepMonths\":6", "\"keepMonths\":25"))).andExpect(status().isBadRequest());
         mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON)
                 .content(SETTINGS.replace("\"intervalHours\":6", "\"intervalHours\":0"))).andExpect(status().isBadRequest());
         verifyNoInteractions(settings);

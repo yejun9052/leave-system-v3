@@ -21,7 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 
 const FORM_KEYS: (keyof BackupSettingsForm)[] = [
-  "enabled", "frequency", "dayOfWeek", "runTime", "intervalHours", "keepDaily", "keepWeekly", "keepMonthly",
+  "enabled", "frequency", "dayOfWeek", "runTime", "intervalHours", "keepMonths",
 ];
 
 function toForm(s: BackupSettings): BackupSettingsForm {
@@ -31,31 +31,8 @@ function toForm(s: BackupSettings): BackupSettingsForm {
     dayOfWeek: s.dayOfWeek,
     runTime: s.runTime.slice(0, 5),
     intervalHours: s.intervalHours,
-    keepDaily: s.keepDaily,
-    keepWeekly: s.keepWeekly,
-    keepMonthly: s.keepMonthly,
+    keepMonths: s.keepMonths,
   };
-}
-
-/** 보관 개수 입력(정수, 범위 안). */
-function KeepInput({ id, label, unit, max, value, onChange }: {
-  id: string;
-  label: string;
-  unit: string;
-  max: number;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="space-y-1">
-      <Label htmlFor={id} className="text-xs">{label}</Label>
-      <div className="flex items-center gap-1.5">
-        <Input id={id} type="number" min={0} max={max} className="w-20" value={value}
-          onChange={(e) => onChange(Math.max(0, Math.min(max, Math.trunc(Number(e.target.value) || 0))))} />
-        <span className="text-sm text-muted-foreground">{unit}</span>
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -151,19 +128,16 @@ export default function BackupSettingsCard() {
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium">보관 개수 (자동 백업만)</p>
-          <div className="flex flex-wrap gap-5">
-            <KeepInput id="keep-daily" label="일간" unit="일" max={60} value={form.keepDaily}
-              onChange={(v) => set("keepDaily", v)} />
-            <KeepInput id="keep-weekly" label="주간" unit="주" max={52} value={form.keepWeekly}
-              onChange={(v) => set("keepWeekly", v)} />
-            <KeepInput id="keep-monthly" label="월간" unit="개월" max={24} value={form.keepMonthly}
-              onChange={(v) => set("keepMonthly", v)} />
+          <Label htmlFor="keep-months">보관 기간 (자동 백업)</Label>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm">최대</span>
+            <Input id="keep-months" type="number" min={1} max={24} className="w-20" value={form.keepMonths}
+              onChange={(e) => set("keepMonths", Math.max(1, Math.min(24, Math.trunc(Number(e.target.value) || 1))))} />
+            <span className="text-sm">개월 동안 저장 (1~24)</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            새 자동 백업이 성공한 뒤에만 정리합니다. 날짜·주(월~일)·월마다 마지막 백업을, 백업이 있는 최근 N개만큼
-            남기고 셋 중 하나라도 해당하면 지우지 않습니다. 가장 최근 자동 백업은 항상 남깁니다. 수동·복원 전 백업은
-            자동으로 지우지 않으니 필요 없으면 목록에서 직접 지워 주세요.
+            이 기간 안의 자동 백업은 모두 남기고, 더 오래된 자동 백업은 새 자동 백업이 성공한 뒤 지웁니다. 가장 최근 자동
+            백업은 항상 남깁니다. 수동·복원 전 백업은 자동으로 지우지 않으니 필요 없으면 목록에서 직접 지워 주세요.
           </p>
         </div>
 

@@ -240,16 +240,17 @@ class BackupServiceTest {
     }
 
     @Test
-    void 보관_정리는_규칙에_맞지_않는_자동_백업만_지우고_수동_백업은_남긴다() throws IOException {
-        for (String name : List.of("annual_leave_20261006_020000_auto.dump", "annual_leave_20261007_020000_auto.dump",
+    void 보관_정리는_보관_기간이_지난_자동_백업만_지우고_수동_백업은_남긴다() throws IOException {
+        // 지금 2026-10-08 09:30, 6개월 → 2026-04-08 09:30 이전 자동 백업만 삭제
+        for (String name : List.of("annual_leave_20260401_020000_auto.dump", "annual_leave_20260408_093100_auto.dump",
                 "annual_leave_20261008_020000_auto.dump", "annual_leave_20260101_090000_manual.dump")) {
             Files.writeString(dir.resolve(name), "PGDMP");
         }
 
-        List<String> deleted = service(new FakeRunner(0, "")).cleanupAuto(2, 0, 0);
+        List<String> deleted = service(new FakeRunner(0, "")).cleanupAuto(6);
 
-        assertThat(deleted).containsExactly("annual_leave_20261006_020000_auto.dump");
-        assertThat(namesIn(dir)).containsExactlyInAnyOrder("annual_leave_20261007_020000_auto.dump",
+        assertThat(deleted).containsExactly("annual_leave_20260401_020000_auto.dump");
+        assertThat(namesIn(dir)).containsExactlyInAnyOrder("annual_leave_20260408_093100_auto.dump",
                 "annual_leave_20261008_020000_auto.dump", "annual_leave_20260101_090000_manual.dump");
     }
 
@@ -367,6 +368,18 @@ class BackupServiceTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_INVALID_FILE));
         assertThat(failing.command).contains("--data-only", "--table=flyway_schema_history", "-f", "-");
+    }
+
+    @Test
+    void 같은_초에_같은_종류를_또_만들면_다음_초까지_기다렸다_만든다() {
+        BackupService service = new BackupService(new BackupProperties(dir.toString(), ""), new FakeRunner(0, ""), DB,
+                Clock.system(ZoneId.of("Asia/Seoul")), () -> "9", JSON);
+
+        BackupFile first = service.backup(Kind.PRE_RESTORE);
+        BackupFile second = service.backup(Kind.PRE_RESTORE);
+
+        assertThat(second.fileName()).isNotEqualTo(first.fileName());
+        assertThat(second.createdAt()).isAfter(first.createdAt());
     }
 
     @Test

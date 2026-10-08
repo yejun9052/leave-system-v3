@@ -147,7 +147,12 @@ public class BackupService {
         }
         prepareDirs();
         LocalDateTime createdAt = LocalDateTime.now(clock).withNano(0);
-        String name = "annual_leave_" + createdAt.format(STAMP) + "_" + kind.code() + ".dump";
+        // 이름은 초 단위라 같은 초에 같은 종류를 또 만들면(예: 복원 직후 다시 복원) 다음 초까지 기다렸다 만든다
+        for (int retry = 0; Files.exists(dir.resolve(fileName(createdAt, kind))) && retry < 2; retry++) {
+            sleepQuietly(Duration.ofMillis(1000 - LocalDateTime.now(clock).getNano() / 1_000_000 + 10));
+            createdAt = LocalDateTime.now(clock).withNano(0);
+        }
+        String name = fileName(createdAt, kind);
         Path target = dir.resolve(name);
         if (Files.exists(target)) {
             throw failed("같은 시각의 백업 파일이 이미 있습니다. 잠시 후 다시 시도하세요.");
@@ -225,14 +230,15 @@ public class BackupService {
     }
 
     /**
-     * 자동 백업 보관 정리({@link BackupRetention}). 새 자동 백업이 성공한 뒤에만 부른다.
+     * 자동 백업 보관 정리({@link BackupRetention}): 최근 keepMonths 개월보다 오래된 자동 백업 삭제.
+     * 새 자동 백업이 성공한 뒤에만 부른다.
      * 수동·복원 전 백업은 지우지 않는다. 지우지 못한 파일은 건너뛰고 로그만 남긴다.
      *
      * @return 지운 파일 이름(오래된 것부터)
      */
-    public List<String> cleanupAuto(int keepDaily, int keepWeekly, int keepMonthly) {
+    public List<String> cleanupAuto(int keepMonths) {
         List<String> deleted = new ArrayList<>();
-        for (BackupFile old : BackupRetention.toDelete(listBackups(), keepDaily, keepWeekly, keepMonthly)) {
+        for (BackupFile old : BackupRetention.toDelete(listBackups(), keepMonths, LocalDateTime.now(clock))) {
             try {
                 Files.deleteIfExists(dir.resolve(old.fileName()));
                 Files.deleteIfExists(infoPath(dir.resolve(old.fileName())));
@@ -459,6 +465,18 @@ public class BackupService {
         String[] lines = output.strip().split("\\R");
         String last = lines[lines.length - 1].strip();
         return ": " + (last.length() > 200 ? last.substring(0, 200) : last);
+    }
+
+    private static String fileName(LocalDateTime createdAt, Kind kind) {
+        return "annual_leave_" + createdAt.format(STAMP) + "_" + kind.code() + ".dump";
+    }
+
+    private static void sleepQuietly(Duration duration) {
+        try {
+            Thread.sleep(Math.max(0, duration.toMillis()));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static void deleteQuietly(Path path) {

@@ -105,8 +105,7 @@ public class AutoBackupScheduler {
     private String backupAndCleanup() {
         BackupFile file = backupService.backup(Kind.AUTO);
         BackupSettings settings = settingsService.current();
-        List<String> deleted = backupService.cleanupAuto(settings.getKeepDaily(), settings.getKeepWeekly(),
-                settings.getKeepMonthly());
+        List<String> deleted = backupService.cleanupAuto(settings.getKeepMonths());
         return summary(file, deleted);
     }
 

@@ -53,9 +53,8 @@ export interface BackupSettingsForm {
   /** "02:00" */
   runTime: string;
   intervalHours: number;
-  keepDaily: number;
-  keepWeekly: number;
-  keepMonthly: number;
+  /** 보관 기간(개월, 1~24): 이 기간 안의 자동 백업은 모두 남고, 더 오래된 자동 백업은 지워진다 */
+  keepMonths: number;
 }
 
 export interface BackupSettings extends BackupSettingsForm {

@@ -78,19 +78,17 @@ public final class BackupDtos {
      * @param warnings      다른 자동 작업과 같은 시각이면 그 안내(막지는 않음)
      */
     public record Settings(boolean enabled, Frequency frequency, int dayOfWeek, LocalTime runTime, int intervalHours,
-                           int keepDaily, int keepWeekly, int keepMonthly, String scheduleLabel,
+                           int keepMonths, String scheduleLabel,
                            LocalDateTime nextRunAt, List<String> warnings) {
     }
 
-    /** 자동 백업 설정 변경. dayOfWeek: 1=월~7=일, runTime: "02:00" */
+    /** 자동 백업 설정 변경. dayOfWeek: 1=월~7=일, runTime: "02:00", keepMonths: 보관 기간(개월) */
     public record SettingsRequest(
             @NotNull Boolean enabled,
             @NotNull Frequency frequency,
             @Min(1) @Max(7) int dayOfWeek,
             @NotNull LocalTime runTime,
             @Min(1) @Max(24) int intervalHours,
-            @Min(0) @Max(60) int keepDaily,
-            @Min(0) @Max(52) int keepWeekly,
-            @Min(0) @Max(24) int keepMonthly) {
+            @Min(1) @Max(24) int keepMonths) {
     }
 }
