@@ -371,17 +371,54 @@ class LeaveRequestServiceSickAndPartialTest {
         }
 
         @Test
-        void 취소_요청_중인_반차가_있는_날도_나머지_반차는_신청할_수_있다() {
-            LeaveRequest 취소_요청 = new LeaveRequest(employee, 반차, TUE, TUE, new BigDecimal("0.5"),
-                    new BigDecimal("0.5"), 2027, "기존");
-            취소_요청.approve(employee, java.time.Instant.now());
-            취소_요청.requestCancel("일정 변경");
-            when(requestRepository.findActiveOverlapping(EMP, TUE, TUE)).thenReturn(List.of(취소_요청));
+        void 취소_요청_중인_연차와_같은_날_시간차도_신청할_수_없다() {
+            취소_요청_중(연차, BigDecimal.ONE);
 
-            assertThat(신청(반차, null, null).getDays()).isEqualByComparingTo("0.5");
-            assertThatThrownBy(() -> 신청(연차, null, null))
+            assertThatThrownBy(() -> 신청(시간차, 2, null))
                     .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getMessage()).contains("취소 요청 중인 휴가와 날짜가 겹칩니다"));
+            LeaveRequestDtos.Eligibility preview = service.eligibility(EMP, 시간차.getId(), TUE, TUE, 2, null);
+            assertThat(preview.allowed()).isFalse();
+            assertThat(preview.reason()).contains("취소 요청 중인 휴가와 날짜가 겹칩니다");
+        }
+
+        @Test
+        void 취소_요청_중인_연차와_같은_날_병가_공가도_신청할_수_없다() {
+            잔여(0);
+            취소_요청_중(연차, BigDecimal.ONE);
+
+            for (LeaveType type : List.of(병가, 공가)) {
+                assertThatThrownBy(() -> 신청(type, null, null))
+                        .as(type.getName())
+                        .isInstanceOfSatisfying(BusinessException.class,
+                                ex -> assertThat(ex.getMessage()).contains("취소 요청 중인 휴가와 날짜가 겹칩니다"));
+            }
+        }
+
+        @Test
+        void 취소_요청_중인_반차가_있는_날에는_반차_시간차도_신청할_수_없다() {
+            취소_요청_중(반차, new BigDecimal("0.5"));
+
+            assertThatThrownBy(() -> 신청(반차, null, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getMessage()).contains("취소 요청 중인 휴가와 날짜가 겹칩니다"));
+            assertThatThrownBy(() -> 신청(시간차, 1, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getMessage()).contains("취소 요청 중인 휴가와 날짜가 겹칩니다"));
+            verify(requestRepository, never()).save(any());
+        }
+
+        @Test
+        void 승인된_반차가_있는_날은_합계_1일까지_반차_시간차를_신청할_수_있다() {
+            LeaveRequest 승인 = new LeaveRequest(employee, 반차, TUE, TUE, new BigDecimal("0.5"),
+                    new BigDecimal("0.5"), 2027, "기존");
+            승인.approve(employee, java.time.Instant.now());
+            when(requestRepository.findActiveOverlapping(EMP, TUE, TUE)).thenReturn(List.of(승인));
+
+            assertThat(신청(시간차, 3, null).getDays()).isEqualByComparingTo("0.375");
+            assertThatThrownBy(() -> 신청(연차, null, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_DATE_OVERLAP));
         }
 
         @Test
@@ -898,6 +935,14 @@ class LeaveRequestServiceSickAndPartialTest {
     /** 승인 기준 잔여 연차를 맞춘다(부여 = 잔여, 사용·소멸 0 기준에서 현재 소멸분은 유지). */
     private void 잔여(double remaining) {
         balance.setGranted(BigDecimal.valueOf(remaining).add(balance.getUsed()).add(balance.getExpired()));
+    }
+
+    /** TUE 하루짜리 승인 휴가를 취소 요청 중으로 만들어 겹침 조회에 걸리게 한다. */
+    private void 취소_요청_중(LeaveType type, BigDecimal days) {
+        LeaveRequest r = new LeaveRequest(employee, type, TUE, TUE, days, days, 2027, "기존");
+        r.approve(employee, java.time.Instant.now());
+        r.requestCancel("일정 변경");
+        when(requestRepository.findActiveOverlapping(EMP, TUE, TUE)).thenReturn(List.of(r));
     }
 
     private LeaveRequest 신청(LeaveType type, Integer hours, Boolean acknowledged) {

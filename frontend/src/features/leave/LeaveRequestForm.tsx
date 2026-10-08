@@ -167,17 +167,19 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     return `결재 대기 중인 연차·반차 신청이 있어 ${names}${objectParticle(names)} 신청할 수 없습니다. 대기 중인 신청이 처리된 뒤 신청해 주세요.`;
   })();
 
-  // 신청 미리보기: 신청과 같은 계산으로 근무일·차감·신청 후 잔여와 불가 사유를 받는다
-  const previewEnabled =
-    !!selectedType && !!start && !!endDate && (!isHourly || !!hours) && (!halfDayRule || !!halfDayPart);
+  // 신청 미리보기: 신청과 같은 계산으로 근무일·차감·신청 후 잔여와 불가 사유를 받는다.
+  // 시간차는 시간을 고르기 전에도 가장 짧은 1시간으로 미리 물어 날짜 때문에 안 되는 경우(겹침 등)를 바로 알려 준다.
+  // 1시간에 안 되면 더 긴 시간도 안 된다. 차감 요약은 시간을 고른 뒤에만 보여 준다.
+  const previewHours = isHourly ? Number(hours || "1") : undefined;
+  const previewEnabled = !!selectedType && !!start && !!endDate && (!halfDayRule || !!halfDayPart);
   const { data: preview, isFetching: previewLoading } = useQuery({
-    queryKey: ["leavePreview", typeId, start, endDate, hours, specialRuleId, sentHalfDay],
+    queryKey: ["leavePreview", typeId, start, endDate, previewHours, specialRuleId, sentHalfDay],
     queryFn: () =>
       leaveApi.preview({
         leaveTypeId: Number(typeId),
         startDate: start,
         endDate,
-        hours: isHourly ? Number(hours) : undefined,
+        hours: previewHours,
         specialRuleId: specialRuleId ? Number(specialRuleId) : undefined,
         halfDayPart: sentHalfDay,
       }),
@@ -369,7 +371,7 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
       {notAllowed && eligibility?.reason && (
         <p className="text-sm text-destructive">{eligibility.reason}</p>
       )}
-      {eligibility?.allowed && <DeductionSummary form={form} />}
+      {eligibility?.allowed && (!isHourly || !!hours) && <DeductionSummary form={form} />}
       {forfeitDays > 0 && (
         <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           <p>승인되면 남은 연차 {formatDays(forfeitDays)}일이 소멸됩니다(취소 시 복구).</p>
