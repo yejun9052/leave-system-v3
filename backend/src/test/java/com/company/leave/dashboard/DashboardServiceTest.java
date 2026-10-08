@@ -47,6 +47,9 @@ class DashboardServiceTest {
 
     private static final LocalDate TODAY = LocalDate.now();
     private static final int YEAR = TODAY.getYear();
+    private static final LocalDate WEEK_START = TODAY.with(java.time.temporal.TemporalAdjusters.previousOrSame(
+            java.time.DayOfWeek.MONDAY));
+    private static final LocalDate WEEK_END = WEEK_START.plusDays(6);
 
     @Mock private EmployeeRepository employeeRepository;
     @Mock private LeaveRequestRepository requestRepository;
@@ -63,6 +66,7 @@ class DashboardServiceTest {
     void setUp() {
         service = new DashboardService(employeeRepository, requestRepository, balanceService);
         lenient().when(requestRepository.findApprovedBetween(TODAY, TODAY)).thenReturn(List.of());
+        lenient().when(requestRepository.findApprovedBetween(WEEK_START, WEEK_END)).thenReturn(List.of());
         lenient().when(requestRepository.findApprovedBetween(LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31)))
                 .thenReturn(List.of());
         lenient().when(balanceService.balancesAsOf(TODAY, true, true)).thenReturn(List.of());
@@ -194,7 +198,7 @@ class DashboardServiceTest {
         Employee me = 직원(10L, 개발팀);
         Employee 동료 = 직원(11L, 개발팀);
         when(employeeRepository.findById(10L)).thenReturn(Optional.of(me));
-        when(requestRepository.findApprovedBetween(TODAY, TODAY)).thenReturn(List.of(
+        when(requestRepository.findApprovedBetween(WEEK_START, WEEK_END)).thenReturn(List.of(
                 휴가(동료, TODAY, TODAY, "0.5"),
                 휴가(동료, TODAY, TODAY, "0.5"), // 같은 날 반차 두 건
                 휴가(me, TODAY, TODAY, "1"), // 본인 제외
@@ -204,11 +208,30 @@ class DashboardServiceTest {
     }
 
     @Test
+    void 팀_일정은_이번_주_같은_부서_동료의_승인된_휴가를_시작일_순으로_보여준다() {
+        Employee me = 직원(10L, 개발팀);
+        Employee 가람 = 직원(11L, 개발팀);
+        Employee 나래 = 직원(13L, 개발팀);
+        when(employeeRepository.findById(10L)).thenReturn(Optional.of(me));
+        LeaveRequest 이번주_끝 = 휴가(나래, WEEK_END, WEEK_END, "1");
+        LeaveRequest 이번주_처음 = 휴가(가람, WEEK_START, WEEK_START, "1");
+        when(requestRepository.findApprovedBetween(WEEK_START, WEEK_END)).thenReturn(List.of(
+                이번주_끝, 이번주_처음, 휴가(me, WEEK_START, WEEK_START, "1"), 휴가(직원(12L, QA팀), TODAY, TODAY, "1")));
+
+        DashboardDtos.PersonalDashboard d = service.personal(10L);
+
+        assertThat(d.teamLeaves()).extracting(DashboardDtos.TeamLeave::employeeId, DashboardDtos.TeamLeave::startDate)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(11L, WEEK_START),
+                        org.assertj.core.groups.Tuple.tuple(13L, WEEK_END));
+        assertThat(d.teamLeaves().get(0).leaveTypeName()).isEqualTo(연차.getName());
+    }
+
+    @Test
     void 부서가_없는_직원의_오늘_팀_부재는_0이다() {
         when(employeeRepository.findById(10L)).thenReturn(Optional.of(직원(10L, null)));
 
         assertThat(service.personal(10L).teamOnLeaveToday()).isZero();
-        verify(requestRepository, never()).findApprovedBetween(TODAY, TODAY);
+        verify(requestRepository, never()).findApprovedBetween(WEEK_START, WEEK_END);
     }
 
     // --- helpers ---

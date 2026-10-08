@@ -12,8 +12,11 @@ import com.company.leave.leave.dto.LeaveRequestDtos;
 import com.company.leave.leave.repository.LeaveRequestRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,18 +86,29 @@ public class DashboardService {
                 .map(LeaveRequestDtos.Response::from)
                 .toList();
 
+        // 같은 부서 동료(본인 제외)의 이번 주(월~일) 승인된 휴가. 오늘 팀 부재는 그중 오늘 쉬는 사람 수
         Employee me = employeeRepository.findById(employeeId).orElseThrow();
-        int teamOnLeave = 0;
+        List<LeaveRequest> teamThisWeek = List.of();
         if (me.getDepartmentId() != null) {
-            teamOnLeave = (int) requestRepository.findApprovedBetween(today, today).stream()
+            LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            teamThisWeek = requestRepository.findApprovedBetween(weekStart, weekStart.plusDays(6)).stream()
                     .filter(r -> me.getDepartmentId().equals(r.getEmployee().getDepartmentId()))
-                    .filter(r -> !r.getEmployee().getId().equals(employeeId)) // 본인 제외
-                    .map(r -> r.getEmployee().getId())
-                    .distinct()
-                    .count();
+                    .filter(r -> !r.getEmployee().getId().equals(employeeId))
+                    .sorted(Comparator.comparing(LeaveRequest::getStartDate)
+                            .thenComparing(r -> r.getEmployee().getName()))
+                    .toList();
         }
+        int teamOnLeave = (int) teamThisWeek.stream()
+                .filter(r -> !r.getStartDate().isAfter(today) && !r.getEndDate().isBefore(today))
+                .map(r -> r.getEmployee().getId())
+                .distinct()
+                .count();
+        List<DashboardDtos.TeamLeave> teamLeaves = teamThisWeek.stream()
+                .map(r -> new DashboardDtos.TeamLeave(r.getEmployee().getId(), r.getEmployee().getName(),
+                        r.getLeaveType().getName(), r.getPortion(), r.getStartDate(), r.getEndDate()))
+                .toList();
 
-        return new DashboardDtos.PersonalDashboard(balance, pendingCount, upcoming, teamOnLeave);
+        return new DashboardDtos.PersonalDashboard(balance, pendingCount, upcoming, teamOnLeave, teamLeaves);
     }
 
     private List<DashboardDtos.MonthlyUsage> monthlyUsage(List<LeaveRequest> approved) {

@@ -1,11 +1,22 @@
 import { api, unwrap } from "./client";
-import type { LeaveBalance, LeaveRequest } from "@/types";
+import type { LeaveBalance, LeavePortion, LeaveRequest } from "@/types";
 
 export interface PersonalDashboard {
   balance: LeaveBalance;
   pendingCount: number;
   upcoming: LeaveRequest[];
   teamOnLeaveToday: number;
+  /** 이번 주(월~일) 같은 부서 동료(본인 제외)의 승인된 휴가, 시작일 순 */
+  teamLeaves: TeamLeave[];
+}
+
+export interface TeamLeave {
+  employeeId: number;
+  employeeName: string;
+  leaveTypeName: string;
+  portion: LeavePortion;
+  startDate: string;
+  endDate: string;
 }
 
 export interface AdminDashboard {

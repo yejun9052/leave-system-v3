@@ -73,7 +73,7 @@ export default function AppLayout() {
         <Brand />
         <NavList items={visibleNav} onNavigate={() => setMobileOpen(false)} />
         <div className="border-t p-3">
-          <UserCard onLogout={onLogout} name={user?.name} roleLabel={primaryRoleLabel(user?.roles)} />
+          <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, primaryRoleLabel(user?.roles)].filter(Boolean).join(" · ")} />
         </div>
       </aside>
 
@@ -90,7 +90,7 @@ export default function AppLayout() {
             </div>
             <NavList items={visibleNav} onNavigate={() => setMobileOpen(false)} />
             <div className="border-t p-3">
-              <UserCard onLogout={onLogout} name={user?.name} roleLabel={primaryRoleLabel(user?.roles)} />
+              <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, primaryRoleLabel(user?.roles)].filter(Boolean).join(" · ")} />
             </div>
           </aside>
         </div>
@@ -128,7 +128,7 @@ export default function AppLayout() {
 // 메뉴·로고는 AppLayout 밖에 둔다. 안에서 만들면 다시 그릴 때마다 새 컴포넌트가 되어 통째로 다시 만들어진다.
 function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate: () => void }) {
   return (
-    <nav className="flex flex-1 flex-col gap-1 px-3">
+    <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
       {items.map((item) => (
         <NavLink
           key={item.to}
@@ -137,14 +137,15 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate: () => vo
           onClick={onNavigate}
           className={({ isActive }) =>
             cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+              // 선택된 메뉴: 연한 바탕 + 보라 글자 + 왼쪽 막대
               isActive
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                ? "bg-primary/10 text-primary before:absolute before:inset-y-1.5 before:-left-3 before:w-1 before:rounded-r-full before:bg-primary"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
             )
           }
         >
-          <item.icon className="h-4 w-4" />
+          <item.icon className="h-5 w-5" />
           {item.label}
         </NavLink>
       ))}
@@ -181,7 +182,7 @@ function UserCard({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg px-2 py-1.5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-sm font-semibold">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border bg-background text-sm font-semibold">
         {name?.charAt(0) ?? "?"}
       </div>
       <div className="min-w-0 flex-1">
