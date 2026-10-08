@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi } from "@/api/leave";
@@ -230,28 +230,16 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   );
 }
 
-/**
- * 휴가 신청 창(내 휴가·대시보드에서 연다).
- *
- * @param initialTypeCode 처음 고를 휴가 종류 코드(예: 대시보드 "경조사 신청" → CONDOLENCE)
- */
-export function LeaveRequestDialog({ onClose, onSaved, initialTypeCode }: {
+/** 휴가 신청 창(내 휴가·대시보드에서 연다). */
+export function LeaveRequestDialog({ onClose, onSaved }: {
   onClose: () => void;
   onSaved: (warning?: string | null) => void;
-  initialTypeCode?: string;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const form = useLeaveRequestForm({ start, end, onSaved });
   const { isPartial } = form;
-
-  // 종류 목록이 오면 처음 고를 종류를 한 번 맞춘다
-  const initialTypeId = initialTypeCode ? form.usableTypes.find((t) => t.code === initialTypeCode)?.id : undefined;
-  useEffect(() => {
-    if (initialTypeId != null) form.setTypeId(String(initialTypeId));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialTypeId]);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

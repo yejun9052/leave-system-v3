@@ -18,7 +18,6 @@ import {
   CalendarCheck2,
   CalendarClock,
   CalendarDays,
-  CalendarHeart,
   Clock,
   Inbox,
   Plus,
@@ -79,7 +78,7 @@ export default function DashboardPage() {
   const manager = isManager();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [applying, setApplying] = useState<{ typeCode?: string } | null>(null);
+  const [applying, setApplying] = useState(false);
   const now = new Date();
 
   return (
@@ -92,14 +91,9 @@ export default function DashboardPage() {
             {now.getFullYear()}년 {now.getMonth() + 1}월 {now.getDate()}일 {WEEKDAYS[now.getDay()]}요일
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button size="lg" onClick={() => setApplying({})}>
-            <Plus className="h-4 w-4" /> 휴가 신청
-          </Button>
-          <Button size="lg" variant="outline" onClick={() => setApplying({ typeCode: "CONDOLENCE" })}>
-            <CalendarHeart className="h-4 w-4" /> 경조사 신청
-          </Button>
-        </div>
+        <Button size="lg" onClick={() => setApplying(true)}>
+          <Plus className="h-4 w-4" /> 휴가 신청
+        </Button>
       </div>
 
       {/* 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 개인 연차·휴가 카드를 보여 준다 */}
@@ -108,10 +102,9 @@ export default function DashboardPage() {
 
       {applying && (
         <LeaveRequestDialog
-          initialTypeCode={applying.typeCode}
-          onClose={() => setApplying(null)}
+          onClose={() => setApplying(false)}
           onSaved={(warning) => {
-            setApplying(null);
+            setApplying(false);
             if (warning) toast({ title: warning, variant: "destructive" });
             for (const key of ["dashboard", "myRequests", "myBalance"]) qc.invalidateQueries({ queryKey: [key] });
           }}
