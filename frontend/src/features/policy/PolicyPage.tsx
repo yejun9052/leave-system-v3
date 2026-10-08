@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Save, Trash2, PlayCircle } from "lucide-react";
 import {
@@ -66,14 +67,21 @@ const DEDUCTION_MODE_DESC: Record<AnnualDeductionMode, string> = {
   NONE: "연차와 상관없이 신청하고 연차에서 빼지 않습니다. 예: 경조사 휴가",
 };
 
+const TABS = ["policy", "types", "rules", "blackout", "holidays", "promotion", "automation", "backup"];
+
 export default function PolicyPage() {
+  // ?tab=backup 처럼 주소로 탭을 열 수 있다(알림의 "백업 확인하기")
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("tab");
+  const tab = requested && TABS.includes(requested) ? requested : "policy";
+  const changeTab = (v: string) => setParams(v === "policy" ? {} : { tab: v }, { replace: true });
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">정책 · 휴가종류</h1>
         <p className="text-sm text-muted-foreground">연차 운영 정책과 휴가 종류를 설정합니다.</p>
       </div>
-      <Tabs defaultValue="policy">
+      <Tabs value={tab} onValueChange={changeTab}>
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="policy">연차 정책</TabsTrigger>
           <TabsTrigger value="types">휴가 종류</TabsTrigger>
