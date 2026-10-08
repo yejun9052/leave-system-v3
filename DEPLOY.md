@@ -331,6 +331,53 @@ gunzip -c leave_2026-07-07.sql.gz | docker exec -i leave-postgres psql -U leave 
   ```
 - 백업 파일에는 전 직원 정보(비밀번호 해시 포함)가 들어 있습니다. 서버 밖으로 옮길 때 주의하세요.
 - 내용 확인: `docker exec leave-backend pg_restore --list /backups/파일이름.dump`
+- **자동 백업**: 같은 화면에서 켜고 끄며 주기(매일·매주·N시간마다)·시각·보관 개수(일간 7·주간 4·월간 6이 기본)를 정합니다. 기본은 매일 02:00. 실패하면 시스템 관리자·인사관리자에게 알림과 메일이 갑니다.
+- 백업마다 같은 이름의 `.json`(만든 시각·종류·DB 버전·크기·SHA-256)이 함께 생깁니다. 백업 파일을 옮길 때 같이 옮기세요.
+- **화면에서 복원**(시스템 관리자): 목록의 "복원" → 확인 창에서 "복원" 입력. 복원 직전 상태를 `..._pre-restore.dump` 로 먼저 저장하고, 복원하는 동안 다른 사용자에게는 "시스템 점검 중"이 보이며, 끝나면 모든 사용자가 다시 로그인해야 합니다.
+- **다른 서버의 백업 불러오기**: 파일을 서버의 `/var/backups/annual-leave/import/` 에 넣으면(이름은 영문·숫자·`._-` 와 `.dump`) 화면의 "가져온 파일"에 보이고 복원할 수 있습니다. 화면에서 올리는 기능은 일부러 두지 않았습니다.
+  ```bash
+  sudo cp 받은파일.dump /var/backups/annual-leave/import/ && sudo chown 10001:10001 /var/backups/annual-leave/import/받은파일.dump
+  ```
+
+### 앱이 고장 났을 때 서버에서 직접 복원
+화면에 들어갈 수 없을 때 서버에서 명령으로 복원합니다. 아래 `leave` / `annual_leave` 는 `.env` 의 `POSTGRES_USER` / `POSTGRES_DB` 값입니다(다르면 바꿔서 입력). 모든 명령은 `annual-leave` 폴더에서 root(또는 `sudo`)로 실행합니다.
+
+```bash
+# 0) 복원할 파일 고르기 (.json 의 dbVersion 이 지금 앱보다 높으면 복원하면 안 됨)
+ls -lh /var/backups/annual-leave/
+FILE=/var/backups/annual-leave/annual_leave_20261008_020000_auto.dump   # ← 고른 파일
+
+# 1) 서비스 중지 (DB 는 켜 둠)
+docker compose -f docker-compose.prod.yml stop web backend
+
+# 2) 지금 상태를 먼저 백업 (되돌릴 때 씀)
+NOW=/var/backups/annual-leave/annual_leave_$(date +%Y%m%d_%H%M%S)_pre-restore.dump
+docker exec leave-postgres pg_dump -U leave -Fc \
+  --exclude-table-data=spring_session --exclude-table-data=spring_session_attributes annual_leave > "$NOW"
+chown 10001:10001 "$NOW"
+
+# 3) 백업 파일을 DB 상자로 복사하고 정상 파일인지 확인 (표 목록이 나오면 정상)
+docker cp "$FILE" leave-postgres:/tmp/restore.dump
+docker exec leave-postgres pg_restore --list /tmp/restore.dump | head
+
+# 4) 한 트랜잭션으로 복원: 모든 표 지우기 → 백업 내용 넣기. 중간에 오류가 나면 전부 되돌아가 DB 는 그대로입니다
+docker exec leave-postgres pg_restore --no-owner -f /tmp/restore.sql /tmp/restore.dump
+docker exec leave-postgres sh -c "printf 'DROP SCHEMA public CASCADE;\nCREATE SCHEMA public;\n' > /tmp/reset.sql"
+docker exec leave-postgres psql -X -q -o /dev/null -v ON_ERROR_STOP=1 --single-transaction -U leave -d annual_leave \
+  -f /tmp/reset.sql -f /tmp/restore.sql && echo "복원 성공"
+docker exec leave-postgres rm -f /tmp/restore.dump /tmp/restore.sql /tmp/reset.sql
+
+# 5) 로그인 세션 정리 (복원된 직원·권한으로 다시 로그인하게)
+docker exec leave-postgres psql -U leave -d annual_leave -c "DELETE FROM spring_session"
+
+# 6) 서비스 시작 (백업이 이전 버전이면 앱이 시작하며 지금 버전으로 자동 변환)
+docker compose -f docker-compose.prod.yml start backend web
+
+# 7) 확인
+docker compose -f docker-compose.prod.yml logs --tail=50 backend   # "Started LeaveManagementApplication" 이 보이면 정상
+```
+- 4)에서 "복원 성공"이 안 나오고 오류가 보이면 DB 는 복원 전 그대로입니다. 6)으로 서비스만 다시 켜고 오류 내용을 확인하세요.
+- 복원 뒤 브라우저에서 로그인해 데이터가 그 시점으로 돌아왔는지 확인합니다. 되돌리려면 2)에서 만든 파일로 같은 순서를 반복합니다.
 
 ### (선택) 지금 로컬 테스트 데이터 옮기기
 내 PC:
