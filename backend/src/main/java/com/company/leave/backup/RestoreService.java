@@ -144,7 +144,7 @@ public class RestoreService {
             check = verify(resolve(fileName, source), source);
             pre = preRestoreBackup();
         } catch (BusinessException ex) {
-            record(actorId, actorName, false, describe(fileName, source, null, null) + " | " + ex.getMessage());
+            recordAudit(actorId, actorName, false, describe(fileName, source, null, null) + " | " + ex.getMessage());
             throw ex;
         }
 
@@ -169,7 +169,7 @@ public class RestoreService {
         String detail = describe(fileName, source, check, pre.fileName());
         if (failure != null) {
             log.error("[복원] 실패: {} (복원 전 백업 {})", fileName, pre.fileName(), failure);
-            record(actorId, actorName, false, detail + " | " + brief(failure));
+            recordAudit(actorId, actorName, false, detail + " | " + brief(failure));
             throw new BusinessException(ErrorCode.BACKUP_RESTORE_FAILED,
                     "복원에 실패했습니다. 복원 전 백업(" + pre.fileName() + ")으로 되돌릴 수 있습니다.");
         }
@@ -177,7 +177,7 @@ public class RestoreService {
         log.info("[복원] 완료: {} (DB 버전 {} → {}, 마이그레이션 {}개, 세션 {}개 삭제, 복원 전 백업 {})",
                 fileName, check.dbVersion(), toVersion, migrations, sessions, pre.fileName());
         // 감사 로그 표도 복원으로 되돌아갔으므로 복원 기록은 지금 새로 쓴다
-        record(actorId, actorName, true, detail);
+        recordAudit(actorId, actorName, true, detail);
         events.publishEvent(new Restored(fileName));
         try {
             messenger.restored(actorName, fileName, check.createdAt(), pre.fileName());
@@ -305,7 +305,7 @@ public class RestoreService {
         return jdbc.update("DELETE FROM spring_session");
     }
 
-    private void record(Long actorId, String actorName, boolean success, String detail) {
+    private void recordAudit(Long actorId, String actorName, boolean success, String detail) {
         try {
             audit.record(actorId, actorName, "restore", "backups", null,
                     detail.length() > 1000 ? detail.substring(0, 1000) : detail, success);

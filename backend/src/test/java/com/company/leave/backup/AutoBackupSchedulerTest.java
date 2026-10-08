@@ -61,7 +61,7 @@ class AutoBackupSchedulerTest {
     @BeforeEach
     void setUp() {
         repository = mock(BackupSettingsRepository.class);
-        when(repository.findById(BackupSettings.ID)).thenReturn(Optional.of(stored));
+        when(repository.findById(BackupSettings.SINGLETON_ID)).thenReturn(Optional.of(stored));
         taskScheduler = mock(TaskScheduler.class);
         future = mock(ScheduledFuture.class);
         doAnswer(i -> future).when(taskScheduler).schedule(any(Runnable.class), any(CronTrigger.class));

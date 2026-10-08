@@ -42,7 +42,7 @@ public class BackupSettingsService {
     /** 지금 설정(행이 없으면 기본값). */
     @Transactional(readOnly = true)
     public BackupSettings current() {
-        return repository.findById(BackupSettings.ID).orElseGet(BackupSettings::defaults);
+        return repository.findById(BackupSettings.SINGLETON_ID).orElseGet(BackupSettings::defaults);
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +52,7 @@ public class BackupSettingsService {
 
     @Transactional
     public Settings update(SettingsRequest req) {
-        BackupSettings settings = repository.findById(BackupSettings.ID)
+        BackupSettings settings = repository.findById(BackupSettings.SINGLETON_ID)
                 .orElseGet(() -> repository.save(BackupSettings.defaults()));
         settings.update(req.enabled(), req.frequency(), req.dayOfWeek(), req.runTime(), req.intervalHours(),
                 req.keepMonths());

@@ -16,7 +16,7 @@ import lombok.Getter;
 @Getter
 public class BackupSettings {
 
-    public static final int ID = 1;
+    public static final int SINGLETON_ID = 1;
 
     /** 매일 / 매주(요일) / N시간마다(0시부터 정각). */
     public enum Frequency { DAILY, WEEKLY, HOURLY }
@@ -56,7 +56,7 @@ public class BackupSettings {
     /** 기본값(마이그레이션과 같음): 켜짐, 매일 02:00, 6개월 보관. */
     public static BackupSettings defaults() {
         BackupSettings s = new BackupSettings();
-        s.id = ID;
+        s.id = SINGLETON_ID;
         s.update(true, Frequency.DAILY, 1, LocalTime.of(2, 0), 6, 6);
         return s;
     }
