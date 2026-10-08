@@ -255,8 +255,27 @@ class LeaveReportServiceTest {
 
         int row = HEADER_ROW + 1;
         assertThat(칸들(sheet.getRow(row)).subList(C, C + 10)).containsExactly(
-                "1.0", "이도윤", "부서 없음", "0.0", "2021-07-05", "15.0", "", "15.0", "-1.0",
+                "1.0", "이도윤", "부서 없음", "0.0", "2021.07.05", "15.0", "", "15.0", "-1.0",
                 "2024.01.01 ~ 2024.12.31");
+    }
+
+    @Test
+    void 입사일_사용일_기준일은_날짜_서식을_모르는_프로그램에서도_보이게_글자로_쓴다() throws IOException {
+        Employee 이도윤 = employee(1L, "이도윤", null);
+        ReflectionTestUtils.setField(이도윤, "hireDate", LocalDate.of(2018, 5, 20));
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of(
+                new LeaveBalanceService.PeriodBalance(이도윤, Y2024, balance(1L, "15", "1"))));
+        공휴일();
+        승인(request(이도윤, 연차, LocalDate.of(2024, 4, 1), LocalDate.of(2024, 4, 1), "1", "1"));
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        Row row = sheet.getRow(HEADER_ROW + 1);
+        assertThat(row.getCell(C + 4).getCellType()).isEqualTo(CellType.STRING);
+        assertThat(row.getCell(C + 4).getStringCellValue()).isEqualTo("2018.05.20");
+        assertThat(row.getCell(FIRST_DAY_COL).getCellType()).isEqualTo(CellType.STRING);
+        assertThat(row.getCell(FIRST_DAY_COL).getStringCellValue()).isEqualTo("2024-04-01");
+        assertThat(sheet.getRow(INFO_ROW).getCell(C).getCellType()).isEqualTo(CellType.STRING);
     }
 
     @Test

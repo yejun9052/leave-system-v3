@@ -193,9 +193,11 @@ public class LeaveReportService {
                 styled(row.createCell(TEAM_COL), styles.team).setCellValue(team);
                 styled(row.createCell(FIRST_COL + 3), styles.used).setCellValue(
                         days.stream().map(UsedDay::days).reduce(BigDecimal.ZERO, BigDecimal::add).doubleValue());
-                Cell hire = styled(row.createCell(FIRST_COL + 4), styles.hireDate);
+                // 날짜는 글자로 쓴다(날짜 값 + 서식이면 서식을 모르는 미리보기·뷰어에서 43241.0 처럼 보임).
+                // yyyy.MM.dd 라 글자로 정렬해도 날짜 순이다
+                Cell hire = styled(row.createCell(FIRST_COL + 4), styles.cell);
                 if (e.getHireDate() != null) {
-                    hire.setCellValue(e.getHireDate());
+                    hire.setCellValue(e.getHireDate().format(PERIOD_FORMAT));
                 }
                 styled(row.createCell(FIRST_COL + 5), styles.cell).setCellValue(b.getGranted().doubleValue());
                 styled(row.createCell(FIRST_COL + 6), styles.cell); // 추가일: 아직 정하지 않아 빈칸
@@ -208,7 +210,7 @@ public class LeaveReportService {
                     if (i >= days.size()) {
                         styled(cell, styles.day);
                     } else if (days.get(i).mark() == null) {
-                        styled(cell, styles.dayDate).setCellValue(days.get(i).date());
+                        styled(cell, styles.day).setCellValue(days.get(i).date().toString());
                     } else {
                         styled(cell, styles.day).setCellValue(days.get(i).date() + days.get(i).mark());
                     }
@@ -298,7 +300,7 @@ public class LeaveReportService {
         sheet.createRow(NUMBER_ROW).createCell(FIRST_COL).setCellValue(NOTE_2019);
 
         Row info = sheet.createRow(INFO_ROW);
-        styled(info.createCell(FIRST_COL), styles.plainDate).setCellValue(asOf);
+        info.createCell(FIRST_COL).setCellValue(asOf.toString());
         styled(info.createCell(FIRST_COL + 7), styles.red).setCellValue(CHECK_NEEDED);
         info.createCell(FIRST_DAY_COL).setCellValue(LEGEND_HALF);
         info.createCell(FIRST_DAY_COL + 1).setCellValue(LEGEND_HOURLY);
@@ -474,18 +476,15 @@ public class LeaveReportService {
         final CellStyle notice;
         final CellStyle sectionTitle;
         final CellStyle pinkBar;
-        final CellStyle plainDate;
         final CellStyle red;
         final CellStyle dayNumber;
         final CellStyle header;
         final CellStyle cell;
         final CellStyle team;
-        final CellStyle hireDate;
         final CellStyle used;
         final CellStyle remaining;
         final CellStyle period;
         final CellStyle day;
-        final CellStyle dayDate;
 
         Styles(Workbook wb) {
             Font base = wb.getFontAt(0);
@@ -493,15 +492,12 @@ public class LeaveReportService {
             base.setFontHeightInPoints((short) 10);
             Font big = font(wb, true, 14, null);
             Font redFont = font(wb, false, 10, IndexedColors.RED);
-            short isoDate = wb.createDataFormat().getFormat("yyyy-mm-dd");
 
             notice = wb.createCellStyle();
             notice.setFont(big);
             sectionTitle = wb.createCellStyle();
             sectionTitle.setFont(font(wb, true, 12, null));
             pinkBar = filled(wb.createCellStyle(), PINK_BAR);
-            plainDate = wb.createCellStyle();
-            plainDate.setDataFormat(isoDate);
             red = wb.createCellStyle();
             red.setFont(redFont);
             dayNumber = wb.createCellStyle();
@@ -511,14 +507,10 @@ public class LeaveReportService {
             cell = filled(bordered(wb), WHITE);
             team = filled(bordered(wb), WHITE);
             team.setWrapText(true);
-            hireDate = filled(bordered(wb), WHITE);
-            hireDate.setDataFormat(wb.createDataFormat().getFormat("yyyy.mm.dd"));
             used = filled(bordered(wb), USED_PINK);
             remaining = filled(bordered(wb), REMAINING_CYAN);
             period = filled(bordered(wb), PERIOD_GRAY);
             day = filled(bordered(wb), DAY_BLUE);
-            dayDate = filled(bordered(wb), DAY_BLUE);
-            dayDate.setDataFormat(isoDate);
         }
 
         private static CellStyle filled(CellStyle s, int rgb) {
