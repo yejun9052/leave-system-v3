@@ -14,6 +14,8 @@ import {
   CalendarCheck,
   LogOut,
   Menu,
+  BellRing,
+  ChevronRight,
   UserRound,
   X,
 } from "lucide-react";
@@ -23,7 +25,7 @@ import { formatDays } from "@/lib/leaveFormat";
 import { ROLE_LABEL, type Role } from "@/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import NotificationBell from "@/components/NotificationBell";
+import NotificationBell, { useUnreadNotifications } from "@/components/NotificationBell";
 import LicenseBanner from "@/features/license/LicenseBanner";
 import ForcePasswordChangeDialog from "@/features/auth/ForcePasswordChangeDialog";
 
@@ -52,6 +54,7 @@ export default function AppLayout() {
   const { user, logout, hasAnyRole } = useAuthStore();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
 
   // 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 "내 휴가" 메뉴를 보여 준다
   const visibleNav = NAV.filter((n) => !n.roles || hasAnyRole(...n.roles));
@@ -113,8 +116,10 @@ export default function AppLayout() {
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <div className="flex-1" />
-          <NotificationBell />
+          <div className="flex min-w-0 flex-1 items-center">
+            <UnreadNotice onOpen={() => setBellOpen(true)} />
+          </div>
+          <NotificationBell open={bellOpen} onOpenChange={setBellOpen} />
           <div className="text-right">
             <p className="text-sm font-medium leading-tight">{user?.name}</p>
             <p className="text-xs text-muted-foreground leading-tight">
@@ -204,6 +209,32 @@ function SidebarSummary({ onNavigate }: { onNavigate: () => void }) {
         </div>
       </Link>
     </div>
+  );
+}
+
+/** 상단 빈 곳의 안내: 확인하지 않은 알림이 있으면 눈에 띄게 보여 주고, 누르면 알림 목록을 연다. */
+function UnreadNotice({ onOpen }: { onOpen: () => void }) {
+  const unread = useUnreadNotifications();
+  if (unread === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex min-w-0 items-center gap-2 rounded-full border border-red-200 bg-red-50 py-1.5 pl-3 pr-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-100"
+    >
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+      </span>
+      <BellRing className="hidden h-4 w-4 shrink-0 sm:block" />
+      <span className="truncate">
+        <span className="hidden sm:inline">확인하지 않은 알림 </span>
+        <b className="text-base">{unread > 99 ? "99+" : unread}</b>개<span className="hidden sm:inline">가 있어요</span>
+      </span>
+      <span className="ml-1 hidden shrink-0 items-center rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white sm:flex">
+        확인하기 <ChevronRight className="h-3.5 w-3.5" />
+      </span>
+    </button>
   );
 }
 
