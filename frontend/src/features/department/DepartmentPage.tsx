@@ -297,15 +297,8 @@ function DeptNode({
           "group flex items-center gap-2 rounded-lg px-2 py-2",
           !drag && "hover:bg-accent",
           isTarget && "bg-primary/10 ring-2 ring-primary",
-          !drag && "cursor-pointer",
         )}
         style={{ paddingLeft: `${depth * 20 + 8}px` }}
-        title="눌러서 부서 명단 보기"
-        onClick={(e) => {
-          // 펼치기·손잡이·관리 버튼을 누른 경우는 제외
-          if ((e.target as HTMLElement).closest("button, [role=button]")) return;
-          onOpen(dept);
-        }}
       >
         <span
           role="button"
@@ -331,16 +324,27 @@ function DeptNode({
             <ChevronRight className="h-4 w-4 opacity-0" />
           )}
         </button>
-        <Building2 className="h-4 w-4 text-primary" />
-        <span className="font-medium">{dept.name}</span>
-        {dept.leadName && (
-          <Badge variant="secondary" className="gap-1">
-            팀장 {dept.leadName}
+        {/* 부서 이름 쪽을 버튼으로 둬서 키보드(Tab·Enter)로도 명단을 연다 */}
+        <button
+          type="button"
+          title="눌러서 부서 명단 보기"
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2 self-stretch rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            !drag && "cursor-pointer",
+          )}
+          onClick={() => onOpen(dept)}
+        >
+          <Building2 className="h-4 w-4 text-primary" />
+          <span className="font-medium">{dept.name}</span>
+          {dept.leadName && (
+            <Badge variant="secondary" className="gap-1">
+              팀장 {dept.leadName}
+            </Badge>
+          )}
+          <Badge variant="outline" className="gap-1 text-muted-foreground">
+            <Users className="h-3 w-3" /> {dept.memberCount}
           </Badge>
-        )}
-        <Badge variant="outline" className="gap-1 text-muted-foreground">
-          <Users className="h-3 w-3" /> {dept.memberCount}
-        </Badge>
+        </button>
 
         <div className={cn("ml-auto flex items-center gap-1 opacity-0 transition-opacity", !drag && "group-hover:opacity-100")}>
           <Button size="icon" variant="ghost" title="하위 부서 추가" onClick={() => onAddChild(dept.id)}>

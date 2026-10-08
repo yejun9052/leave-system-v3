@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -554,12 +555,13 @@ function LeaveTypeDialog({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <CardHeader>
-          <CardTitle className="text-base">{isEdit ? "휴가 종류 수정" : "휴가 종류 추가"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    // 공용 창: 바깥 클릭·Esc 로 닫힘
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-base">{isEdit ? "휴가 종류 수정" : "휴가 종류 추가"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>이름</Label>
@@ -632,26 +634,26 @@ function LeaveTypeDialog({
           {isEdit && (
             <ToggleRow label="사용" checked={form.active ?? true} onChange={(v) => set("active", v)} />
           )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={onClose}>
-              취소
-            </Button>
-            <Button
-              onClick={async () => {
-                const ok = await confirm({
-                  title: isEdit ? `'${form.name}' 휴가 종류를 저장할까요?` : `'${form.name}' 휴가 종류를 추가할까요?`,
-                  confirmText: isEdit ? "저장" : "추가",
-                });
-                if (ok) save.mutate();
-              }}
-              disabled={save.isPending || !form.name.trim() || (!isEdit && !form.code?.trim())}
-            >
-              저장
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            취소
+          </Button>
+          <Button
+            onClick={async () => {
+              const ok = await confirm({
+                title: isEdit ? `'${form.name}' 휴가 종류를 저장할까요?` : `'${form.name}' 휴가 종류를 추가할까요?`,
+                confirmText: isEdit ? "저장" : "추가",
+              });
+              if (ok) save.mutate();
+            }}
+            disabled={save.isPending || !form.name.trim() || (!isEdit && !form.code?.trim())}
+          >
+            저장
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
