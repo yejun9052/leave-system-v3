@@ -232,6 +232,36 @@ class BackupServiceTest {
     }
 
     @Test
+    void 보관_정리는_규칙에_맞지_않는_자동_백업만_지우고_수동_백업은_남긴다() throws IOException {
+        for (String name : List.of("annual_leave_20261006_020000_auto.dump", "annual_leave_20261007_020000_auto.dump",
+                "annual_leave_20261008_020000_auto.dump", "annual_leave_20260101_090000_manual.dump")) {
+            Files.writeString(dir.resolve(name), "PGDMP");
+        }
+
+        List<String> deleted = service(new FakeRunner(0, "")).cleanupAuto(2, 0, 0);
+
+        assertThat(deleted).containsExactly("annual_leave_20261006_020000_auto.dump");
+        assertThat(namesIn(dir)).containsExactlyInAnyOrder("annual_leave_20261007_020000_auto.dump",
+                "annual_leave_20261008_020000_auto.dump", "annual_leave_20260101_090000_manual.dump");
+    }
+
+    @Test
+    void 삭제는_정해진_이름의_백업_파일만_지운다() throws IOException {
+        Files.writeString(dir.resolve(NAME), "PGDMP");
+        BackupService service = service(new FakeRunner(0, ""));
+
+        service.delete(NAME);
+
+        assertThat(dir.resolve(NAME)).doesNotExist();
+        assertThatThrownBy(() -> service.delete("../" + NAME))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_INVALID_NAME));
+        assertThatThrownBy(() -> service.delete(NAME))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_NOT_FOUND));
+    }
+
+    @Test
     void JDBC_주소에서_호스트_포트_DB_이름을_꺼낸다() {
         assertThat(DbTarget.fromJdbcUrl("jdbc:postgresql://postgres:5432/annual_leave", "u", "p"))
                 .isEqualTo(new DbTarget("postgres", 5432, "annual_leave", "u", "p"));

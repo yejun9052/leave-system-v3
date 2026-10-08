@@ -16,6 +16,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 정책 → 백업 탭. 백업 실행·목록은 인사관리자·시스템 관리자, 내려받기는 시스템 관리자만.
- * 실행(POST)과 내려받기(GET .../download)는 이벤트 로그에 남는다(AuditAspect).
+ * 실행(POST)·삭제(DELETE)와 내려받기(GET .../download)는 이벤트 로그에 남는다(AuditAspect).
  */
 @Tag(name = "Backup", description = "DB 백업")
 @RestController
@@ -64,6 +65,14 @@ public class BackupController {
     @PutMapping("/settings")
     public ApiResponse<Settings> updateSettings(@Valid @RequestBody SettingsRequest req) {
         return ApiResponse.ok(settingsService.update(req));
+    }
+
+    @Operation(summary = "백업 파일 삭제(시스템 관리자)", description = "수동·복원 전 백업은 자동 정리되지 않아 여기서 지운다.")
+    @PreAuthorize("hasRole('SYSTEM_ADMIN')")
+    @DeleteMapping("/{fileName}")
+    public ApiResponse<Void> delete(@PathVariable String fileName) {
+        backupService.delete(fileName);
+        return ApiResponse.ok();
     }
 
     @Operation(summary = "백업 파일 내려받기(시스템 관리자)")

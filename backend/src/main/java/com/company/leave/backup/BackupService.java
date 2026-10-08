@@ -171,9 +171,13 @@ public class BackupService {
     /** 백업 탭: 폴더·남은 공간·진행 여부와 백업 목록(최신순). */
     public Overview overview() {
         prepareDirs();
-        List<BackupFile> files;
+        return new Overview(dir.toString(), dir.toFile().getUsableSpace(), running.get(), listBackups());
+    }
+
+    /** 백업 폴더의 백업 파일(최신순). */
+    private List<BackupFile> listBackups() {
         try (Stream<Path> paths = Files.list(dir)) {
-            files = paths.filter(Files::isRegularFile)
+            return paths.filter(Files::isRegularFile)
                     .map(this::toBackupFile)
                     .flatMap(Optional::stream)
                     .sorted(Comparator.comparing(BackupFile::createdAt).thenComparing(BackupFile::fileName).reversed())
@@ -181,7 +185,39 @@ public class BackupService {
         } catch (IOException e) {
             throw new BusinessException(ErrorCode.BACKUP_FAILED, "백업 폴더를 읽을 수 없습니다: " + dir);
         }
-        return new Overview(dir.toString(), dir.toFile().getUsableSpace(), running.get(), files);
+    }
+
+    /**
+     * 자동 백업 보관 정리({@link BackupRetention}). 새 자동 백업이 성공한 뒤에만 부른다.
+     * 수동·복원 전 백업은 지우지 않는다. 지우지 못한 파일은 건너뛰고 로그만 남긴다.
+     *
+     * @return 지운 파일 이름(오래된 것부터)
+     */
+    public List<String> cleanupAuto(int keepDaily, int keepWeekly, int keepMonthly) {
+        List<String> deleted = new ArrayList<>();
+        for (BackupFile old : BackupRetention.toDelete(listBackups(), keepDaily, keepWeekly, keepMonthly)) {
+            try {
+                Files.deleteIfExists(dir.resolve(old.fileName()));
+                deleted.add(old.fileName());
+            } catch (IOException e) {
+                log.warn("오래된 자동 백업 삭제 실패: {} ({})", old.fileName(), e.getMessage());
+            }
+        }
+        if (!deleted.isEmpty()) {
+            log.info("자동 백업 보관 정리: {}개 삭제 {}", deleted.size(), deleted);
+        }
+        return deleted;
+    }
+
+    /** 백업 파일 삭제(목록의 삭제 버튼). 진행 중인 백업 파일(.tmp)은 이름 형식이 달라 지울 수 없다. */
+    public void delete(String fileName) {
+        Path file = resolve(fileName);
+        try {
+            Files.delete(file);
+        } catch (IOException e) {
+            throw new BusinessException(ErrorCode.BACKUP_FAILED, "백업 파일을 지우지 못했습니다: " + fileName);
+        }
+        log.info("백업 삭제: {}", fileName);
     }
 
     /**

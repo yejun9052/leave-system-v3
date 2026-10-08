@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -93,6 +94,7 @@ class BackupControllerAccessTest {
             mvc.perform(get("/api/backups")).andExpect(status().isForbidden());
             mvc.perform(post("/api/backups")).andExpect(status().isForbidden());
             mvc.perform(get(DOWNLOAD)).andExpect(status().isForbidden());
+            mvc.perform(delete("/api/backups/" + NAME)).andExpect(status().isForbidden());
             mvc.perform(get("/api/backups/settings")).andExpect(status().isForbidden());
             mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON).content(SETTINGS))
                     .andExpect(status().isForbidden());
@@ -101,18 +103,20 @@ class BackupControllerAccessTest {
     }
 
     @Test
-    void 인사관리자는_백업을_보고_실행하지만_내려받을_수는_없다() throws Exception {
+    void 인사관리자는_백업을_보고_실행하지만_내려받거나_지울_수는_없다() throws Exception {
         authenticate(Set.of(Role.HR_ADMIN));
         mvc.perform(get("/api/backups")).andExpect(status().isOk());
         mvc.perform(post("/api/backups")).andExpect(status().isOk());
         mvc.perform(get(DOWNLOAD)).andExpect(status().isForbidden());
+        mvc.perform(delete("/api/backups/" + NAME)).andExpect(status().isForbidden());
         verify(service).overview();
         verify(service).backup(Kind.MANUAL);
         verify(service, never()).resolve(anyString());
+        verify(service, never()).delete(anyString());
     }
 
     @Test
-    void 시스템_관리자는_백업_파일을_내려받을_수_있다() throws Exception {
+    void 시스템_관리자는_백업_파일을_내려받고_지울_수_있다() throws Exception {
         Path file = Files.writeString(dir.resolve(NAME), "PGDMP");
         when(service.resolve(NAME)).thenReturn(file);
         authenticate(Set.of(Role.SYSTEM_ADMIN));
@@ -122,7 +126,9 @@ class BackupControllerAccessTest {
                 .andExpect(header().string("Content-Disposition", "attachment; filename=\"" + NAME + "\""))
                 .andExpect(content().bytes("PGDMP".getBytes()));
         mvc.perform(post("/api/backups")).andExpect(status().isOk());
+        mvc.perform(delete("/api/backups/" + NAME)).andExpect(status().isOk());
         verify(service).backup(any());
+        verify(service).delete(NAME);
     }
 
     @Test

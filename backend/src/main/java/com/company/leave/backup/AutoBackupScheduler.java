@@ -4,6 +4,7 @@ import com.company.leave.backup.BackupDtos.BackupFile;
 import com.company.leave.backup.BackupDtos.Kind;
 import com.company.leave.batch.JobRunRecorder;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,14 +81,25 @@ public class AutoBackupScheduler {
     void runAuto() {
         log.info("[자동 백업] 시작");
         try {
-            recorder.run(JobRunRecorder.BACKUP_AUTO, () -> summary(backupService.backup(Kind.AUTO)));
+            recorder.run(JobRunRecorder.BACKUP_AUTO, this::backupAndCleanup);
         } catch (RuntimeException ex) {
             log.warn("[자동 백업] 실패: {}", ex.getMessage());
             messenger.autoBackupFailed(ex.getMessage());
         }
     }
 
-    private static String summary(BackupFile file) {
-        return file.fileName() + " (" + file.size() / 1024 + " KB)";
+    /** 백업이 성공한 뒤에만 보관 정리. 백업이 실패하면 예외가 나서 아무것도 지우지 않는다. */
+    private String backupAndCleanup() {
+        BackupFile file = backupService.backup(Kind.AUTO);
+        BackupSettings settings = settingsService.current();
+        List<String> deleted = backupService.cleanupAuto(settings.getKeepDaily(), settings.getKeepWeekly(),
+                settings.getKeepMonthly());
+        return summary(file, deleted);
+    }
+
+    /** "annual_leave_..._auto.dump (98 KB) · 보관 정리 2개 삭제: a, b" */
+    static String summary(BackupFile file, List<String> deleted) {
+        String made = file.fileName() + " (" + file.size() / 1024 + " KB)";
+        return deleted.isEmpty() ? made : made + " · 보관 정리 " + deleted.size() + "개 삭제: " + String.join(", ", deleted);
     }
 }

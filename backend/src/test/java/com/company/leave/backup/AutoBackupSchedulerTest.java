@@ -2,6 +2,7 @@ package com.company.leave.backup;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -23,6 +24,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
 import java.util.function.Supplier;
@@ -134,15 +136,28 @@ class AutoBackupSchedulerTest {
         doAnswer(i -> ((Supplier<String>) i.getArgument(1)).get())
                 .when(recorder).run(eq(JobRunRecorder.BACKUP_AUTO), any());
 
+        when(backupService.cleanupAuto(7, 4, 6)).thenReturn(List.of("annual_leave_20260901_020000_auto.dump"));
+
         scheduler.runAuto();
 
         verify(backupService).backup(Kind.AUTO);
+        verify(backupService).cleanupAuto(7, 4, 6);
         verify(messenger, never()).autoBackupFailed(anyString());
     }
 
     @Test
+    void 실행_기록_요약에_만든_파일과_지운_파일을_남긴다() {
+        BackupFile made = new BackupFile("annual_leave_20261009_020000_auto.dump", LocalDateTime.of(2026, 10, 9, 2, 0),
+                100 * 1024, Kind.AUTO);
+
+        assertThat(AutoBackupScheduler.summary(made, List.of())).isEqualTo("annual_leave_20261009_020000_auto.dump (100 KB)");
+        assertThat(AutoBackupScheduler.summary(made, List.of("a.dump", "b.dump")))
+                .isEqualTo("annual_leave_20261009_020000_auto.dump (100 KB) · 보관 정리 2개 삭제: a.dump, b.dump");
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
-    void 자동_백업이_실패하면_관리자에게_알린다() {
+    void 자동_백업이_실패하면_아무것도_지우지_않고_관리자에게_알린다() {
         when(backupService.backup(Kind.AUTO))
                 .thenThrow(new BusinessException(ErrorCode.BACKUP_FAILED, "백업에 실패했습니다. pg_dump 종료 코드 1"));
         doAnswer(i -> ((Supplier<String>) i.getArgument(1)).get())
@@ -151,6 +166,8 @@ class AutoBackupSchedulerTest {
         scheduler.runAuto();
 
         verify(messenger).autoBackupFailed("백업에 실패했습니다. pg_dump 종료 코드 1");
+        verify(backupService, never()).cleanupAuto(anyInt(),
+                anyInt(), anyInt());
     }
 
     @Test
