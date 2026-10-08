@@ -19,11 +19,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Holiday", description = "공휴일(관리자)")
+/** 공휴일. 목록은 로그인한 누구나(대시보드 "다가오는 휴일"), 수동 동기화는 인사관리자·시스템 관리자만. */
+@Tag(name = "Holiday", description = "공휴일")
 @Validated
 @RestController
 @RequestMapping("/api/holidays")
-@PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
 public class HolidayController {
 
     private final HolidayRepository holidayRepository;
@@ -50,6 +50,7 @@ public class HolidayController {
     @Operation(summary = "공휴일 수동 동기화",
             description = "공휴일 API 에서 해당 연도를 받아 저장하고, 새 공휴일이 걸친 기존 휴가의 차감 일수를 자동 조정·환원한다.")
     @PostMapping("/sync")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
     public ApiResponse<HolidaySyncService.SyncResult> sync(@RequestParam @Min(2000) @Max(2100) int year) {
         try {
             return ApiResponse.ok(syncService.sync(year));

@@ -75,9 +75,11 @@ class HolidayControllerTest {
     }
 
     @Test
-    void 인사_관리자와_최고_관리자만_호출할_수_있다() {
-        PreAuthorize rule = HolidayController.class.getAnnotation(PreAuthorize.class);
+    void 목록은_권한_제한이_없고_수동_동기화만_인사_관리자와_시스템_관리자가_호출할_수_있다() throws Exception {
+        assertThat(HolidayController.class.getAnnotation(PreAuthorize.class)).isNull();
+        assertThat(HolidayController.class.getMethod("list", int.class).getAnnotation(PreAuthorize.class)).isNull();
 
+        PreAuthorize rule = HolidayController.class.getMethod("sync", int.class).getAnnotation(PreAuthorize.class);
         assertThat(rule).isNotNull();
         assertThat(rule.value()).isEqualTo("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')");
     }
