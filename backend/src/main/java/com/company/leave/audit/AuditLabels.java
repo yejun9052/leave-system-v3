@@ -40,6 +40,7 @@ public final class AuditLabels {
         ACTIONS.put("import", "일괄 등록");
         ACTIONS.put("export", "내보내기");
         ACTIONS.put("download", "내려받기");
+        ACTIONS.put("restore", "데이터 복원");
         ACTIONS.put("read-all", "알림 읽음");
 
         RESOURCES.put("auth", "인증");

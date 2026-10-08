@@ -29,4 +29,22 @@ public final class BackupMailTemplates {
                 "백업 화면 열기", MailLayout.url(baseUrl, "/admin/policy"));
         return new Mail(PREFIX + "자동 백업 실패 (" + at.format(TIME) + ")", content);
     }
+
+    /**
+     * 복원 완료. 복원 전 상태로 되돌릴 수 있는 백업 파일 이름을 함께 알린다.
+     *
+     * @param backupAt 복원한 백업의 시점
+     */
+    public static Mail restored(String actorName, String fileName, LocalDateTime backupAt, String preRestoreFile,
+                                LocalDateTime at, String baseUrl) {
+        String who = actorName + "님이 " + backupAt.format(TIME) + " 시점 백업으로 복원했습니다.";
+        Content content = new Content("데이터 복원 완료",
+                List.of(who, "이 시점 이후의 변경 사항은 사라졌고, 모든 사용자는 다시 로그인해야 합니다.",
+                        "되돌리려면 정책 › 백업 화면에서 복원 전 백업으로 다시 복원하세요."),
+                List.of(Row.of("수신자", AUDIENCE), Row.of("처리자", actorName)),
+                List.of(Row.of("복원 시각", at.format(TIME)), Row.strong("복원한 백업", fileName),
+                        Row.of("백업 시점", backupAt.format(TIME)), Row.of("복원 전 백업", preRestoreFile)),
+                "백업 화면 열기", MailLayout.url(baseUrl, "/admin/policy"));
+        return new Mail(PREFIX + "데이터 복원 완료 (" + backupAt.format(TIME) + " 시점)", content);
+    }
 }

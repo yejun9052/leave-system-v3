@@ -55,7 +55,9 @@ public class AuditAspect {
         String uri = request != null ? request.getRequestURI() : pjp.getSignature().toShortString();
         String httpMethod = request != null ? request.getMethod() : "CALL";
         boolean auth = uri.startsWith("/api/auth/");
-        return proceedAndRecord(pjp, actionOf(uri, httpMethod), uri, uri, !auth);
+        // 복원은 감사 로그 표도 되돌리므로 RestoreService 가 복원이 끝난 뒤 직접 기록한다
+        boolean restore = uri.startsWith("/api/backups/") && uri.endsWith("/restore");
+        return proceedAndRecord(pjp, actionOf(uri, httpMethod), uri, uri, !auth && !restore);
     }
 
     /**

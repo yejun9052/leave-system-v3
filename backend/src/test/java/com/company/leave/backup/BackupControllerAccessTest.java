@@ -1,5 +1,6 @@
 package com.company.leave.backup;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -57,6 +58,8 @@ class BackupControllerAccessTest {
             {"enabled":true,"frequency":"WEEKLY","dayOfWeek":1,"runTime":"03:30","intervalHours":6,
              "keepDaily":7,"keepWeekly":4,"keepMonthly":6}
             """;
+    private static final String RESTORE = "/api/backups/" + NAME + "/restore";
+    private static final String CONFIRM = "{\"confirm\":\"복원\"}";
     private static final String DOWNLOAD = "/api/backups/" + NAME + "/download";
 
     @TempDir
@@ -65,6 +68,7 @@ class BackupControllerAccessTest {
     private AnnotationConfigApplicationContext context;
     private BackupService service;
     private BackupSettingsService settings;
+    private RestoreService restore;
     private MockMvc mvc;
 
     @BeforeEach
@@ -75,6 +79,8 @@ class BackupControllerAccessTest {
         context.registerBean(BackupService.class, () -> service);
         settings = mock(BackupSettingsService.class);
         context.registerBean(BackupSettingsService.class, () -> settings);
+        restore = mock(RestoreService.class);
+        context.registerBean(RestoreService.class, () -> restore);
         context.registerBean(BackupController.class);
         context.refresh();
         mvc = MockMvcBuilders.standaloneSetup(context.getBean(BackupController.class))
@@ -99,7 +105,7 @@ class BackupControllerAccessTest {
             mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON).content(SETTINGS))
                     .andExpect(status().isForbidden());
         }
-        verifyNoInteractions(service, settings);
+        verifyNoInteractions(service, settings, restore);
     }
 
     @Test
@@ -129,6 +135,45 @@ class BackupControllerAccessTest {
         mvc.perform(delete("/api/backups/" + NAME)).andExpect(status().isOk());
         verify(service).backup(any());
         verify(service).delete(NAME);
+    }
+
+    @Test
+    void 인사관리자_팀장_직원은_복원하거나_복원_전_확인을_할_수_없다() throws Exception {
+        for (Role role : List.of(Role.HR_ADMIN, Role.TEAM_LEAD, Role.EMPLOYEE)) {
+            authenticate(Set.of(role));
+            mvc.perform(post(RESTORE).contentType(MediaType.APPLICATION_JSON).content(CONFIRM))
+                    .andExpect(status().isForbidden());
+            mvc.perform(get("/api/backups/" + NAME + "/check")).andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(restore);
+    }
+
+    @Test
+    void 확인_문구_복원이_없거나_다르면_400이고_복원하지_않는다() throws Exception {
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
+        mvc.perform(post(RESTORE)).andExpect(status().isBadRequest());
+        mvc.perform(post(RESTORE).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(RESTORE).contentType(MediaType.APPLICATION_JSON).content("{\"confirm\":\"복 원\"}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(restore);
+    }
+
+    @Test
+    void 시스템_관리자는_확인_문구와_함께_복원하고_가져온_파일도_고를_수_있다() throws Exception {
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
+        mvc.perform(post(RESTORE).contentType(MediaType.APPLICATION_JSON).content(CONFIRM))
+                .andExpect(status().isOk());
+        // 복원하면 로그인이 끝나므로(세션 삭제·인증 정보 비움) 다시 로그인한 것으로 둔다
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
+        mvc.perform(post("/api/backups/old.dump/restore").param("source", "import")
+                .contentType(MediaType.APPLICATION_JSON).content(CONFIRM)).andExpect(status().isOk());
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
+        mvc.perform(get("/api/backups/" + NAME + "/check")).andExpect(status().isOk());
+        verify(restore).restore(NAME, RestoreService.Source.BACKUP, 1L, "사용자");
+        verify(restore).restore("old.dump", RestoreService.Source.IMPORT, 1L, "사용자");
+        verify(restore).check(NAME, RestoreService.Source.BACKUP);
     }
 
     @Test

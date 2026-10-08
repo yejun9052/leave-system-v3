@@ -204,6 +204,15 @@ class AuditAspectTest {
     }
 
     @Test
+    void 복원은_자동으로_남기지_않는다_복원이_끝난_뒤_직접_기록한다() throws Throwable {
+        요청("POST", "/api/backups/annual_leave_20261008_093000_manual.dump/restore");
+
+        aspect.around(pjp);
+
+        verify(auditService, never()).record(anyString(), anyString(), any(), anyString(), anyBoolean());
+    }
+
+    @Test
     void 내보내기가_실패해도_실패로_남기고_예외는_그대로_던진다() throws Throwable {
         요청("GET", "/api/employees/export");
         when(pjp.proceed()).thenThrow(new IllegalStateException("엑셀 오류"));

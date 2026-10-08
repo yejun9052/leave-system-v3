@@ -54,6 +54,16 @@ public class BackupMessenger {
                 BackupMailTemplates.autoBackupFailed(LocalDateTime.now(clock), why, mailProperties.linkBaseUrl()));
     }
 
+    /** 복원 완료: 복원된 DB 기준의 시스템 관리자·인사관리자(복원한 본인 포함)에게. */
+    @Transactional
+    public void restored(String actorName, String fileName, LocalDateTime backupAt, String preRestoreFile) {
+        deliver("BACKUP_RESTORED", "데이터 복원",
+                actorName + "님이 " + backupAt.toLocalDate() + " " + backupAt.toLocalTime() + " 시점 백업으로 복원했습니다. "
+                        + "복원 전 백업: " + preRestoreFile,
+                BackupMailTemplates.restored(actorName, fileName, backupAt, preRestoreFile, LocalDateTime.now(clock),
+                        mailProperties.linkBaseUrl()));
+    }
+
     private void deliver(String type, String title, String message, BackupMailTemplates.Mail mail) {
         List<Employee> admins = employeeRepository.findAllById(employeeRepository.findIdsByAnyRoleAndStatus(
                 List.of(Role.SYSTEM_ADMIN, Role.HR_ADMIN), EmployeeStatus.ACTIVE));

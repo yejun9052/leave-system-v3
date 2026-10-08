@@ -391,6 +391,35 @@ public class BackupService {
         }
     }
 
+    /** 목록과 같은 정보(종류·만든 시각·DB 버전). 가져온 파일이면 imported. */
+    Optional<BackupFile> describe(Path file, boolean imported) {
+        return imported ? toImportFile(file) : toBackupFile(file);
+    }
+
+    /** PostgreSQL 클라이언트 도구 경로(pg_restore·psql). */
+    String tool(String name) {
+        return props.tool(name);
+    }
+
+    /** psql 접속 인자(-h -p -U -d). 비밀번호는 {@link #passwordEnv()} 로 따로 넘긴다. */
+    List<String> connectionArgs() {
+        if (db == null) {
+            throw failed("DB 접속 주소(spring.datasource.url)를 읽을 수 없습니다.");
+        }
+        return List.of("-h", db.host(), "-p", String.valueOf(db.port()), "-U", db.username(), "-d", db.database());
+    }
+
+    /** DB 비밀번호 환경변수(PGPASSWORD). 명령 인자로 넘기지 않는다(프로세스 목록 노출 방지). */
+    Map<String, String> passwordEnv() {
+        return db != null && StringUtils.hasLength(db.password()) ? Map.of("PGPASSWORD", db.password()) : Map.of();
+    }
+
+    /** 복원 중 임시 파일을 둘 폴더(백업 폴더). 임시 파일 이름은 목록 규칙과 겹치지 않게 .tmp 로 끝낸다. */
+    Path workDir() {
+        prepareDirs();
+        return dir;
+    }
+
     private void prepareDirs() {
         try {
             Files.createDirectories(dir.resolve(IMPORT_DIR));

@@ -31,12 +31,15 @@ public class AutoBackupScheduler {
     private final BackupService backupService;
     private final JobRunRecorder recorder;
     private final BackupMessenger messenger;
+    private final MaintenanceMode maintenance;
 
     private ScheduledFuture<?> future;
     private CronTrigger trigger;
 
     public AutoBackupScheduler(TaskScheduler taskScheduler, BackupSettingsService settingsService,
-                               BackupService backupService, JobRunRecorder recorder, BackupMessenger messenger) {
+                               BackupService backupService, JobRunRecorder recorder, BackupMessenger messenger,
+                               MaintenanceMode maintenance) {
+        this.maintenance = maintenance;
         this.taskScheduler = taskScheduler;
         this.settingsService = settingsService;
         this.backupService = backupService;
@@ -46,6 +49,12 @@ public class AutoBackupScheduler {
 
     @EventListener(ApplicationReadyEvent.class)
     public void onReady() {
+        reschedule();
+    }
+
+    /** 복원으로 설정 표도 되돌아갔으니 다시 읽어 등록. */
+    @EventListener(RestoreService.Restored.class)
+    public void onRestored() {
         reschedule();
     }
 
@@ -79,6 +88,10 @@ public class AutoBackupScheduler {
     }
 
     void runAuto() {
+        if (maintenance.isActive()) {
+            recorder.skipped(JobRunRecorder.BACKUP_AUTO, "복원 중(점검 모드)이라 건너뜀");
+            return;
+        }
         log.info("[자동 백업] 시작");
         try {
             recorder.run(JobRunRecorder.BACKUP_AUTO, this::backupAndCleanup);

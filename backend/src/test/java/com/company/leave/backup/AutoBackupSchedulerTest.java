@@ -54,6 +54,7 @@ class AutoBackupSchedulerTest {
     private BackupService backupService;
     private JobRunRecorder recorder;
     private BackupMessenger messenger;
+    private final MaintenanceMode maintenance = new MaintenanceMode();
     private BackupSettingsService settingsService;
     private AutoBackupScheduler scheduler;
 
@@ -74,7 +75,8 @@ class AutoBackupSchedulerTest {
             scheduler.onSettingsChanged((BackupSettingsService.Changed) i.getArgument(0));
             return null;
         }).when(events).publishEvent(any(Object.class));
-        scheduler = new AutoBackupScheduler(taskScheduler, settingsService, backupService, recorder, messenger);
+        scheduler = new AutoBackupScheduler(taskScheduler, settingsService, backupService, recorder, messenger,
+                maintenance);
     }
 
     private static LocalDateTime nextRun(CronTrigger trigger) {
@@ -168,6 +170,26 @@ class AutoBackupSchedulerTest {
         verify(messenger).autoBackupFailed("백업에 실패했습니다. pg_dump 종료 코드 1");
         verify(backupService, never()).cleanupAuto(anyInt(),
                 anyInt(), anyInt());
+    }
+
+    @Test
+    void 복원_중에는_자동_백업을_건너뛰고_기록만_남긴다() {
+        maintenance.begin();
+
+        scheduler.runAuto();
+
+        verify(recorder).skipped(JobRunRecorder.BACKUP_AUTO, "복원 중(점검 모드)이라 건너뜀");
+        verify(backupService, never()).backup(any());
+    }
+
+    @Test
+    void 복원이_끝나면_되돌아간_설정으로_다시_예약한다() {
+        scheduler.onReady();
+
+        scheduler.onRestored();
+
+        verify(future).cancel(false);
+        verify(taskScheduler, times(2)).schedule(any(Runnable.class), any(CronTrigger.class));
     }
 
     @Test
