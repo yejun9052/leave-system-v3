@@ -40,3 +40,6 @@ LICENSE-PRIVATE-KEY.txt
 # 배포 산출물(대용량 바이너리)
 backend/app.jar
 *.tar.gz
+
+# DB 백업 파일(직원 정보 포함)
+*.dump

@@ -69,6 +69,10 @@ services:
       resources:
         limits:
           memory: 1g
+    volumes:
+      # DB 백업 파일(정책 › 백업). 서버 폴더 주인은 앱 계정(uid 10001)이어야 쓸 수 있다 → install.sh 가 준비.
+      # :z 는 SELinux 사용 서버(CentOS/RHEL)에서 컨테이너가 이 폴더에 쓸 수 있게 한다(그 밖의 서버에서는 무시)
+      - ${BACKUP_DIR:-/var/backups/annual-leave}:/backups:z
     expose:
       - "8080"   # 내부 네트워크에서만 접근 (외부로 직접 노출하지 않음)
 

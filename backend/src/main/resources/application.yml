@@ -101,6 +101,11 @@ app:
     # 서비스 키(Decoding 키). 저장소에 커밋 금지 → 환경변수 HOLIDAY_API_KEY,
     # 로컬은 backend/application-secret.yml(git 제외 파일)에 입력
     service-key: ${HOLIDAY_API_KEY:}
+  backup:
+    # 백업 파일 폴더(정책 › 백업). 운영 컨테이너는 /backups (docker-compose.prod.yml 이 서버 폴더를 연결)
+    dir: ${BACKUP_DIR:/backups}
+    # pg_dump 가 있는 폴더. 비우면 PATH 의 pg_dump (운영 이미지에 postgresql-client-16 설치됨)
+    pg-bin: ${BACKUP_PG_BIN:}
   license:
     # 라이선스는 항상 집행됩니다. 유효한 키가 없으면 모든 기능이 차단됩니다.
     key: ${LICENSE_KEY:}                 # 발급받은 라이선스 문자열 (운영 필수)

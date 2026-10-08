@@ -49,6 +49,7 @@ import PromotionTab from "./PromotionTab";
 import SpecialRuleEditDialog from "./SpecialRuleEditDialog";
 import BlackoutSaveDialog from "./BlackoutSaveDialog";
 import AutomationTab from "./AutomationTab";
+import BackupTab from "./BackupTab";
 
 const PORTION_LABEL: Record<LeavePortion, string> = {
   FULL: "종일",
@@ -80,6 +81,7 @@ export default function PolicyPage() {
           <TabsTrigger value="holidays">공휴일</TabsTrigger>
           <TabsTrigger value="promotion">촉진 · 미사용</TabsTrigger>
           <TabsTrigger value="automation">자동화</TabsTrigger>
+          <TabsTrigger value="backup">백업</TabsTrigger>
         </TabsList>
         <TabsContent value="policy">
           <PolicyTab />
@@ -101,6 +103,9 @@ export default function PolicyPage() {
         </TabsContent>
         <TabsContent value="automation">
           <AutomationTab />
+        </TabsContent>
+        <TabsContent value="backup">
+          <BackupTab />
         </TabsContent>
       </Tabs>
     </div>

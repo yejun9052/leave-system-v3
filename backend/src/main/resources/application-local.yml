@@ -27,6 +27,10 @@ app:
   # 로컬/테스트 전용 고정 초기 관리자 비밀번호 (운영은 미설정 → 무작위 생성)
   admin:
     initial-password: admin1234!
+  backup:
+    dir: ${BACKUP_DIR:C:/annual-leave-backup}
+    # PostgreSQL 16 클라이언트(pg_dump) 설치 폴더. PC마다 다르면 환경변수 BACKUP_PG_BIN 으로 바꾼다
+    pg-bin: ${BACKUP_PG_BIN:C:/tool/pgsql/bin}
   license:
     # 로컬 개발용 라이선스 (host=localhost, 만료 2030-12-31, 최대 100명)
     host: localhost

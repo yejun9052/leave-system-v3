@@ -76,6 +76,12 @@ public enum ErrorCode {
     // 캘린더
     CALENDAR_EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "캘린더 일정을 찾을 수 없습니다."),
 
+    // 백업
+    BACKUP_IN_PROGRESS(HttpStatus.CONFLICT, "백업이 진행 중입니다. 끝난 뒤 다시 시도하세요."),
+    BACKUP_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "백업에 실패했습니다."),
+    BACKUP_NOT_FOUND(HttpStatus.NOT_FOUND, "백업 파일을 찾을 수 없습니다."),
+    BACKUP_INVALID_NAME(HttpStatus.BAD_REQUEST, "백업 파일 이름이 올바르지 않습니다."),
+
     // 라이선스
     LICENSE_INVALID(HttpStatus.FORBIDDEN, "유효한 라이선스가 없습니다. 관리자에게 문의하세요."),
     LICENSE_USER_LIMIT(HttpStatus.CONFLICT, "라이선스 최대 사용자 수에 도달했습니다.");

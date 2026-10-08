@@ -195,6 +195,22 @@ else
   c_info "암호화 저장을 원하면: bash secrets-encrypt.sh 실행(마스터키 생성·secrets.enc 생성)"
 fi
 
+# ---- 백업 폴더 준비 (정책 › 백업) ----------------------------------
+# 앱은 컨테이너 안에서 일반 계정(appuser, uid 10001)으로 돈다. 서버 폴더가 없으면 Docker 가 root 소유로
+# 만들어 앱이 백업 파일을 쓰지 못하므로, 미리 만들고 주인을 앱 계정으로 바꿔 둔다.
+# 위치는 .env 의 BACKUP_DIR(있으면), 없으면 docker-compose.prod.yml 기본값과 같은 /var/backups/annual-leave
+BACKUP_HOST_DIR="/var/backups/annual-leave"
+if [ -f .env ]; then
+  env_backup_dir="$(grep -E '^BACKUP_DIR=' .env | tail -n 1 | cut -d= -f2- || true)"
+  env_backup_dir="${env_backup_dir%\"}"; env_backup_dir="${env_backup_dir#\"}"
+  [ -n "$env_backup_dir" ] && BACKUP_HOST_DIR="$env_backup_dir"
+fi
+mkdir -p "$BACKUP_HOST_DIR/import"
+chown -R 10001:10001 "$BACKUP_HOST_DIR"
+# 백업 파일에는 전 직원 정보가 들어 있으므로 앱 계정(과 root)만 접근
+chmod 700 "$BACKUP_HOST_DIR"
+c_ok "백업 폴더 준비: $BACKUP_HOST_DIR (주인 uid 10001)"
+
 # ---- .env 준비 ----------------------------------------------------
 if [ ! -f ".env" ]; then
   cp .env.prod.example .env

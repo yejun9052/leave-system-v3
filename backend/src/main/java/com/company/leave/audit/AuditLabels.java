@@ -39,6 +39,7 @@ public final class AuditLabels {
         ACTIONS.put("send", "촉진 안내 발송");
         ACTIONS.put("import", "일괄 등록");
         ACTIONS.put("export", "내보내기");
+        ACTIONS.put("download", "내려받기");
         ACTIONS.put("read-all", "알림 읽음");
 
         RESOURCES.put("auth", "인증");
@@ -51,6 +52,7 @@ public final class AuditLabels {
         RESOURCES.put("leave", "연차 운영");
         RESOURCES.put("notifications", "알림");
         RESOURCES.put("reports", "리포트");
+        RESOURCES.put("backups", "백업");
     }
 
     public static String action(String code) {

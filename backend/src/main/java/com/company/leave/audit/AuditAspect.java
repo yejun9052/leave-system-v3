@@ -59,19 +59,28 @@ public class AuditAspect {
     }
 
     /**
-     * 조회 중에는 엑셀 내보내기(/export 로 끝나는 GET)만 남긴다: 리포트·사용자 엑셀. 직원 정보가 파일로 나가므로
-     * 누가 언제 어떤 조건(연도·고른 부서·사용자, 요청 주소의 조회 조건)으로 내려받았는지 기록한다.
+     * 조회 중에는 파일로 나가는 요청만 남긴다: 엑셀 내보내기(/export 로 끝나는 GET, 리포트·사용자 엑셀)와
+     * 백업 파일 내려받기(/download). 직원 정보가 파일로 나가므로 누가 언제 어떤 조건(연도·고른 부서·사용자,
+     * 요청 주소의 조회 조건·파일 이름)으로 내려받았는지 기록한다.
      */
     @Around("getMapping()")
     public Object aroundGet(ProceedingJoinPoint pjp) throws Throwable {
         HttpServletRequest request = currentRequest();
-        if (request == null || !request.getRequestURI().endsWith("/export")) {
+        String action = request == null ? null : fileActionOf(request.getRequestURI());
+        if (action == null) {
             return pjp.proceed();
         }
         String uri = request.getRequestURI();
         String query = request.getQueryString();
         String detail = query == null ? uri : uri + "?" + URLDecoder.decode(query, StandardCharsets.UTF_8);
-        return proceedAndRecord(pjp, "export", uri, detail, true);
+        return proceedAndRecord(pjp, action, uri, detail, true);
+    }
+
+    private static String fileActionOf(String uri) {
+        if (uri.endsWith("/export")) {
+            return "export";
+        }
+        return uri.endsWith("/download") ? "download" : null;
     }
 
     private Object proceedAndRecord(ProceedingJoinPoint pjp, String action, String uri, String detail,

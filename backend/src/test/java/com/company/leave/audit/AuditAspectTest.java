@@ -185,6 +185,25 @@ class AuditAspectTest {
     }
 
     @Test
+    void 백업_파일_내려받기는_파일_이름과_함께_download로_남긴다() throws Throwable {
+        요청("GET", "/api/backups/annual_leave_20261008_093000_manual.dump/download");
+
+        aspect.aroundGet(pjp);
+
+        verify(auditService).record("download", "backups", null,
+                "/api/backups/annual_leave_20261008_093000_manual.dump/download", true);
+    }
+
+    @Test
+    void 지금_백업은_생성으로_남긴다() throws Throwable {
+        요청("POST", "/api/backups");
+
+        aspect.around(pjp);
+
+        verify(auditService).record("POST", "backups", null, "/api/backups", true);
+    }
+
+    @Test
     void 내보내기가_실패해도_실패로_남기고_예외는_그대로_던진다() throws Throwable {
         요청("GET", "/api/employees/export");
         when(pjp.proceed()).thenThrow(new IllegalStateException("엑셀 오류"));

@@ -320,6 +320,18 @@ gunzip -c leave_2026-07-07.sql.gz | docker exec -i leave-postgres psql -U leave 
 ```
 > DB 데이터는 도커 볼륨 `pgdata`, 인증서는 `caddy_data` 에 영구 저장됩니다.
 
+### 화면에서 백업 (정책 › 백업)
+- 인사관리자·시스템 관리자가 "지금 백업"을 누르면 서버 폴더 `/var/backups/annual-leave` 에 `annual_leave_날짜_시각_manual.dump` 파일이 생깁니다. 내려받기는 시스템 관리자만 할 수 있습니다.
+- 폴더 위치를 바꾸려면 `.env` 에 `BACKUP_DIR=/원하는/경로` 를 넣습니다.
+- **이 폴더의 주인은 앱 계정(uid 10001)이어야 합니다.** 앱이 컨테이너 안에서 일반 계정으로 돌기 때문에, 주인이 root 이면 "백업 폴더를 만들 수 없습니다(권한 확인)" 오류가 납니다. `install.sh` 가 자동으로 준비하고, 직접 하려면:
+  ```bash
+  sudo mkdir -p /var/backups/annual-leave/import
+  sudo chown -R 10001:10001 /var/backups/annual-leave
+  sudo chmod 700 /var/backups/annual-leave
+  ```
+- 백업 파일에는 전 직원 정보(비밀번호 해시 포함)가 들어 있습니다. 서버 밖으로 옮길 때 주의하세요.
+- 내용 확인: `docker exec leave-backend pg_restore --list /backups/파일이름.dump`
+
 ### (선택) 지금 로컬 테스트 데이터 옮기기
 내 PC:
 ```powershell
