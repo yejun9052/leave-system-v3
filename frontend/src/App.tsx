@@ -19,6 +19,7 @@ import CalendarPage from "@/features/calendar/CalendarPage";
 import DashboardPage from "@/features/dashboard/DashboardPage";
 import ReportsPage from "@/features/report/ReportsPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
+import MaintenanceOverlay from "@/components/MaintenanceOverlay";
 
 export default function App() {
   const loadMe = useAuthStore((s) => s.loadMe);
@@ -34,37 +35,40 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+    <>
+      <MaintenanceOverlay />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppLayout />}>
-          <Route index element={<DashboardPage />} />
-          <Route path="calendar" element={<CalendarPage />} />
-          <Route path="my-leaves" element={<MyLeavesPage />} />
-          <Route path="me" element={<MyInfoPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppLayout />}>
+            <Route index element={<DashboardPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
+            <Route path="my-leaves" element={<MyLeavesPage />} />
+            <Route path="me" element={<MyInfoPage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route element={<ProtectedRoute roles={["TEAM_LEAD", "HR_ADMIN", "SYSTEM_ADMIN"]} />}>
-        <Route element={<AppLayout />}>
-          <Route path="approvals" element={<ApprovalsPage />} />
+        <Route element={<ProtectedRoute roles={["TEAM_LEAD", "HR_ADMIN", "SYSTEM_ADMIN"]} />}>
+          <Route element={<AppLayout />}>
+            <Route path="approvals" element={<ApprovalsPage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route element={<ProtectedRoute roles={["HR_ADMIN", "SYSTEM_ADMIN"]} />}>
-        <Route element={<AppLayout />}>
-          <Route path="admin/employees" element={<EmployeePage />} />
-          <Route path="admin/departments" element={<DepartmentPage />} />
-          <Route path="admin/policy" element={<PolicyPage />} />
-          <Route path="admin/reports" element={<ReportsPage />} />
-          <Route path="admin/audit" element={<AuditLogPage />} />
+        <Route element={<ProtectedRoute roles={["HR_ADMIN", "SYSTEM_ADMIN"]} />}>
+          <Route element={<AppLayout />}>
+            <Route path="admin/employees" element={<EmployeePage />} />
+            <Route path="admin/departments" element={<DepartmentPage />} />
+            <Route path="admin/policy" element={<PolicyPage />} />
+            <Route path="admin/reports" element={<ReportsPage />} />
+            <Route path="admin/audit" element={<AuditLogPage />} />
+          </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }

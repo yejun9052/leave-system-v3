@@ -1,4 +1,5 @@
 import axios, { AxiosError } from "axios";
+import { useMaintenanceStore } from "@/store/maintenance";
 
 /**
  * 백엔드 표준 응답 형태.
@@ -37,6 +38,13 @@ api.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
     const url = error.config?.url ?? "";
+    // 시스템 점검(데이터 복원 중) → 화면 전체에 점검 안내(MaintenanceOverlay)
+    if (
+      error.response?.status === 503 &&
+      (error.response.data as ApiEnvelope<unknown> | undefined)?.error?.code === "MAINTENANCE"
+    ) {
+      useMaintenanceStore.getState().setActive(true);
+    }
     if (
       isSessionLost(error) &&
       !SKIP_REDIRECT_URLS.includes(url) &&
