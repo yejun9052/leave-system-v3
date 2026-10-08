@@ -15,6 +15,8 @@ export interface Me {
   phone: string | null;
   departmentId: number | null;
   departmentName: string | null;
+  /** 입사일(yyyy-MM-dd) */
+  hireDate: string | null;
   roles: Role[];
   /** true 면 비밀번호를 바꾸기 전까지 다른 기능 사용 불가(서버가 403 으로 차단) */
   passwordChangeRequired: boolean;

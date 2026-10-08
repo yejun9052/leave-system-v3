@@ -20,6 +20,7 @@ import com.company.leave.employee.domain.Role;
 import com.company.leave.employee.repository.EmployeeRepository;
 import com.company.leave.security.UserPrincipal;
 import jakarta.servlet.http.Cookie;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
@@ -126,13 +127,14 @@ class AuthServiceLogoutTest {
     }
 
     @Test
-    void 내_정보는_직원_ID로_조회하고_비밀번호_변경_필요_여부를_포함한다() {
+    void 내_정보는_직원_ID로_조회하고_입사일과_비밀번호_변경_필요_여부를_포함한다() {
         when(employeeRepository.findById(EMPLOYEE_ID)).thenReturn(Optional.of(직원(true)));
 
         MeResponse me = authService.me(EMPLOYEE_ID);
 
         assertThat(me.id()).isEqualTo(EMPLOYEE_ID);
         assertThat(me.phone()).isEqualTo("010-1234-5678");
+        assertThat(me.hireDate()).isEqualTo(LocalDate.of(2021, 7, 5));
         assertThat(me.roles()).containsExactly("EMPLOYEE", "TEAM_LEAD");
         assertThat(me.passwordChangeRequired()).isTrue();
     }
@@ -154,6 +156,7 @@ class AuthServiceLogoutTest {
                 .passwordHash("$2a$10$hash")
                 .name("테스트사원")
                 .phone("010-1234-5678")
+                .hireDate(LocalDate.of(2021, 7, 5))
                 .status(EmployeeStatus.ACTIVE)
                 .roles(Set.of(Role.EMPLOYEE, Role.TEAM_LEAD))
                 .build();
