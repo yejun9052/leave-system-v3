@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -50,6 +52,10 @@ class BackupControllerAccessTest {
     static class MethodSecurity {}
 
     private static final String NAME = "annual_leave_20261008_093000_manual.dump";
+    private static final String SETTINGS = """
+            {"enabled":true,"frequency":"WEEKLY","dayOfWeek":1,"runTime":"03:30","intervalHours":6,
+             "keepDaily":7,"keepWeekly":4,"keepMonthly":6}
+            """;
     private static final String DOWNLOAD = "/api/backups/" + NAME + "/download";
 
     @TempDir
@@ -57,6 +63,7 @@ class BackupControllerAccessTest {
 
     private AnnotationConfigApplicationContext context;
     private BackupService service;
+    private BackupSettingsService settings;
     private MockMvc mvc;
 
     @BeforeEach
@@ -65,6 +72,8 @@ class BackupControllerAccessTest {
         service = mock(BackupService.class);
         context.register(MethodSecurity.class);
         context.registerBean(BackupService.class, () -> service);
+        settings = mock(BackupSettingsService.class);
+        context.registerBean(BackupSettingsService.class, () -> settings);
         context.registerBean(BackupController.class);
         context.refresh();
         mvc = MockMvcBuilders.standaloneSetup(context.getBean(BackupController.class))
@@ -84,8 +93,11 @@ class BackupControllerAccessTest {
             mvc.perform(get("/api/backups")).andExpect(status().isForbidden());
             mvc.perform(post("/api/backups")).andExpect(status().isForbidden());
             mvc.perform(get(DOWNLOAD)).andExpect(status().isForbidden());
+            mvc.perform(get("/api/backups/settings")).andExpect(status().isForbidden());
+            mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON).content(SETTINGS))
+                    .andExpect(status().isForbidden());
         }
-        verifyNoInteractions(service);
+        verifyNoInteractions(service, settings);
     }
 
     @Test
@@ -111,6 +123,26 @@ class BackupControllerAccessTest {
                 .andExpect(content().bytes("PGDMP".getBytes()));
         mvc.perform(post("/api/backups")).andExpect(status().isOk());
         verify(service).backup(any());
+    }
+
+    @Test
+    void 인사관리자는_자동_백업_설정을_보고_바꿀_수_있다() throws Exception {
+        authenticate(Set.of(Role.HR_ADMIN));
+        mvc.perform(get("/api/backups/settings")).andExpect(status().isOk());
+        mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON).content(SETTINGS))
+                .andExpect(status().isOk());
+        verify(settings).get();
+        verify(settings).update(any());
+    }
+
+    @Test
+    void 범위를_벗어난_설정은_400이다() throws Exception {
+        authenticate(Set.of(Role.SYSTEM_ADMIN));
+        mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON)
+                .content(SETTINGS.replace("\"keepDaily\":7", "\"keepDaily\":61"))).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON)
+                .content(SETTINGS.replace("\"intervalHours\":6", "\"intervalHours\":0"))).andExpect(status().isBadRequest());
+        verifyNoInteractions(settings);
     }
 
     private void authenticate(Set<Role> roles) {

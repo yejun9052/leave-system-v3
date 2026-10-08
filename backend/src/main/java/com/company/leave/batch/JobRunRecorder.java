@@ -21,6 +21,7 @@ public class JobRunRecorder {
     public static final String HOLIDAY_SYNC = "holiday-sync";
     public static final String LEAVE_GRANT = "leave-grant";
     public static final String PROMOTION_AUTO = "promotion-auto";
+    public static final String BACKUP_AUTO = "backup-auto";
 
     private static final Logger log = LoggerFactory.getLogger(JobRunRecorder.class);
     private static final int MAX_MESSAGE = 500;

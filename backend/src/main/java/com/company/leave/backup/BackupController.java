@@ -3,9 +3,12 @@ package com.company.leave.backup;
 import com.company.leave.backup.BackupDtos.BackupFile;
 import com.company.leave.backup.BackupDtos.Kind;
 import com.company.leave.backup.BackupDtos.Overview;
+import com.company.leave.backup.BackupDtos.Settings;
+import com.company.leave.backup.BackupDtos.SettingsRequest;
 import com.company.leave.common.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.nio.file.Path;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -16,6 +19,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,9 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class BackupController {
 
     private final BackupService backupService;
+    private final BackupSettingsService settingsService;
 
-    public BackupController(BackupService backupService) {
+    public BackupController(BackupService backupService, BackupSettingsService settingsService) {
         this.backupService = backupService;
+        this.settingsService = settingsService;
     }
 
     @Operation(summary = "백업 폴더·남은 공간·진행 여부와 백업 목록(최신순)")
@@ -45,6 +52,18 @@ public class BackupController {
     @PostMapping
     public ApiResponse<BackupFile> backup() {
         return ApiResponse.ok(backupService.backup(Kind.MANUAL));
+    }
+
+    @Operation(summary = "자동 백업 설정과 다음 실행 시각")
+    @GetMapping("/settings")
+    public ApiResponse<Settings> settings() {
+        return ApiResponse.ok(settingsService.get());
+    }
+
+    @Operation(summary = "자동 백업 설정 변경", description = "저장하면 재시작 없이 바로 새 시각으로 예약된다.")
+    @PutMapping("/settings")
+    public ApiResponse<Settings> updateSettings(@Valid @RequestBody SettingsRequest req) {
+        return ApiResponse.ok(settingsService.update(req));
     }
 
     @Operation(summary = "백업 파일 내려받기(시스템 관리자)")

@@ -28,6 +28,11 @@ spring:
         format_sql: true
         jdbc:
           time_zone: Asia/Seoul
+  task:
+    scheduling:
+      pool:
+        # 자동 작업(공휴일·연차 부여·촉진·자동 백업)이 한 줄로 서지 않게. 백업이 길어져도 다른 작업이 밀리지 않는다
+        size: 2
   session:
     # 미사용 만료 시간 (예: 2h, 30m). 환경변수 SESSION_TIMEOUT 으로 변경 가능
     timeout: ${SESSION_TIMEOUT:2h}

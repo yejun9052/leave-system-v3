@@ -1,6 +1,11 @@
 package com.company.leave.backup;
 
+import com.company.leave.backup.BackupSettings.Frequency;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 public final class BackupDtos {
@@ -49,5 +54,29 @@ public final class BackupDtos {
      * @param files       최신순
      */
     public record Overview(String dir, long usableBytes, boolean running, List<BackupFile> files) {
+    }
+
+    /**
+     * 자동 백업 설정.
+     *
+     * @param scheduleLabel 실행 시각 설명(예: "매일 02:00")
+     * @param nextRunAt     다음 실행 시각(꺼져 있으면 null)
+     * @param warnings      다른 자동 작업과 같은 시각이면 그 안내(막지는 않음)
+     */
+    public record Settings(boolean enabled, Frequency frequency, int dayOfWeek, LocalTime runTime, int intervalHours,
+                           int keepDaily, int keepWeekly, int keepMonthly, String scheduleLabel,
+                           LocalDateTime nextRunAt, List<String> warnings) {
+    }
+
+    /** 자동 백업 설정 변경. dayOfWeek: 1=월~7=일, runTime: "02:00" */
+    public record SettingsRequest(
+            @NotNull Boolean enabled,
+            @NotNull Frequency frequency,
+            @Min(1) @Max(7) int dayOfWeek,
+            @NotNull LocalTime runTime,
+            @Min(1) @Max(24) int intervalHours,
+            @Min(0) @Max(60) int keepDaily,
+            @Min(0) @Max(52) int keepWeekly,
+            @Min(0) @Max(24) int keepMonthly) {
     }
 }

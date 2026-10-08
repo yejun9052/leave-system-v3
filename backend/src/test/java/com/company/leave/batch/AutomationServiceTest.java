@@ -5,6 +5,8 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.company.leave.backup.BackupSettings;
+import com.company.leave.backup.BackupSettingsService;
 import com.company.leave.calendar.holiday.HolidaySyncService;
 import com.company.leave.leave.LeavePromotionService;
 import com.company.leave.policy.PolicyService;
@@ -24,7 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * 정책 → 자동화 탭 정보: 자동 작업 3개(순서·상태·마지막 실행), 촉진 자동 발송 설정과 미리보기, 설정 저장.
+ * 정책 → 자동화 탭 정보: 자동 작업 4개(순서·상태·마지막 실행), 촉진 자동 발송 설정과 미리보기, 설정 저장.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("자동화 탭 정보")
@@ -35,6 +37,7 @@ class AutomationServiceTest {
     @Mock private LeavePromotionService promotionService;
     @Mock private HolidaySyncService holidaySyncService;
     @Mock private JobRunRecorder recorder;
+    @Mock private BackupSettingsService backupSettingsService;
     @InjectMocks private AutomationService service;
 
     private final LeavePolicy policy = LeavePolicy.createDefault();
@@ -45,18 +48,21 @@ class AutomationServiceTest {
         lenient().when(recorder.lastRuns()).thenReturn(Map.of());
         lenient().when(promotionService.autoPreview()).thenReturn(List.of());
         lenient().when(holidaySyncService.isConfigured()).thenReturn(true);
+        lenient().when(backupSettingsService.current()).thenReturn(BackupSettings.defaults());
     }
 
     @Test
-    void 자동_작업은_공휴일_연차_부여_촉진_순서로_실행_시각과_함께_보여준다() {
+    void 자동_작업은_공휴일_연차_부여_촉진_자동_백업_순서로_실행_시각과_함께_보여준다() {
         AutomationService.Overview o = service.overview();
 
         assertThat(o.jobs()).extracting(AutomationService.Job::key).containsExactly(
-                JobRunRecorder.HOLIDAY_SYNC, JobRunRecorder.LEAVE_GRANT, JobRunRecorder.PROMOTION_AUTO);
+                JobRunRecorder.HOLIDAY_SYNC, JobRunRecorder.LEAVE_GRANT, JobRunRecorder.PROMOTION_AUTO,
+                JobRunRecorder.BACKUP_AUTO);
         assertThat(o.jobs()).extracting(AutomationService.Job::schedule)
-                .containsExactly("매일 00:10", "매일 01:00", "매일 09:00");
+                .containsExactly("매일 00:10", "매일 01:00", "매일 09:00", "매일 02:00");
         assertThat(o.jobs()).extracting(AutomationService.Job::state).containsExactly(
-                AutomationService.State.ALWAYS, AutomationService.State.ALWAYS, AutomationService.State.OFF);
+                AutomationService.State.ALWAYS, AutomationService.State.ALWAYS, AutomationService.State.OFF,
+                AutomationService.State.ON);
     }
 
     @Test
@@ -113,7 +119,7 @@ class AutomationServiceTest {
         AutomationService.Overview o = service.updatePromotion(true, List.of(3));
 
         verify(policyService).updateAutomation(true, List.of(3));
-        assertThat(o.jobs()).hasSize(3);
+        assertThat(o.jobs()).hasSize(4);
     }
 
     @Test

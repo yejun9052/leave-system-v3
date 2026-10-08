@@ -1,5 +1,7 @@
 package com.company.leave.batch;
 
+import com.company.leave.backup.BackupSettings;
+import com.company.leave.backup.BackupSettingsService;
 import com.company.leave.calendar.holiday.HolidaySyncService;
 import com.company.leave.leave.LeavePromotionService;
 import com.company.leave.policy.PolicyService;
@@ -20,9 +22,12 @@ public class AutomationService {
     private final LeavePromotionService promotionService;
     private final HolidaySyncService holidaySyncService;
     private final JobRunRecorder recorder;
+    private final BackupSettingsService backupSettingsService;
 
     public AutomationService(PolicyService policyService, LeavePromotionService promotionService,
-                             HolidaySyncService holidaySyncService, JobRunRecorder recorder) {
+                             HolidaySyncService holidaySyncService, JobRunRecorder recorder,
+                             BackupSettingsService backupSettingsService) {
+        this.backupSettingsService = backupSettingsService;
         this.policyService = policyService;
         this.promotionService = promotionService;
         this.holidaySyncService = holidaySyncService;
@@ -49,6 +54,7 @@ public class AutomationService {
     public Overview overview() {
         LeavePolicy policy = policyService.getActivePolicy();
         Map<String, JobRunRecorder.Run> runs = recorder.lastRuns();
+        BackupSettings backup = backupSettingsService.current();
         List<Job> jobs = List.of(
                 job(runs, JobRunRecorder.HOLIDAY_SYNC, "공휴일 동기화", "매일 00:10",
                         "올해·내년 공휴일을 공공데이터 API에서 받아 저장합니다. 새로 생긴 공휴일이 걸친 휴가는 일수를 다시 "
@@ -61,7 +67,11 @@ public class AutomationService {
                 job(runs, JobRunRecorder.PROMOTION_AUTO, "연차 촉진 자동 발송", "매일 09:00",
                         "사용 기한이 정한 시기(" + monthsLabel(policy.getPromotionMonths()) + ")에 들어온 직원에게 남은 연차 "
                                 + "안내 메일과 앱 알림을 보냅니다.",
-                        policy.isPromotionEnabled() ? State.ON : State.OFF));
+                        policy.isPromotionEnabled() ? State.ON : State.OFF),
+                job(runs, JobRunRecorder.BACKUP_AUTO, "자동 백업", backup.schedule().label(),
+                        "DB 전체를 서버 백업 폴더에 파일로 저장하고, 보관 개수를 넘은 오래된 자동 백업을 지웁니다. 실패하면 "
+                                + "시스템 관리자·인사관리자에게 알림과 메일을 보냅니다. 설정은 백업 탭에서 바꿉니다.",
+                        backup.isEnabled() ? State.ON : State.OFF));
         return new Overview(policy.isPromotionEnabled(), policy.getPromotionMonths(),
                 promotionService.autoPreview(), jobs);
     }
