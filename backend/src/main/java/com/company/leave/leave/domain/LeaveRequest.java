@@ -175,6 +175,11 @@ public class LeaveRequest extends BaseTimeEntity {
         return halfDayPart != null ? DayPortion.HALF : leaveType.getPortion();
     }
 
+    /** 반차의 오전·오후: 반일 규정으로 고른 값, 아니면 종류(오전 반차·오후 반차). 알 수 없으면 null. */
+    public HalfDayPart halfSide() {
+        return halfDayPart != null ? halfDayPart : leaveType.halfDayPart();
+    }
+
     /** 반차·시간차(하루만, 1일 미만). 종일 종류의 반차 신청 포함. */
     public boolean isPartialDay() {
         return getPortion().isPartial();

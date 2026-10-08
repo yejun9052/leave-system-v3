@@ -257,7 +257,7 @@ public class LeaveRequestService {
                 : resolveSpecialRule(type, specialRuleId, days, halfDayPart);
         String limitWarning = specialRule == null ? null : checkAnnualLimit(employee, specialRule, start, forced);
 
-        validateNoOverlap(employeeId, start, end, portion, days);
+        validateNoOverlap(employeeId, start, end, portion, halfDayPart != null ? halfDayPart : type.halfDayPart(), days);
 
         if (!forced) {
             validateUsagePolicy(employee, type, start, end, days, policy);
@@ -1058,10 +1058,17 @@ public class LeaveRequestService {
 
     /**
      * 겹침 검사. 취소 요청 중인 휴가가 있는 날은 종류와 상관없이 신청할 수 없다(취소가 승인된 뒤 신청).
-     * 종일 휴가는 대기·승인 중인 어떤 신청과도 겹칠 수 없고, 부분 휴가(반차·시간차)는 같은 날 부분 휴가끼리 합계 1일까지 허용한다.
+     * 종일 휴가는 대기·승인 중인 어떤 신청과도 겹칠 수 없다. 같은 날 부분 휴가는
+     * <ul>
+     *   <li>반차끼리: 오전·오후가 다를 때만(오전·오후를 알 수 없는 반차는 어느 쪽과도 겹친다고 본다)</li>
+     *   <li>반차와 시간차: 함께 쓸 수 없다(시간차는 오전·오후 구분이 없다)</li>
+     *   <li>시간차끼리: 합계 1일까지</li>
+     * </ul>
+     *
+     * @param halfSide 새 신청이 반차일 때 오전·오후(알 수 없으면 null)
      */
     private void validateNoOverlap(Long employeeId, LocalDate start, LocalDate end, DayPortion portion,
-                                   BigDecimal days) {
+                                   HalfDayPart halfSide, BigDecimal days) {
         List<LeaveRequest> overlapping = requestRepository.findActiveOverlapping(employeeId, start, end);
         if (overlapping.isEmpty()) {
             return;
@@ -1072,10 +1079,25 @@ public class LeaveRequestService {
         if (!portion.isPartial() || overlapping.stream().anyMatch(r -> !r.isPartialDay())) {
             throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP);
         }
+        boolean hourly = portion == DayPortion.HOURLY;
+        for (LeaveRequest other : overlapping) {
+            boolean otherHourly = other.getPortion() == DayPortion.HOURLY;
+            if (hourly != otherHourly) {
+                throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP, hourly
+                        ? "같은 날 반차가 있어 시간차를 신청할 수 없습니다."
+                        : "같은 날 시간차가 있어 반차를 신청할 수 없습니다.");
+            }
+            HalfDayPart otherSide = other.halfSide();
+            if (!hourly && (halfSide == null || otherSide == null || halfSide == otherSide)) {
+                String which = halfSide != null && halfSide == otherSide ? halfSide.label() + " " : "";
+                throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP,
+                        "같은 날 " + which + "반차가 이미 있습니다. 같은 날에는 오전 반차와 오후 반차만 함께 쓸 수 있습니다.");
+            }
+        }
         BigDecimal sameDay = overlapping.stream().map(LeaveRequest::getDays).reduce(BigDecimal.ZERO, BigDecimal::add);
         if (sameDay.add(days).compareTo(BigDecimal.ONE) > 0) {
             throw new BusinessException(ErrorCode.LEAVE_DATE_OVERLAP,
-                    "같은 날 반차·시간차 합계는 1일을 넘을 수 없습니다. (이미 신청 " + plain(sameDay) + "일)");
+                    "같은 날 시간차 합계는 1일을 넘을 수 없습니다. (이미 신청 " + plain(sameDay) + "일)");
         }
     }
 

@@ -141,4 +141,16 @@ public class LeaveType extends BaseTimeEntity {
     public boolean isRequiresAnnualExhausted() {
         return annualDeductionMode == AnnualDeductionMode.EXHAUST_FIRST;
     }
+
+    /** 반차 종류의 오전·오후. 기본 데이터의 오전 반차(HALF_AM)·오후 반차(HALF_PM)만 알 수 있고, 그 외는 null. */
+    public HalfDayPart halfDayPart() {
+        if (code == null) {
+            return null;
+        }
+        return switch (code) {
+            case "HALF_AM" -> HalfDayPart.AM;
+            case "HALF_PM" -> HalfDayPart.PM;
+            default -> null;
+        };
+    }
 }
