@@ -31,7 +31,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import type { LeaveRequest } from "@/types";
-import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
+import { formatDays, formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
 import LeaveListTab from "./LeaveListTab";
 import LeaveRegisterDialog from "./LeaveRegisterDialog";
 
@@ -207,6 +207,9 @@ export default function ApprovalsPage() {
                             <span className="ml-2 text-xs text-muted-foreground">
                               연차 {formatDays(r.forfeitedDays)}일 소멸
                             </span>
+                          )}
+                          {formatPeriodSplit(r) && (
+                            <p className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{formatPeriodSplit(r)}</p>
                           )}
                         </TableCell>
                         <TableCell className="max-w-[180px] truncate text-muted-foreground">

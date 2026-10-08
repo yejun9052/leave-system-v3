@@ -186,6 +186,9 @@ public final class LeaveRequestDtos {
             /** 종일 종류를 반차로 신청한 경우의 오전·오후(0.5일 경조사 규정), 그 외 null */
             HalfDayPart halfDayPart,
             BigDecimal forfeitedDays,
+            /** 기산일을 걸친 휴가의 차감 몫: 시작일 기간(이번 기간)·다음 기간. 걸치지 않으면 다음 기간 0 */
+            BigDecimal currentPeriodDays,
+            BigDecimal nextPeriodDays,
             String specialRuleName,
             BigDecimal specialRuleDays,
             LeaveRequestStatus status,
@@ -205,14 +208,14 @@ public final class LeaveRequestDtos {
         public Response withInbox(boolean own, String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
                     leaveTypeColor, startDate, endDate, days, portion, hours, halfDayPart, forfeitedDays,
-                    specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
+                    currentPeriodDays, nextPeriodDays, specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
                     cancelReason, createdAt, own, warning, requestWarning);
         }
 
         public Response withRequestWarning(String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
                     leaveTypeColor, startDate, endDate, days, portion, hours, halfDayPart, forfeitedDays,
-                    specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
+                    currentPeriodDays, nextPeriodDays, specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
                     cancelReason, createdAt, ownRequest, approvalWarning, warning);
         }
 
@@ -234,6 +237,8 @@ public final class LeaveRequestDtos {
                     portion == DayPortion.HOURLY ? WorkdayCalculator.hoursOf(r.getDays()) : null,
                     r.getHalfDayPart(),
                     r.getForfeitedDays(),
+                    r.getCurrentPeriodDeductedDays(),
+                    r.getNextPeriodDeductedDays(),
                     r.getSpecialRuleName(),
                     r.getSpecialRuleDays(),
                     r.getStatus(),

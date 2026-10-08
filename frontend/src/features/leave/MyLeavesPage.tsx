@@ -29,7 +29,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
-import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
+import { formatDays, formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
 import { LeaveRequestFields, useLeaveRequestForm } from "./LeaveRequestForm";
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
@@ -149,6 +149,9 @@ export default function MyLeavesPage() {
                         <span className="ml-2 text-xs text-muted-foreground">
                           연차 {formatDays(r.forfeitedDays)}일 소멸
                         </span>
+                      )}
+                      {formatPeriodSplit(r) && (
+                        <p className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{formatPeriodSplit(r)}</p>
                       )}
                     </TableCell>
                     <TableCell>

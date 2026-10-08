@@ -154,6 +154,9 @@ export interface LeaveRequest {
   halfDayPart: HalfDayPart | null;
   /** 승인으로 소멸되는 연차(병가·공가) */
   forfeitedDays: number;
+  /** 기산일을 걸친 휴가의 차감 몫: 시작일 기간(이번 기간)·다음 기간. 걸치지 않으면 다음 기간 0 */
+  currentPeriodDays: number;
+  nextPeriodDays: number;
   /** 경조사 규정으로 신청한 경우의 규정 이름·일수 */
   specialRuleName: string | null;
   specialRuleDays: number | null;

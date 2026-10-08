@@ -21,6 +21,12 @@ export function formatLeaveAmount(r: {
   return `${formatDays(r.days)}일`;
 }
 
+/** 기산일을 걸친 휴가의 기간별 차감: "이번 기간 1일 · 다음 기간 2일", 걸치지 않으면 null. */
+export function formatPeriodSplit(r: { currentPeriodDays?: number; nextPeriodDays?: number }): string | null {
+  if (!r.nextPeriodDays || r.nextPeriodDays <= 0) return null;
+  return `이번 기간 ${formatDays(r.currentPeriodDays ?? 0)}일 · 다음 기간 ${formatDays(r.nextPeriodDays)}일`;
+}
+
 /** 경조사 규정으로 신청한 건의 표시: "· 본인 결혼(규정 5일)", 규정이 없으면 빈 문자열. */
 export function formatSpecialRule(r: { specialRuleName?: string | null; specialRuleDays?: number | null }): string {
   if (!r.specialRuleName) return "";

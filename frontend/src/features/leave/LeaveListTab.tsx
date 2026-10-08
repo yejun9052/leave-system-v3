@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
+import { formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
 import DepartmentFilter from "@/components/DepartmentFilter";
 import { useTableSort } from "@/lib/useTableSort";
 import { useAuthStore } from "@/store/auth";
@@ -213,6 +213,9 @@ export default function LeaveListTab() {
                     <TableCell className="whitespace-nowrap">{period(r)}</TableCell>
                     <TableCell>
                       <Badge variant="secondary">{formatLeaveAmount(r)}</Badge>
+                      {formatPeriodSplit(r) && (
+                        <p className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{formatPeriodSplit(r)}</p>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-[180px] truncate text-muted-foreground" title={r.reason ?? ""}>
                       {r.reason || "-"}
