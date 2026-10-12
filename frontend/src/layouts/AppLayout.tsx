@@ -116,13 +116,15 @@ export default function AppLayout() {
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <div className="flex min-w-0 flex-1 items-center">
+          {/* 빈 곳을 채우고 알림 안내는 오른쪽 끝(벨 바로 옆)에 붙인다. 좁으면 안내 글자가 줄어든다 */}
+          <div className="flex min-w-0 flex-1 items-center justify-end">
             <UnreadNotice onOpen={() => setBellOpen(true)} />
           </div>
           <NotificationBell open={bellOpen} onOpenChange={setBellOpen} />
-          <div className="text-right">
-            <p className="text-sm font-medium leading-tight">{user?.name}</p>
-            <p className="text-xs text-muted-foreground leading-tight">
+          {/* 모바일에서는 이름·부서 칸 폭을 묶어 긴 부서 이름이 알림 안내를 밀어내지 않게 */}
+          <div className="max-w-28 text-right sm:max-w-none">
+            <p className="truncate text-sm font-medium leading-tight">{user?.name}</p>
+            <p className="truncate text-xs text-muted-foreground leading-tight">
               {user?.departmentName ?? "-"}
             </p>
           </div>
@@ -212,7 +214,7 @@ function SidebarSummary({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
-/** 상단 빈 곳의 안내: 확인하지 않은 알림이 있으면 눈에 띄게 보여 주고, 누르면 알림 목록을 연다. */
+/** 상단 알림(벨) 옆 안내: 확인하지 않은 알림이 있으면 눈에 띄게 보여 주고, 누르면 알림 목록을 연다. */
 function UnreadNotice({ onOpen }: { onOpen: () => void }) {
   const unread = useUnreadNotifications();
   if (unread === 0) return null;
