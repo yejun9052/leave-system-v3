@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, Search, X } from "lucide-react";
 import { reportApi } from "@/api/dashboard";
+import { downloadFile } from "@/lib/download";
 import { departmentApi } from "@/api/departments";
 import { employeeApi } from "@/api/employees";
 import DepartmentTreeSelect from "@/components/DepartmentTreeSelect";
@@ -88,17 +89,9 @@ export default function ReportsPage() {
     setLoading(true);
     try {
       const url = reportApi.usageExportUrl(year, [], [...employeeIds]);
-      const res = await fetch(url, { credentials: "same-origin" });
-      if (!res.ok) throw new Error("다운로드 실패");
-      const blob = await res.blob();
-      const href = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = `연차현황표_${todayForFileName()}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(href);
-    } catch {
-      toast({ title: "리포트를 내려받지 못했습니다.", variant: "destructive" });
+      await downloadFile(url, `연차현황표_${todayForFileName()}.xlsx`, "리포트를 내려받지 못했습니다.");
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }

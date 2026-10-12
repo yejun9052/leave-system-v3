@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DatabaseBackup, Download, FolderInput, History, Loader2, Trash2 } from "lucide-react";
 import { BACKUP_KIND_LABEL, backupApi, type BackupFile, type BackupKind, type RestoreSource } from "@/api/backups";
 import { extractErrorMessage } from "@/api/client";
+import { downloadFile } from "@/lib/download";
 import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { useAuthStore } from "@/store/auth";
@@ -51,16 +52,9 @@ export default function BackupTab() {
   const download = async (fileName: string) => {
     setDownloading(fileName);
     try {
-      const res = await fetch(backupApi.downloadUrl(fileName), { credentials: "same-origin" });
-      if (!res.ok) throw new Error("다운로드 실패");
-      const href = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(href);
-    } catch {
-      toast({ title: "백업 파일을 내려받지 못했습니다.", variant: "destructive" });
+      await downloadFile(backupApi.downloadUrl(fileName), fileName, "백업 파일을 내려받지 못했습니다.");
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
     } finally {
       setDownloading(null);
     }

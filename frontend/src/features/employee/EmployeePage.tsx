@@ -40,6 +40,7 @@ import { useTableSort } from "@/lib/useTableSort";
 import { todayString } from "@/lib/dateFormat";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { invalidateOrgData } from "@/lib/invalidate";
+import { downloadFile } from "@/lib/download";
 import {
   Dialog,
   DialogContent,
@@ -89,6 +90,8 @@ export default function EmployeePage() {
   }, [search]);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [creating, setCreating] = useState(false);
+  /** 엑셀 일괄 등록에서 등록하지 못한 행과 이유(닫을 때까지 보여 줌) */
+  const [importErrors, setImportErrors] = useState<string[]>([]);
 
   // 부서 선택은 부서 관리 트리와 같은 순서·들여쓰기로 보여 준다
   const { data: departmentTree = [] } = useQuery({
@@ -133,6 +136,7 @@ export default function EmployeePage() {
       toast({ title: "복원되었습니다.", variant: "success" });
       invalidate();
     },
+    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
   const onImport = async (file: File) => {
@@ -146,10 +150,10 @@ export default function EmployeePage() {
       const result = await employeeApi.importExcel(file);
       toast({
         title: `${result.created}명 등록 완료`,
-        description: result.errors.length ? `오류 ${result.errors.length}건` : undefined,
+        description: result.errors.length ? `${result.errors.length}건은 등록하지 못했습니다(화면 위 목록 확인).` : undefined,
         variant: result.errors.length ? "default" : "success",
       });
-      if (result.errors.length) console.warn("Import errors:", result.errors);
+      setImportErrors(result.errors);
       invalidate();
     } catch (e) {
       toast({ title: extractErrorMessage(e), variant: "destructive" });
@@ -157,17 +161,9 @@ export default function EmployeePage() {
   };
 
   const onExport = () => {
-    // 세션 쿠키로 인증(같은 출처) → fetch 후 blob 다운로드
-    fetch(employeeApi.exportUrl, { credentials: "same-origin" })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "employees.xlsx";
-        a.click();
-        URL.revokeObjectURL(url);
-      });
+    downloadFile(employeeApi.exportUrl, "employees.xlsx", "사용자 목록을 내려받지 못했습니다.").catch((e: Error) =>
+      toast({ title: e.message, variant: "destructive" }),
+    );
   };
 
   const onSearch = (e: React.FormEvent) => {
@@ -207,6 +203,22 @@ export default function EmployeePage() {
           </Button>
         </div>
       </div>
+
+      {importErrors.length > 0 && (
+        <div role="alert" className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="flex items-center justify-between gap-2">
+            <b>엑셀 등록에서 {importErrors.length}건은 등록하지 못했습니다.</b>
+            <Button variant="ghost" size="sm" className="h-7" onClick={() => setImportErrors([])}>
+              닫기
+            </Button>
+          </div>
+          <ul className="max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5">
+            {importErrors.map((message, i) => (
+              <li key={i}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <form onSubmit={onSearch} className="flex gap-2">
         <div className="relative max-w-sm flex-1">
