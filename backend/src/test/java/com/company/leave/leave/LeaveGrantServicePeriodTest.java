@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
 
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.employee.domain.Employee;
@@ -15,6 +17,7 @@ import com.company.leave.leave.accrual.LeavePeriodCalculator;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.repository.LeaveBalanceRepository;
+import com.company.leave.leave.repository.LeaveRequestRepository;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.LeavePolicy;
 import java.math.BigDecimal;
@@ -33,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * 연차 부여 배치와 입사일 기준 기간. 입사 기념일이 지나 새 기간이 시작되면 지난 기간 잔여가 이월·소멸된다.
@@ -51,6 +55,8 @@ class LeaveGrantServicePeriodTest {
     @Mock private LeaveBalanceRepository balanceRepository;
     @Mock private LeaveBalanceService balanceService;
     @Mock private PolicyService policyService;
+    @Mock private LeaveRequestRepository requestRepository;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private LeaveGrantService service;
     private final LeavePolicy policy = LeavePolicy.createDefault();
@@ -61,12 +67,13 @@ class LeaveGrantServicePeriodTest {
     @BeforeEach
     void setUp() {
         service = new LeaveGrantService(employeeRepository, balanceRepository, balanceService, PERIODS,
-                policyService);
+                policyService, requestRepository, transactionManager);
         직원 = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동").hireDate(입사).build();
         ReflectionTestUtils.setField(직원, "id", 10L);
         지금_기간 = PERIODS.currentYear(입사, policy);
 
         lenient().when(policyService.getActivePolicy()).thenReturn(policy);
+        lenient().when(requestRepository.sumPendingDeductedDays(anyLong(), anyInt())).thenReturn(BigDecimal.ZERO);
         lenient().when(employeeRepository.findById(10L)).thenReturn(Optional.of(직원));
         lenient().when(employeeRepository.findByStatus(EmployeeStatus.ACTIVE))
                 .thenReturn(List.of(직원));
@@ -142,6 +149,80 @@ class LeaveGrantServicePeriodTest {
 
         assertThat(지난.remaining()).isZero();
         assertThat(지난.getExpired()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void 기념일_전_날짜로_결재_대기_중인_신청의_몫은_소멸하지_않고_남겨_둔다() {
+        // 3/13 연차를 신청해 결재 대기인 채로 3/14 새 기간이 시작됨
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "13");
+        when(requestRepository.sumPendingDeductedDays(10L, 지금_기간 - 1)).thenReturn(new BigDecimal("1"));
+
+        service.grantCurrentPeriods();
+
+        assertThat(지난.getExpired()).isEqualByComparingTo("2");
+        assertThat(지난.remaining()).isEqualByComparingTo("1"); // 기산일 뒤에 승인돼도 잔여가 있다
+    }
+
+    @Test
+    void 결재_대기가_반려되면_남겨_둔_몫은_다음_배치에서_소멸한다() {
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "13");
+        when(requestRepository.sumPendingDeductedDays(10L, 지금_기간 - 1)).thenReturn(new BigDecimal("1"));
+        service.grantCurrentPeriods();
+
+        when(requestRepository.sumPendingDeductedDays(eq(10L), eq(지금_기간 - 1))).thenReturn(BigDecimal.ZERO);
+        service.grantCurrentPeriods();
+
+        assertThat(지난.remaining()).isZero();
+        assertThat(지난.getExpired()).isEqualByComparingTo("3");
+    }
+
+    @Test
+    void 이월을_허용해도_결재_대기_몫은_이월하지_않고_남겼다가_승인되면_이월은_그대로다() {
+        ReflectionTestUtils.setField(policy, "carryOverEnabled", true);
+        ReflectionTestUtils.setField(policy, "maxCarryOverDays", new BigDecimal("5"));
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "9");
+        when(requestRepository.sumPendingDeductedDays(10L, 지금_기간 - 1)).thenReturn(new BigDecimal("1"));
+
+        service.grantCurrentPeriods();
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("5");
+        assertThat(지난.getExpired()).isEqualByComparingTo("1"); // 7 중 결재 대기 1 제외 6 → 5 이월, 1 소멸
+        assertThat(지난.remaining()).isEqualByComparingTo("6"); // 이월 5 + 결재 대기 1
+
+        지난.addUsed(new BigDecimal("1")); // 기산일 뒤에 승인
+        when(requestRepository.sumPendingDeductedDays(eq(10L), eq(지금_기간 - 1))).thenReturn(BigDecimal.ZERO);
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("5");
+        assertThat(지난.getExpired()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void 이월_뒤_지난_기간에_돌아온_연차는_한도까지_이월되고_나머지는_소멸한다() {
+        ReflectionTestUtils.setField(policy, "carryOverEnabled", true);
+        ReflectionTestUtils.setField(policy, "maxCarryOverDays", new BigDecimal("5"));
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "13");
+        service.grantCurrentPeriods();
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("3");
+
+        지난.restoreUsed(new BigDecimal("4")); // 기념일 전 휴가가 기산일 뒤에 취소돼 4일이 돌아옴
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("5");
+        assertThat(지난.getExpired()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void 한_명이_실패해도_다른_직원은_부여되고_실패를_알린다() {
+        Employee 다른 = Employee.builder().email("other@company.com").passwordHash("h").name("김실패").hireDate(입사).build();
+        ReflectionTestUtils.setField(다른, "id", 11L);
+        when(employeeRepository.findByStatus(EmployeeStatus.ACTIVE)).thenReturn(List.of(다른, 직원));
+        when(balanceService.getOrCreate(eq(11L), anyInt())).thenThrow(new IllegalStateException("잔액 충돌"));
+
+        assertThatThrownBy(() -> service.grantCurrentPeriods())
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("연차 부여: 1명 부여, 1명 실패(김실패)");
+
+        assertThat(잔액(지금_기간).getGranted()).isEqualByComparingTo("16");
     }
 
     @Test
