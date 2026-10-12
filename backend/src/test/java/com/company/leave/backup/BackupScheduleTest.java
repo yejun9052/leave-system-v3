@@ -46,6 +46,21 @@ class BackupScheduleTest {
     }
 
     @Test
+    void N개월마다는_1월부터_N개월_간격의_달에_한_번씩_실행한다() {
+        // 3개월마다 1일 = 1·4·7·10월 1일, 1년에 4번
+        assertThat(s("0 0 4 1 */3 *").label()).isEqualTo("1·4·7·10월 1일 04:00 (3개월마다)");
+        assertThat(s("0 0 4 1 */3 *").nextRuns(NOW, 4)).containsExactly(
+                LocalDateTime.of(2027, 1, 1, 4, 0), LocalDateTime.of(2027, 4, 1, 4, 0),
+                LocalDateTime.of(2027, 7, 1, 4, 0), LocalDateTime.of(2027, 10, 1, 4, 0));
+        assertThat(s("0 0 4 1 2/3 *").label()).isEqualTo("2·5·8·11월 1일 04:00 (3개월마다)");
+        assertThat(s("0 0 4 L */6 *").label()).isEqualTo("1·7월 말일 04:00 (6개월마다)");
+        // 1개월 간격은 매월과 같다
+        assertThat(s("0 0 4 1 */1 *").label()).isEqualTo("매월 1일 04:00");
+        assertThat(s("0 0 4 1 */12 *").label()).isEqualTo("1월 1일 04:00 (12개월마다)");
+        assertThat(s("0 0 4 1 */3 *").problem(NOW)).isNull();
+    }
+
+    @Test
     void N시간마다는_시작_시각부터_N시간_간격으로_실행한다() {
         assertThat(s("0 0 0/5 * * *").label()).isEqualTo("5시간마다(0시부터, 매번 00분)");
         assertThat(s("0 0 0/5 * * *").next(NOW)).isEqualTo(LocalDateTime.of(2026, 10, 8, 15, 0));

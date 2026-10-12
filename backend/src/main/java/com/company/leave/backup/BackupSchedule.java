@@ -87,8 +87,17 @@ public record BackupSchedule(String cron) {
         return runs;
     }
 
-    /** 화면 표시: "매일 02:00", "매주 월·목 03:30", "매월 1일 04:00", "6시간마다(0시부터, 매시 00분)" 등. 못 읽으면 cron 그대로. */
+    /**
+     * 화면 표시: "매일 02:00", "매주 월·목 03:30", "매월 1일 04:00", "6시간마다(0시부터, 매시 00분)" 등. 못 읽으면 cron 그대로.
+     * N개월마다는 실제 달을 앞에 쓰고 간격은 뒤에: "1·4·7·10월 1일 04:00 (3개월마다)" — 그 달들에 한 번씩(1년 4번).
+     */
     public String label() {
+        String body = labelBody();
+        String every = monthEvery(cron.split(" ").length == 6 ? cron.split(" ")[4] : "*");
+        return every == null || body.startsWith("cron ") ? body : body + " (" + every + ")";
+    }
+
+    private String labelBody() {
         String[] f = cron.split(" ");
         if (f.length != 6) {
             return cron;
@@ -103,7 +112,7 @@ public record BackupSchedule(String cron) {
         if (time == null) {
             return "cron " + cron;
         }
-        String months = "*".equals(month) ? "" : month.replace(",", "·") + "월 ";
+        String months = months(month);
         if ("*".equals(dom) && "*".equals(dow)) {
             return months.isEmpty() ? (time.startsWith("매") || time.contains("마다") ? time : "매일 " + time)
                     : months + "매일 " + time;
@@ -151,6 +160,42 @@ public record BackupSchedule(String cron) {
         }
         return "칸마다 쓸 수 있는 값을 확인해 주세요(예: 시 0~23, 요일 MON~SUN).";
     }
+
+    /**
+     * 월 칸 → 문장 앞부분(실행하는 달). 모든 달·1개월 간격은 매월(빈 문자열), 3개월 간격은 "1·4·7·10월 ",
+     * "2/3" 은 "2·5·8·11월 ", "1,7" 은 "1·7월 ".
+     */
+    private static String months(String month) {
+        if (any(month)) {
+            return "";
+        }
+        Matcher step = MONTH_STEP.matcher(month);
+        if (step.matches()) {
+            int from = "*".equals(step.group(1)) ? 1 : Integer.parseInt(step.group(1));
+            int every = Integer.parseInt(step.group(2));
+            if (every <= 1 && from == 1) {
+                return "";
+            }
+            List<String> list = new ArrayList<>();
+            for (int m = from; m <= 12 && every > 0; m += every) {
+                list.add(String.valueOf(m));
+            }
+            return String.join("·", list) + "월 ";
+        }
+        return month.replace(",", "·") + "월 ";
+    }
+
+    /** 월 칸이 2개월 이상 간격이면 "3개월마다", 아니면 null. */
+    private static String monthEvery(String month) {
+        Matcher step = MONTH_STEP.matcher(month);
+        if (!step.matches()) {
+            return null;
+        }
+        int every = Integer.parseInt(step.group(2));
+        return every >= 2 ? every + "개월마다" : null;
+    }
+
+    private static final Pattern MONTH_STEP = Pattern.compile("(\\*|\\d{1,2})/(\\d{1,2})");
 
     private static boolean any(String field) {
         return "*".equals(field) || "?".equals(field);
