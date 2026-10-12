@@ -1,5 +1,6 @@
 package com.company.leave.config;
 
+import com.company.leave.employee.domain.Role;
 import com.company.leave.security.AccountStateFilter;
 import com.company.leave.security.CustomUserDetailsService;
 import com.company.leave.security.RestAuthEntryPoints;
@@ -9,6 +10,8 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -108,6 +111,12 @@ public class SecurityConfig {
         return new SessionTolerantSecurityContextRepository(new DelegatingSecurityContextRepository(
                 new RequestAttributeSecurityContextRepository(),
                 new HttpSessionSecurityContextRepository()));
+    }
+
+    /** 권한 상속: 시스템 관리자 > 인사관리자 > 팀장 > 사원. @PreAuthorize 의 hasRole 이 상위 권한도 통과시킨다. */
+    @Bean
+    static RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.fromHierarchy(Role.hierarchy());
     }
 
     /** csrf.spa() 가 쓰는 것과 같은 쿠키 저장소(XSRF-TOKEN, JS 읽기 허용). */

@@ -93,7 +93,7 @@ public class EmployeeRepositoryImpl implements EmployeeRepositoryCustom {
             Set<Role> roles = new java.util.HashSet<>(SearchKeywords.codesMatching(ROLE_LABELS, token));
             Arrays.stream(Role.values()).filter(r -> r.name().toLowerCase().contains(token)).forEach(roles::add);
             if (!roles.isEmpty()) {
-                any.or(e.roles.any().in(roles));
+                any.or(e.role.in(roles));
             }
             Set<EmployeeStatus> statuses = SearchKeywords.codesMatching(STATUS_LABELS, token);
             if (!statuses.isEmpty()) {

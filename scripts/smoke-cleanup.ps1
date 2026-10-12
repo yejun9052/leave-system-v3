@@ -24,7 +24,6 @@ $stmts = @(
   "DELETE FROM notifications   WHERE message LIKE '%QA\_%';",
   "DELETE FROM calendar_events WHERE employee_id IN $qa OR created_by IN $qa;",
   "UPDATE departments SET lead_id = NULL WHERE lead_id IN $qa;",
-  "DELETE FROM employee_roles  WHERE employee_id IN $qa;",
   "DELETE FROM employees       WHERE email LIKE 'qa.%@test.local';",
   "DELETE FROM audit_logs      WHERE actor_name IN ('QA_Lead','QA_Emp','QA_HR');",
   "DELETE FROM blackout_periods WHERE name LIKE 'QA%';",

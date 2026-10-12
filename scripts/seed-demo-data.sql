@@ -92,35 +92,19 @@ UPDATE employees
 SET department_id = (SELECT id FROM departments WHERE name = '제품개발팀' ORDER BY id LIMIT 1)
 WHERE email = 'leey217423@gmail.com';
 
--- Roles for the demo managers and team leads.
-INSERT INTO employee_roles (employee_id, role)
-SELECT e.id, v.role
-FROM employees e
-JOIN (VALUES
+-- One role per person (higher roles include lower ones). Everyone else keeps the default EMPLOYEE.
+UPDATE employees e
+SET role = v.role
+FROM (VALUES
     ('minjun.kim@example.com', 'HR_ADMIN'),
-    ('minjun.kim@example.com', 'TEAM_LEAD'),
-    ('minjun.kim@example.com', 'EMPLOYEE'),
     ('seoyeon.park@example.com', 'TEAM_LEAD'),
-    ('seoyeon.park@example.com', 'EMPLOYEE'),
     ('jihoon.choi@example.com', 'TEAM_LEAD'),
-    ('jihoon.choi@example.com', 'EMPLOYEE'),
     ('haeun.jeong@example.com', 'TEAM_LEAD'),
-    ('haeun.jeong@example.com', 'EMPLOYEE'),
     ('yujin.han@example.com', 'TEAM_LEAD'),
-    ('yujin.han@example.com', 'EMPLOYEE'),
     ('jimin.oh@example.com', 'TEAM_LEAD'),
-    ('jimin.oh@example.com', 'EMPLOYEE'),
-    ('hyunwoo.kang@example.com', 'TEAM_LEAD'),
-    ('hyunwoo.kang@example.com', 'EMPLOYEE')
-) AS v(email, role) ON v.email = e.email
-ON CONFLICT (employee_id, role) DO NOTHING;
-
--- Every other employee (not the system account) gets the basic EMPLOYEE role.
-INSERT INTO employee_roles (employee_id, role)
-SELECT e.id, 'EMPLOYEE'
-FROM employees e
-WHERE e.system_account = FALSE
-  AND NOT EXISTS (SELECT 1 FROM employee_roles r WHERE r.employee_id = e.id);
+    ('hyunwoo.kang@example.com', 'TEAM_LEAD')
+) AS v(email, role)
+WHERE v.email = e.email;
 
 UPDATE departments SET lead_id = (SELECT id FROM employees WHERE email = 'leey217423@gmail.com') WHERE name = '제품개발팀';
 UPDATE departments SET lead_id = (SELECT id FROM employees WHERE email = 'seoyeon.park@example.com') WHERE name = '플랫폼파트';

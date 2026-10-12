@@ -101,10 +101,10 @@ class LeaveRequestServicePeriodTest {
                 org.mockito.Mockito.mock(com.company.leave.audit.AuditService.class));
 
         직원 = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동")
-                .hireDate(입사).roles(Set.of(Role.EMPLOYEE)).build();
+                .hireDate(입사).role(Role.EMPLOYEE).build();
         ReflectionTestUtils.setField(직원, "id", 10L);
         인사관리자 = Employee.builder().email("hr@company.com").passwordHash("h").name("인사")
-                .hireDate(LocalDate.of(2015, 1, 2)).roles(Set.of(Role.EMPLOYEE, Role.HR_ADMIN)).build();
+                .hireDate(LocalDate.of(2015, 1, 2)).role(Role.HR_ADMIN).build();
         ReflectionTestUtils.setField(인사관리자, "id", 11L);
         lenient().when(employeeService.getEntity(10L)).thenReturn(직원);
         lenient().when(employeeService.getEntity(11L)).thenReturn(인사관리자);

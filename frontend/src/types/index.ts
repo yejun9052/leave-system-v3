@@ -7,6 +7,14 @@ export const ROLE_LABEL: Record<Role, string> = {
   EMPLOYEE: "사원",
 };
 
+/** 권한은 한 사람당 하나. 높은 순: 상위 권한은 하위 권한의 기능을 모두 쓴다(서버 RoleHierarchy와 같음). */
+export const ROLE_ORDER: Role[] = ["SYSTEM_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
+
+/** have 권한으로 need 권한의 기능을 쓸 수 있는지(같거나 상위). */
+export function roleIncludes(have: Role | undefined, need: Role): boolean {
+  return !!have && ROLE_ORDER.indexOf(have) <= ROLE_ORDER.indexOf(need);
+}
+
 export interface Me {
   id: number;
   email: string;
@@ -17,7 +25,8 @@ export interface Me {
   departmentName: string | null;
   /** 입사일(yyyy-MM-dd) */
   hireDate: string | null;
-  roles: Role[];
+  /** 권한(하나) */
+  role: Role;
   /** true 면 비밀번호를 바꾸기 전까지 다른 기능 사용 불가(서버가 403 으로 차단) */
   passwordChangeRequired: boolean;
   /** true 면 직원이 아닌 관리 전용 계정(연차·휴가 신청 대상 아님) */
@@ -47,7 +56,8 @@ export interface Employee {
   phone: string | null;
   hireDate: string;
   status: EmployeeStatus;
-  roles: Role[];
+  /** 권한(하나) */
+  role: Role;
   /** 관리 전용 계정(아이디 admin): 아이디·권한을 바꾸거나 퇴사 처리할 수 없다 */
   systemAccount: boolean;
 }

@@ -1,7 +1,7 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-import type { Role } from "@/types";
+import { roleIncludes, type Role } from "@/types";
 
 export function ProtectedRoute({ roles }: { roles?: Role[] }) {
   const location = useLocation();
@@ -19,7 +19,7 @@ export function ProtectedRoute({ roles }: { roles?: Role[] }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (roles && !user.roles.some((r) => roles.includes(r))) {
+  if (roles && !roles.some((r) => roleIncludes(user.role, r))) {
     return <Navigate to="/" replace />;
   }
 

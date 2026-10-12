@@ -50,7 +50,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
     List<Long> findIdsByDepartmentIdIn(@Param("deptIds") java.util.Collection<Long> deptIds);
 
     /** 주어진 역할 중 하나라도 가진, 해당 상태의 직원 ID (예: 결재 알림을 받을 재직 관리자). */
-    @Query("select distinct e.id from Employee e join e.roles r where r in :roles and e.status = :status")
+    @Query("select e.id from Employee e where e.role in :roles and e.status = :status")
     List<Long> findIdsByAnyRoleAndStatus(@Param("roles") java.util.Collection<Role> roles,
                                          @Param("status") EmployeeStatus status);
 

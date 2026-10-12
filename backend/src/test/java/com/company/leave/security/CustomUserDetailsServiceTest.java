@@ -50,7 +50,7 @@ class CustomUserDetailsServiceTest {
         assertThat(user.getUsername()).isEqualTo("hong@company.com");
         assertThat(user.getPassword()).isEqualTo("hash");
         assertThat(user.getAuthorities()).extracting(GrantedAuthority::getAuthority)
-                .containsExactlyInAnyOrder(Role.EMPLOYEE.authority(), Role.TEAM_LEAD.authority());
+                .containsExactlyInAnyOrder(Role.EMPLOYEE.authority(), Role.TEAM_LEAD.authority()); // 팀장은 사원 권한을 포함
         assertThat(user.isEnabled()).isTrue();
     }
 
@@ -60,7 +60,8 @@ class CustomUserDetailsServiceTest {
         when(employeeRepository.findByEmail("admin")).thenReturn(Optional.of(admin));
 
         assertThat(service.loadUserByUsername("admin").getAuthorities()).extracting(GrantedAuthority::getAuthority)
-                .containsExactly(Role.SYSTEM_ADMIN.authority());
+                .containsExactly(Role.SYSTEM_ADMIN.authority(), Role.HR_ADMIN.authority(), Role.TEAM_LEAD.authority(),
+                        Role.EMPLOYEE.authority()); // 시스템 관리자는 모든 하위 권한을 포함
     }
 
     @Test
@@ -92,7 +93,7 @@ class CustomUserDetailsServiceTest {
 
     private static Employee 직원(Long id, String email, EmployeeStatus status, Role... roles) {
         Employee e = Employee.builder().email(email).passwordHash("hash").name("직원" + id)
-                .status(status).roles(Set.of(roles)).build();
+                .status(status).role(Role.highest(roles)).build();
         ReflectionTestUtils.setField(e, "id", id);
         return e;
     }

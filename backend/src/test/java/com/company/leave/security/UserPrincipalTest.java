@@ -26,11 +26,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 class UserPrincipalTest {
 
     @Test
-    void 역할은_ROLE_접두사를_붙인_권한으로_바뀐다() {
+    void 권한은_하나지만_하위_권한까지_ROLE_접두사를_붙여_펼친다() {
         UserPrincipal principal = UserPrincipal.from(직원(EmployeeStatus.ACTIVE, false));
 
         assertThat(principal.getAuthorities()).extracting(GrantedAuthority::getAuthority)
-                .containsExactlyInAnyOrder("ROLE_EMPLOYEE", "ROLE_HR_ADMIN");
+                .containsExactlyInAnyOrder("ROLE_HR_ADMIN", "ROLE_TEAM_LEAD", "ROLE_EMPLOYEE");
         assertThat(principal.getUsername()).isEqualTo("user@company.com");
         assertThat(principal.getId()).isEqualTo(7L);
     }
@@ -70,7 +70,7 @@ class UserPrincipalTest {
         assertThat(restored.getPassword()).isNull();
         assertThat(restored.isPasswordChangeRequired()).isTrue();
         assertThat(restored.getAuthorities()).extracting(GrantedAuthority::getAuthority)
-                .containsExactlyInAnyOrder("ROLE_EMPLOYEE", "ROLE_HR_ADMIN");
+                .containsExactlyInAnyOrder("ROLE_HR_ADMIN", "ROLE_TEAM_LEAD", "ROLE_EMPLOYEE");
     }
 
     @Test
@@ -87,7 +87,7 @@ class UserPrincipalTest {
                 .passwordHash("$2a$10$hash")
                 .name("테스트사원")
                 .status(status)
-                .roles(Set.of(Role.EMPLOYEE, Role.HR_ADMIN))
+                .role(Role.HR_ADMIN)
                 .build();
         ReflectionTestUtils.setField(employee, "id", 7L);
         if (passwordChangeRequired) {

@@ -103,7 +103,7 @@ class AuthServiceLoginTest {
 
         assertThat(me.id()).isEqualTo(EMPLOYEE_ID);
         assertThat(me.email()).isEqualTo(EMAIL);
-        assertThat(me.roles()).containsExactly("EMPLOYEE");
+        assertThat(me.role()).isEqualTo(Role.EMPLOYEE);
 
         ArgumentCaptor<SecurityContext> saved = ArgumentCaptor.forClass(SecurityContext.class);
         verify(securityContextRepository).saveContext(saved.capture(), eq(request), eq(response));
@@ -215,7 +215,7 @@ class AuthServiceLoginTest {
                 .passwordHash("$2a$10$hash")
                 .name("테스트사원")
                 .status(status)
-                .roles(Set.of(Role.EMPLOYEE))
+                .role(Role.EMPLOYEE)
                 .build();
         ReflectionTestUtils.setField(employee, "id", EMPLOYEE_ID);
         return employee;

@@ -3,7 +3,6 @@ package com.company.leave.auth.dto;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import java.time.LocalDate;
-import java.util.List;
 
 public record MeResponse(
         Long id,
@@ -15,7 +14,8 @@ public record MeResponse(
         String departmentName,
         /** 입사일(내 정보 화면 표시용) */
         LocalDate hireDate,
-        List<String> roles,
+        /** 권한(하나). 상위 권한은 하위 권한의 기능을 모두 쓴다 */
+        Role role,
         boolean passwordChangeRequired,
         /** 관리 전용 계정(직원 아님): 휴가 신청·연차 부여 대상이 아니다. */
         boolean systemAccount) {
@@ -30,7 +30,7 @@ public record MeResponse(
                 e.getDepartmentId(),
                 e.getDepartment() != null ? e.getDepartment().getName() : null,
                 e.getHireDate(),
-                e.getRoles().stream().map(Role::name).sorted().toList(),
+                e.getRole(),
                 e.isPasswordChangeRequired(),
                 e.isSystemAccount());
     }

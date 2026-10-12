@@ -84,7 +84,7 @@ if (-not $found) { "[ERROR] no free week"; exit 1 }
 $bad = Req POST "$base/auth/login" $null (@{email="admin";password="nope"}|ConvertTo-Json)
 Check "wrong password -> 401" ($bad.status -eq 401) "(status=$($bad.status))"
 $me = Req GET "$base/auth/me" $admin
-Check "me = SYSTEM_ADMIN" ($me.data.data.roles -contains "SYSTEM_ADMIN")
+Check "me = SYSTEM_ADMIN" ($me.data.data.role -eq "SYSTEM_ADMIN")
 
 "===== 2. Department create / move / cycle ====="
 $rootId = (Req GET "$base/departments" $admin).data.data[0].id
@@ -96,16 +96,16 @@ $moveBad = Req PATCH "$base/departments/$($qa.id)/move" $admin (@{newParentId=$q
 Check "cycle move blocked" ($moveBad.status -eq 400 -and $moveBad.data.error.code -eq "DEPARTMENT_CYCLE") "(status=$($moveBad.status))"
 
 "===== 3. Employee create + seniority accrual ====="
-$leadBody = @{email="qa.lead@test.local";name="QA_Lead";departmentId=$qa.id;position="lead";hireDate="2019-03-01";roles=@("TEAM_LEAD")}|ConvertTo-Json
+$leadBody = @{email="qa.lead@test.local";name="QA_Lead";departmentId=$qa.id;position="lead";hireDate="2019-03-01";role="TEAM_LEAD"}|ConvertTo-Json
 $lead = (Req POST "$base/employees" $admin $leadBody).data.data
 Check "create team lead" ($lead.id -ne $null)
-$empBody = @{email="qa.emp@test.local";name="QA_Emp";departmentId=$qa.id;position="staff";hireDate="2024-01-02";roles=@("EMPLOYEE")}|ConvertTo-Json
+$empBody = @{email="qa.emp@test.local";name="QA_Emp";departmentId=$qa.id;position="staff";hireDate="2024-01-02";role="EMPLOYEE"}|ConvertTo-Json
 $emp = (Req POST "$base/employees" $admin $empBody).data.data
 Check "create staff" ($emp.id -ne $null)
-$hrBody = @{email="qa.hr@test.local";name="QA_HR";departmentId=$rootId;position="hr";hireDate="2022-01-03";roles=@("HR_ADMIN","EMPLOYEE")}|ConvertTo-Json
+$hrBody = @{email="qa.hr@test.local";name="QA_HR";departmentId=$rootId;position="hr";hireDate="2022-01-03";role="HR_ADMIN"}|ConvertTo-Json
 $hr = (Req POST "$base/employees" $admin $hrBody).data.data
 Check "create HR admin" ($hr.id -ne $null)
-$superBody = @{email="qa.super@test.local";name="QA_Super";departmentId=$qa.id;position="x";hireDate="2022-01-03";roles=@("SYSTEM_ADMIN")}|ConvertTo-Json
+$superBody = @{email="qa.super@test.local";name="QA_Super";departmentId=$qa.id;position="x";hireDate="2022-01-03";role="SYSTEM_ADMIN"}|ConvertTo-Json
 $superRes = Req POST "$base/employees" $admin $superBody
 Check "SYSTEM_ADMIN cannot be granted to employee -> 400" ($superRes.status -eq 400 -and $superRes.data.error.code -eq "SYSTEM_ADMIN_ROLE_RESTRICTED") "(status=$($superRes.status))"
 SetQaPassword "qa.lead@test.local"

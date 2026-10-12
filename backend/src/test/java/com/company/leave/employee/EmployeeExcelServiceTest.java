@@ -47,7 +47,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class EmployeeExcelServiceTest {
 
     private static final String[] NEW_HEADERS =
-            {"이메일", "이름", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한(콤마)"};
+            {"이메일", "이름", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한"};
     private static final String[] LEGACY_HEADERS =
             {"이메일", "이름", "사번", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한(콤마)"};
 
@@ -82,7 +82,18 @@ class EmployeeExcelServiceTest {
         assertThat(req.position()).isEqualTo("대리");
         assertThat(req.phone()).isEqualTo("010-1111-2222");
         assertThat(req.hireDate()).isEqualTo(LocalDate.of(2024, 3, 2));
-        assertThat(req.roles()).containsExactlyInAnyOrder(Role.EMPLOYEE, Role.TEAM_LEAD);
+        assertThat(req.role()).isEqualTo(Role.TEAM_LEAD); // 예전 양식처럼 여러 개면 가장 높은 권한 하나
+    }
+
+    @Test
+    void 권한_칸은_하나만_받고_한글_이름도_읽으며_여러_개면_가장_높은_권한이다() {
+        assertThat(EmployeeExcelService.parseRole(null)).isEqualTo(Role.EMPLOYEE);
+        assertThat(EmployeeExcelService.parseRole("TEAM_LEAD")).isEqualTo(Role.TEAM_LEAD);
+        assertThat(EmployeeExcelService.parseRole("인사관리자")).isEqualTo(Role.HR_ADMIN);
+        assertThat(EmployeeExcelService.parseRole("EMPLOYEE, HR_ADMIN, TEAM_LEAD")).isEqualTo(Role.HR_ADMIN);
+        assertThatThrownBy(() -> EmployeeExcelService.parseRole("부장"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getMessage()).contains("알 수 없는 권한"));
     }
 
     @Test
@@ -98,7 +109,7 @@ class EmployeeExcelServiceTest {
         assertThat(req.position()).isEqualTo("대리");
         assertThat(req.phone()).isEqualTo("010-1111-2222");
         assertThat(req.hireDate()).isEqualTo(LocalDate.of(2024, 3, 2));
-        assertThat(req.roles()).containsExactly(Role.EMPLOYEE);
+        assertThat(req.role()).isEqualTo(Role.EMPLOYEE);
     }
 
     @Test
@@ -118,7 +129,7 @@ class EmployeeExcelServiceTest {
     void 내보내기_양식에는_사번_열이_없다() throws IOException {
         when(employeeService.search(any(), any())).thenReturn(new PageImpl<>(List.of(
                 new EmployeeResponse(1L, "kim@company.com", "김철수", 2L, "개발팀", "대리", "010-1111-2222",
-                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, List.of("EMPLOYEE"), false))));
+                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, Role.EMPLOYEE, false))));
 
         byte[] exported = excelService.export();
 
@@ -135,9 +146,9 @@ class EmployeeExcelServiceTest {
     void 내보내기에는_관리_전용_계정을_넣지_않는다() throws IOException {
         when(employeeService.search(any(), any())).thenReturn(new PageImpl<>(List.of(
                 new EmployeeResponse(1L, "admin", "시스템관리자", 2L, "연구소", null, null,
-                        LocalDate.of(2023, 10, 6), EmployeeStatus.ACTIVE, List.of("SYSTEM_ADMIN"), true),
+                        LocalDate.of(2023, 10, 6), EmployeeStatus.ACTIVE, Role.SYSTEM_ADMIN, true),
                 new EmployeeResponse(2L, "kim@company.com", "김철수", 2L, "개발팀", "대리", null,
-                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, List.of("EMPLOYEE"), false))));
+                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, Role.EMPLOYEE, false))));
 
         try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(excelService.export()))) {
             assertThat(wb.getSheetAt(0).getLastRowNum()).isEqualTo(1);

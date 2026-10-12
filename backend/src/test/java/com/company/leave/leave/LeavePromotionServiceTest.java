@@ -82,7 +82,7 @@ class LeavePromotionServiceTest {
                 notificationService, policyService, eventPublisher,
                 new AccountMailProperties("noreply@company.com", "http://localhost:5173"), departmentRepository);
         인사관리자 = 직원(99L, "김인사", "hr@company.com");
-        인사관리자.replaceRoles(Set.of(Role.EMPLOYEE, Role.HR_ADMIN));
+        인사관리자.changeRole(Role.HR_ADMIN);
         lenient().when(balanceService.balancesAsOf(any(), eq(true), eq(true))).thenReturn(balances);
         lenient().when(requestRepository.sumPendingDeductedDays(anyLong(), anyInt())).thenReturn(BigDecimal.ZERO);
         lenient().when(noticeRepository.summarize(any())).thenReturn(List.of());

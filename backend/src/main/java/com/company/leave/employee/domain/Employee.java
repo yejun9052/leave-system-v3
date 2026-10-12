@@ -2,9 +2,7 @@ package com.company.leave.employee.domain;
 
 import com.company.leave.common.entity.BaseTimeEntity;
 import com.company.leave.department.domain.Department;
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -16,8 +14,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
-import java.util.EnumSet;
-import java.util.Set;
 import lombok.Getter;
 
 /**
@@ -69,11 +65,10 @@ public class Employee extends BaseTimeEntity {
     @Column(name = "password_change_required", nullable = false)
     private boolean passwordChangeRequired = false;
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "employee_roles", joinColumns = @JoinColumn(name = "employee_id"))
+    /** 권한은 하나. 상위 권한은 하위 권한의 기능을 모두 쓴다({@link Role#includes}). */
     @Enumerated(EnumType.STRING)
-    @Column(name = "role", length = 30)
-    private Set<Role> roles = EnumSet.of(Role.EMPLOYEE);
+    @Column(nullable = false, length = 30)
+    private Role role = Role.EMPLOYEE;
 
     protected Employee() {
     }
@@ -87,8 +82,7 @@ public class Employee extends BaseTimeEntity {
         this.phone = b.phone;
         this.hireDate = b.hireDate;
         this.status = b.status != null ? b.status : EmployeeStatus.ACTIVE;
-        this.roles = (b.roles == null || b.roles.isEmpty())
-                ? EnumSet.of(Role.EMPLOYEE) : EnumSet.copyOf(b.roles);
+        this.role = b.role != null ? b.role : Role.EMPLOYEE;
         this.systemAccount = b.systemAccount;
     }
 
@@ -133,9 +127,8 @@ public class Employee extends BaseTimeEntity {
         this.hireDate = hireDate;
     }
 
-    public void replaceRoles(Set<Role> roles) {
-        this.roles = (roles == null || roles.isEmpty())
-                ? EnumSet.of(Role.EMPLOYEE) : EnumSet.copyOf(roles);
+    public void changeRole(Role role) {
+        this.role = role != null ? role : Role.EMPLOYEE;
     }
 
     public void resign(LocalDate date) {
@@ -152,8 +145,9 @@ public class Employee extends BaseTimeEntity {
         return status == EmployeeStatus.ACTIVE;
     }
 
-    public boolean hasRole(Role role) {
-        return roles.contains(role);
+    /** 이 권한의 기능을 쓸 수 있는지(같거나 상위 권한이면 true). 예: 인사관리자는 팀장 기능도 쓴다. */
+    public boolean hasRole(Role required) {
+        return role.includes(required);
     }
 
     // --- getters ---
@@ -171,7 +165,7 @@ public class Employee extends BaseTimeEntity {
         private String phone;
         private LocalDate hireDate;
         private EmployeeStatus status;
-        private Set<Role> roles;
+        private Role role;
         private boolean systemAccount;
 
         public Builder email(String email) {
@@ -214,8 +208,8 @@ public class Employee extends BaseTimeEntity {
             return this;
         }
 
-        public Builder roles(Set<Role> roles) {
-            this.roles = roles;
+        public Builder role(Role role) {
+            this.role = role;
             return this;
         }
 

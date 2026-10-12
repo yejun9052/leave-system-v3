@@ -60,7 +60,7 @@ class LicenseControllerTest {
     @Test
     void 일반_직원도_라이선스_만료일과_남은_일수를_본다() throws Exception {
         Employee employee = Employee.builder().email("user@company.com").name("사용자")
-                .roles(Set.of(Role.EMPLOYEE)).build();
+                .role(Role.EMPLOYEE).build();
         ReflectionTestUtils.setField(employee, "id", 7L);
         UserPrincipal principal = UserPrincipal.from(employee);
         SecurityContextHolder.getContext().setAuthentication(

@@ -167,7 +167,7 @@ class CalendarServiceEventScopesTest {
     private UserPrincipal user(Long id, Role role) {
         Employee e = Employee.builder().email("user" + id + "@company.com").name("직원")
                 .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1))
-                .systemAccount(role == Role.SYSTEM_ADMIN).roles(Set.of(role)).build();
+                .systemAccount(role == Role.SYSTEM_ADMIN).role(role).build();
         ReflectionTestUtils.setField(e, "id", id);
         return UserPrincipal.from(e);
     }

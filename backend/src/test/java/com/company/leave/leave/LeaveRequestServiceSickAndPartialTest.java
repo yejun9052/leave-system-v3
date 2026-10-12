@@ -131,7 +131,7 @@ class LeaveRequestServiceSickAndPartialTest {
         employee = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동").build();
         ReflectionTestUtils.setField(employee, "id", EMP);
         Employee admin = Employee.builder().email("hr@company.com").passwordHash("h").name("인사")
-                .roles(Set.of(Role.HR_ADMIN)).build();
+                .role(Role.HR_ADMIN).build();
         ReflectionTestUtils.setField(admin, "id", ADMIN);
         lenient().when(employeeService.getEntity(EMP)).thenReturn(employee);
         lenient().when(employeeService.getEntity(ADMIN)).thenReturn(admin);

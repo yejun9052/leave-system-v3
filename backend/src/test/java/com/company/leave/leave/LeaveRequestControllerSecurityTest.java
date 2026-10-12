@@ -159,7 +159,7 @@ class LeaveRequestControllerSecurityTest {
     }
 
     private void authenticate(Set<Role> roles) {
-        Employee employee = Employee.builder().email("admin").name("관리자").roles(roles)
+        Employee employee = Employee.builder().email("admin").name("관리자").role(Role.highest(roles))
                 .systemAccount(roles.contains(Role.SYSTEM_ADMIN)).build();
         ReflectionTestUtils.setField(employee, "id", 1L);
         UserPrincipal principal = UserPrincipal.from(employee);

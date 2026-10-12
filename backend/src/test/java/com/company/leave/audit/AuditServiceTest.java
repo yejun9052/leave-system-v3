@@ -120,7 +120,7 @@ class AuditServiceTest {
 
     private static void 로그인(Long id, String name) {
         Employee e = Employee.builder().email("hr@company.com").passwordHash("h").name(name)
-                .roles(Set.of(Role.EMPLOYEE, Role.HR_ADMIN)).build();
+                .role(Role.HR_ADMIN).build();
         ReflectionTestUtils.setField(e, "id", id);
         UserPrincipal principal = UserPrincipal.from(e);
         SecurityContextHolder.getContext().setAuthentication(

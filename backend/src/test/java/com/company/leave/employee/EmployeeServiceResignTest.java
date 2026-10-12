@@ -168,7 +168,7 @@ class EmployeeServiceResignTest {
             assertThat(updated.position()).isEqualTo("선임");
             assertThat(updated.phone()).isEqualTo("010-1234-5678");
             assertThat(updated.departmentId()).isEqualTo(3L);
-            assertThat(updated.roles()).containsExactlyInAnyOrder("EMPLOYEE", "TEAM_LEAD");
+            assertThat(updated.role()).isEqualTo(Role.TEAM_LEAD);
         }
 
         @Test
@@ -186,7 +186,7 @@ class EmployeeServiceResignTest {
     private Employee employee(Long id, Set<Role> roles, boolean systemAccount) {
         Employee e = Employee.builder().email("e" + id + "@company.com").name("홍길동").position("사원")
                 .phone("010-0000-0000").passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1))
-                .department(개발팀).roles(roles).systemAccount(systemAccount).build();
+                .department(개발팀).role(Role.highest(roles)).systemAccount(systemAccount).build();
         ReflectionTestUtils.setField(e, "id", id);
         return e;
     }

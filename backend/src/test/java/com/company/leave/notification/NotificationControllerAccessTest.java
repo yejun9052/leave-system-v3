@@ -82,7 +82,7 @@ class NotificationControllerAccessTest {
     }
 
     private void authenticate(Set<Role> roles, Long id) {
-        Employee employee = Employee.builder().email("user@company.com").name("사용자").roles(roles).build();
+        Employee employee = Employee.builder().email("user@company.com").name("사용자").role(Role.highest(roles)).build();
         ReflectionTestUtils.setField(employee, "id", id);
         UserPrincipal principal = UserPrincipal.from(employee);
         SecurityContextHolder.getContext().setAuthentication(

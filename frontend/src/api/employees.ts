@@ -8,14 +8,15 @@ export interface EmployeeCreate {
   position?: string;
   phone?: string;
   hireDate: string;
-  roles: Role[];
+  /** 권한(하나). 상위 권한은 하위 권한의 기능을 모두 쓴다 */
+  role: Role;
 }
 
 /**
  * 초기 비밀번호는 서버가 생성해 본인 메일로만 보낸다(관리자 입력 없음).
- * 관리 전용 계정은 아이디(email)·권한(roles)이 바뀌지 않아 둘 다 비워 보낸다.
+ * 관리 전용 계정은 아이디(email)·권한(role)이 바뀌지 않아 둘 다 비워 보낸다.
  */
-export type EmployeeUpdate = Omit<EmployeeCreate, "email" | "roles"> & { email?: string; roles?: Role[] };
+export type EmployeeUpdate = Omit<EmployeeCreate, "email" | "role"> & { email?: string; role?: Role };
 
 export interface EmployeeSearchParams {
   keyword?: string;

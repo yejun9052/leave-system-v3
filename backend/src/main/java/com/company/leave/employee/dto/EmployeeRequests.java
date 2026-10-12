@@ -6,7 +6,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
-import java.util.Set;
 
 public final class EmployeeRequests {
 
@@ -20,7 +19,8 @@ public final class EmployeeRequests {
             @Size(max = 50) String position,
             @Size(max = 30) String phone,
             @NotNull LocalDate hireDate,
-            Set<Role> roles) {
+            /** 권한(하나). 비우면 사원 */
+            Role role) {
     }
 
     /** email: 관리 전용 계정은 아이디(admin)가 바뀌지 않으므로 비워 보낸다. 그 외 직원은 필수. */
@@ -31,7 +31,8 @@ public final class EmployeeRequests {
             @Size(max = 50) String position,
             @Size(max = 30) String phone,
             @NotNull LocalDate hireDate,
-            Set<Role> roles) {
+            /** 권한(하나). 비우면 사원 */
+            Role role) {
     }
 
     public record ChangeMyPassword(

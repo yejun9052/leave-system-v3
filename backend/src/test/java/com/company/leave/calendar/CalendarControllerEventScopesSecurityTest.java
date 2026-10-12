@@ -96,7 +96,7 @@ class CalendarControllerEventScopesSecurityTest {
     }
 
     private void authenticate(Role role) {
-        Employee employee = Employee.builder().email("user").name("직원").roles(Set.of(role))
+        Employee employee = Employee.builder().email("user").name("직원").role(role)
                 .systemAccount(role == Role.SYSTEM_ADMIN).build();
         ReflectionTestUtils.setField(employee, "id", 1L);
         UserPrincipal principal = UserPrincipal.from(employee);

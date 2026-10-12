@@ -34,7 +34,7 @@ class SecurityUtilsTest {
     @Test
     void 로그인한_사용자의_id를_돌려준다() {
         Employee e = Employee.builder().email("hong@company.com").passwordHash("h").name("홍길동")
-                .roles(Set.of(Role.EMPLOYEE)).build();
+                .role(Role.EMPLOYEE).build();
         ReflectionTestUtils.setField(e, "id", 7L);
         UserPrincipal principal = UserPrincipal.from(e);
         SecurityContextHolder.getContext().setAuthentication(

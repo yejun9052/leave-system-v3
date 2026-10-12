@@ -135,7 +135,7 @@ class AuthServiceLogoutTest {
         assertThat(me.id()).isEqualTo(EMPLOYEE_ID);
         assertThat(me.phone()).isEqualTo("010-1234-5678");
         assertThat(me.hireDate()).isEqualTo(LocalDate.of(2021, 7, 5));
-        assertThat(me.roles()).containsExactly("EMPLOYEE", "TEAM_LEAD");
+        assertThat(me.role()).isEqualTo(Role.TEAM_LEAD);
         assertThat(me.passwordChangeRequired()).isTrue();
     }
 
@@ -158,7 +158,7 @@ class AuthServiceLogoutTest {
                 .phone("010-1234-5678")
                 .hireDate(LocalDate.of(2021, 7, 5))
                 .status(EmployeeStatus.ACTIVE)
-                .roles(Set.of(Role.EMPLOYEE, Role.TEAM_LEAD))
+                .role(Role.TEAM_LEAD)
                 .build();
         ReflectionTestUtils.setField(employee, "id", EMPLOYEE_ID);
         if (passwordChangeRequired) {

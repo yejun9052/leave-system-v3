@@ -39,7 +39,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 - Server sessions are stored in the DB via Spring Session JDBC (`spring_session` tables), not JWT.
 - The CSRF cookie is `XSRF-TOKEN`.
 - Authorization uses `@PreAuthorize` per controller or method. Roles: `SYSTEM_ADMIN`, `HR_ADMIN`, `TEAM_LEAD`, `EMPLOYEE`.
-  - Roles do not inherit; each role is granted explicitly.
+  - Each person has exactly one role (`employees.role`, V11). Higher roles include lower ones: `SYSTEM_ADMIN > HR_ADMIN > TEAM_LEAD > EMPLOYEE` (`RoleHierarchy` bean, `Role.includes`, `Employee.hasRole`; `UserPrincipal` expands the reachable authorities). Frontend checks go through `roleIncludes` in `types/index.ts`.
   - `SYSTEM_ADMIN` belongs only to the `admin` system account (`system_account`). For leave approval it acts like HR.
   - The admin can take leave like an employee, but is excluded from report Excel, the user Excel export and license counts.
   - The README's `SUPER_ADMIN` is outdated.

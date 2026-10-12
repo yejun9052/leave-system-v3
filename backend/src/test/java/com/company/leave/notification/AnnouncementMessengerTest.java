@@ -158,7 +158,7 @@ class AnnouncementMessengerTest {
     private static Employee 직원(Long id, Department department, String email, Role role) {
         Employee employee = Employee.builder()
                 .email(email).passwordHash("h").name("직원" + id)
-                .department(department).roles(Set.of(role))
+                .department(department).role(role)
                 .build();
         ReflectionTestUtils.setField(employee, "id", id);
         return employee;

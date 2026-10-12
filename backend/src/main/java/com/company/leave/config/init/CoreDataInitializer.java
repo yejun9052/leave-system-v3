@@ -6,7 +6,6 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.employee.repository.EmployeeRepository;
 import java.time.LocalDate;
-import java.util.EnumSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -73,7 +72,7 @@ public class CoreDataInitializer implements ApplicationRunner {
                 .department(root)
                 .position("관리자")
                 .hireDate(LocalDate.now())
-                .roles(EnumSet.of(Role.SYSTEM_ADMIN))
+                .role(Role.SYSTEM_ADMIN)
                 .systemAccount(true)
                 .build();
         if (!localConfigured) {

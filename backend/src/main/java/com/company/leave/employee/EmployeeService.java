@@ -102,7 +102,7 @@ public class EmployeeService {
 
     @Transactional
     public EmployeeResponse create(EmployeeRequests.Create req) {
-        Set<Role> roles = resolveRoles(req.roles());
+        Role role = resolveRole(req.role());
         // 동시 생성 직렬화 → 라이선스 최대 사용자 수 초과(TOCTOU) 방지
         employeeRepository.lockForUserCreation();
         licenseService.checkUserQuota(employeeRepository.countByStatusAndSystemAccountFalse(EmployeeStatus.ACTIVE));
@@ -119,7 +119,7 @@ public class EmployeeService {
                 .position(req.position())
                 .phone(req.phone())
                 .hireDate(req.hireDate())
-                .roles(roles)
+                .role(role)
                 .build();
         employee.requirePasswordChange();
         Employee saved = employeeRepository.save(employee);
@@ -138,13 +138,13 @@ public class EmployeeService {
         Employee employee = getEntity(id);
         // 관리 전용 계정은 이름·부서·직위·연락처·입사일만 고친다. 아이디(admin)와 권한은 그대로
         boolean system = employee.isSystemAccount();
-        if (system && req.roles() != null && !req.roles().equals(employee.getRoles())) {
+        if (system && req.role() != null && req.role() != employee.getRole()) {
             throw new BusinessException(ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
         }
         if (!system && (req.email() == null || req.email().isBlank())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "이메일을 입력해 주세요.");
         }
-        Set<Role> roles = system ? employee.getRoles() : resolveRoles(req.roles());
+        Role role = system ? employee.getRole() : resolveRole(req.role());
         if (!system) {
             validateEmailUnique(req.email(), id);
         }
@@ -158,7 +158,7 @@ public class EmployeeService {
         employee.changeHireDate(req.hireDate());
         employee.assignDepartment(resolveDepartment(req.departmentId()));
         if (!system) {
-            employee.replaceRoles(roles);
+            employee.changeRole(role);
         }
         leadSync.afterSave(employee, previousDepartmentId, wasTeamLead);
         return EmployeeResponse.from(employee);
@@ -245,11 +245,11 @@ public class EmployeeService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.DEPARTMENT_NOT_FOUND));
     }
 
-    private Set<Role> resolveRoles(Set<Role> roles) {
-        if (roles != null && roles.contains(Role.SYSTEM_ADMIN)) {
+    private Role resolveRole(Role role) {
+        if (role == Role.SYSTEM_ADMIN) {
             throw new BusinessException(ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         }
-        return (roles == null || roles.isEmpty()) ? EnumSet.of(Role.EMPLOYEE) : roles;
+        return role != null ? role : Role.EMPLOYEE;
     }
 
     private void validateEmailUnique(String email, Long selfId) {

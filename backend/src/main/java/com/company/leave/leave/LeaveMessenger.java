@@ -1,7 +1,6 @@
 package com.company.leave.leave;
 
 import com.company.leave.employee.domain.Employee;
-import com.company.leave.employee.domain.Role;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveRequest;
@@ -141,12 +140,15 @@ public class LeaveMessenger {
     // --- 공통 ---
 
     /**
-     * 처리한 사람: 자격(인사관리자 > 시스템 관리자 > 팀장) + 이름.
+     * 처리한 사람: 자격(시스템 관리자·인사관리자·팀장) + 이름. 권한은 하나라 그 권한 이름 그대로 쓴다.
      * 메일 표에는 "홍길동 (팀장)", 문장·알림에는 "팀장 홍길동님" 으로 쓴다.
      */
     public static Handler handler(Employee e) {
-        String role = e.hasRole(Role.HR_ADMIN) ? "인사관리자"
-                : e.hasRole(Role.SYSTEM_ADMIN) ? "시스템 관리자" : "팀장";
+        String role = switch (e.getRole()) {
+            case SYSTEM_ADMIN -> "시스템 관리자";
+            case HR_ADMIN -> "인사관리자";
+            default -> "팀장"; // 결재·처리는 팀장 이상만 한다(최상위 부서장 자가 승인 포함)
+        };
         return new Handler(role, e.getName());
     }
 

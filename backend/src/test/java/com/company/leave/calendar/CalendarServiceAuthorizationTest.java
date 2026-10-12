@@ -224,7 +224,7 @@ class CalendarServiceAuthorizationTest {
 
     private static UserPrincipal user(Long id, Role role) {
         Employee e = Employee.builder().email("user" + id + "@company.com").name("직원")
-                .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1)).roles(Set.of(role)).build();
+                .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1)).role(role).build();
         ReflectionTestUtils.setField(e, "id", id);
         return UserPrincipal.from(e);
     }

@@ -17,6 +17,7 @@ import DepartmentFilter from "@/components/DepartmentFilter";
 import { flattenDepartments, type DepartmentOption } from "@/lib/departmentTree";
 import {
   ROLE_LABEL,
+  ROLE_ORDER,
   type Employee,
   type EmployeeStatus,
   type Role,
@@ -63,7 +64,6 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
   RESIGNED: "퇴사",
 };
 
-const ROLE_RANK: Role[] = ["SYSTEM_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
 const STATUS_RANK: EmployeeStatus[] = ["ACTIVE", "ON_LEAVE", "RESIGNED"];
 
 export default function EmployeePage() {
@@ -104,7 +104,7 @@ export default function EmployeePage() {
     department: (e) => e.departmentName,
     position: (e) => e.position,
     // 권한은 높은 권한 순(시스템관리자 → 인사관리자 → 팀장 → 사원)
-    roles: (e) => Math.min(...e.roles.map((r) => ROLE_RANK.indexOf(r))),
+    roles: (e) => ROLE_ORDER.indexOf(e.role),
     status: (e) => STATUS_RANK.indexOf(e.status),
   });
 
@@ -250,13 +250,7 @@ export default function EmployeePage() {
                     <TableCell>{e.departmentName ?? "-"}</TableCell>
                     <TableCell>{e.position ?? "-"}</TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {e.roles.map((r) => (
-                          <Badge key={r} variant="secondary">
-                            {ROLE_LABEL[r]}
-                          </Badge>
-                        ))}
-                      </div>
+                      <Badge variant="secondary">{ROLE_LABEL[e.role]}</Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={e.status === "ACTIVE" ? "success" : "outline"}>
@@ -406,17 +400,11 @@ function EmployeeDialog({
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
     hireDate: employee?.hireDate ?? new Date().toISOString().slice(0, 10),
-    roles: isSystem ? employee!.roles : (employee?.roles.filter((role) => role !== "SYSTEM_ADMIN") ?? ["EMPLOYEE"]),
+    role: employee?.role ?? "EMPLOYEE",
   });
 
   const set = <K extends keyof EmployeeCreate>(k: K, v: EmployeeCreate[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
-
-  const toggleRole = (role: Role) =>
-    setForm((f) => ({
-      ...f,
-      roles: f.roles.includes(role) ? f.roles.filter((r) => r !== role) : [...f.roles, role],
-    }));
 
   const save = useMutation({
     mutationFn: async () => {
@@ -427,12 +415,12 @@ function EmployeeDialog({
         position: form.position || undefined,
         phone: form.phone || undefined,
         hireDate: form.hireDate,
-        roles: form.roles.length ? form.roles : (["EMPLOYEE"] as Role[]),
+        role: form.role,
       };
       if (isEdit && employee) {
         return employeeApi.update(
           employee.id,
-          isSystem ? { ...payload, email: undefined, roles: undefined } : payload,
+          isSystem ? { ...payload, email: undefined, role: undefined } : payload,
         );
       }
       return employeeApi.create(payload);
@@ -447,17 +435,14 @@ function EmployeeDialog({
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
-  const roleText = (roles: Role[]) =>
-    (roles.length ? roles : (["EMPLOYEE"] as Role[])).map((r) => ROLE_LABEL[r]).join(", ");
-
   const onSave = async () => {
     const lines: string[] = [`${form.name.trim()} (${form.email.trim()})`];
     if (isEdit && employee) {
-      const before = roleText(employee.roles);
-      const after = roleText(form.roles);
+      const before = ROLE_LABEL[employee.role];
+      const after = ROLE_LABEL[form.role];
       lines.push(before === after ? `권한: ${after}` : `권한 변경: ${before} → ${after}`);
     } else {
-      lines.push(`권한: ${roleText(form.roles)}`);
+      lines.push(`권한: ${ROLE_LABEL[form.role]}`);
       lines.push("임시 비밀번호가 사용자 이메일로 발송됩니다.");
     }
     const ok = await confirm({
@@ -528,19 +513,25 @@ function EmployeeDialog({
 
         <div className="space-y-2">
           <Label>권한</Label>
-          {isSystem && (
+          {isSystem ? (
             <p className="text-xs text-muted-foreground">관리 전용 계정의 권한(시스템 관리자)은 바꿀 수 없습니다.</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              하나만 고릅니다. 위 권한은 아래 권한의 기능을 모두 씁니다(인사관리자 → 팀장 → 사원).
+            </p>
           )}
-          <div className="flex flex-wrap gap-2">
-            {(isSystem ? form.roles : ALL_ROLES).map((role) => (
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="권한">
+            {(isSystem ? [form.role] : ALL_ROLES).map((role) => (
               <button
                 key={role}
                 type="button"
+                role="radio"
+                aria-checked={form.role === role}
                 disabled={isSystem}
-                onClick={() => toggleRole(role)}
+                onClick={() => set("role", role)}
                 className={cn(
                   "rounded-full border px-3 py-1 text-sm transition-colors",
-                  form.roles.includes(role)
+                  form.role === role
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-input hover:bg-accent",
                 )}

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Me, Role } from "@/types";
+import { roleIncludes, type Me, type Role } from "@/types";
 import { authApi } from "@/api/auth";
 
 interface AuthState {
@@ -49,12 +49,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hasAnyRole: (...roles) => {
     const user = get().user;
     if (!user) return false;
-    return user.roles.some((r) => roles.includes(r));
+    return roles.some((r) => roleIncludes(user.role, r));
   },
 
   isManager: () => {
     const user = get().user;
     if (!user) return false;
-    return user.roles.some((r) => r === "SYSTEM_ADMIN" || r === "HR_ADMIN");
+    return roleIncludes(user.role, "HR_ADMIN");
   },
 }));

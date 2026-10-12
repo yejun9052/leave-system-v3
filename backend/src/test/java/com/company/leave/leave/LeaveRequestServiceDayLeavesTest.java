@@ -177,7 +177,7 @@ class LeaveRequestServiceDayLeavesTest {
     private Employee 직원(Long id, Department department, Role... roles) {
         Employee employee = Employee.builder()
                 .email("e" + id + "@company.com").passwordHash("h").name("직원" + id)
-                .department(department).roles(Set.of(roles))
+                .department(department).role(Role.highest(roles))
                 .build();
         ReflectionTestUtils.setField(employee, "id", id);
         lenient().when(employeeService.getEntity(id)).thenReturn(employee);

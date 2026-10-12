@@ -84,7 +84,7 @@ class DashboardControllerAccessTest {
     }
 
     private void authenticate(Set<Role> roles, Long id) {
-        Employee employee = Employee.builder().email("user@company.com").name("사용자").roles(roles)
+        Employee employee = Employee.builder().email("user@company.com").name("사용자").role(Role.highest(roles))
                 .systemAccount(roles.contains(Role.SYSTEM_ADMIN)).build();
         ReflectionTestUtils.setField(employee, "id", id);
         UserPrincipal principal = UserPrincipal.from(employee);

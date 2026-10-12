@@ -62,6 +62,15 @@ class DepartmentLeadSyncTest {
     }
 
     @Test
+    void 인사관리자도_팀장_기능을_쓰므로_부서장이_빈_자기_부서의_부서장이_된다() {
+        Employee 인사 = 직원(11L, 일팀, Role.HR_ADMIN);
+
+        sync.afterSave(인사, null, false);
+
+        assertThat(일팀.getLead()).isSameAs(인사);
+    }
+
+    @Test
     void 부서장이_이미_있으면_바꾸지_않는다() {
         Employee 박서연 = 직원(7L, 일팀, Role.EMPLOYEE, Role.TEAM_LEAD);
         일팀.assignLead(박서연);
@@ -78,7 +87,7 @@ class DepartmentLeadSyncTest {
         Employee 강현우 = 직원(9L, 일팀, Role.EMPLOYEE, Role.TEAM_LEAD);
         일팀.assignLead(박서연);
 
-        박서연.replaceRoles(Set.of(Role.EMPLOYEE));
+        박서연.changeRole(Role.EMPLOYEE);
         sync.afterSave(박서연, 일팀.getId(), true);
 
         assertThat(일팀.getLead()).isSameAs(강현우);
@@ -134,7 +143,7 @@ class DepartmentLeadSyncTest {
 
     private Employee 직원(Long id, Department department, Role... roles) {
         Employee e = Employee.builder().email("e" + id + "@company.com").name("직원" + id).passwordHash("h")
-                .hireDate(LocalDate.of(2024, 1, 1)).department(department).roles(Set.of(roles)).build();
+                .hireDate(LocalDate.of(2024, 1, 1)).department(department).role(Role.highest(roles)).build();
         ReflectionTestUtils.setField(e, "id", id);
         all.add(e);
         return e;

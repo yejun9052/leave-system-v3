@@ -81,7 +81,7 @@ export default function AppLayout() {
         <NavList items={visibleNav} onNavigate={() => setMobileOpen(false)} />
         <SidebarSummary onNavigate={() => setMobileOpen(false)} />
         <div className="border-t p-3">
-          <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, primaryRoleLabel(user?.roles)].filter(Boolean).join(" · ")} />
+          <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, (user ? ROLE_LABEL[user.role] : "")].filter(Boolean).join(" · ")} />
         </div>
       </aside>
 
@@ -99,7 +99,7 @@ export default function AppLayout() {
             <NavList items={visibleNav} onNavigate={() => setMobileOpen(false)} />
             <SidebarSummary onNavigate={() => setMobileOpen(false)} />
             <div className="border-t p-3">
-              <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, primaryRoleLabel(user?.roles)].filter(Boolean).join(" · ")} />
+              <UserCard onLogout={onLogout} name={user?.name} roleLabel={[user?.departmentName, (user ? ROLE_LABEL[user.role] : "")].filter(Boolean).join(" · ")} />
             </div>
           </aside>
         </div>
@@ -247,13 +247,6 @@ function Brand() {
       <span className="font-semibold">연차관리</span>
     </div>
   );
-}
-
-function primaryRoleLabel(roles?: Role[]): string {
-  if (!roles || roles.length === 0) return "";
-  const order: Role[] = ["SYSTEM_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
-  const top = order.find((r) => roles.includes(r)) ?? roles[0];
-  return ROLE_LABEL[top];
 }
 
 function UserCard({

@@ -118,7 +118,7 @@ class AuthControllerTest {
     @Test
     void 내_정보는_로그인한_본인_id로_조회한다() throws Exception {
         Employee employee = Employee.builder().email("user@company.com").name("사용자")
-                .roles(Set.of(Role.EMPLOYEE)).build();
+                .role(Role.EMPLOYEE).build();
         ReflectionTestUtils.setField(employee, "id", 7L);
         UserPrincipal principal = UserPrincipal.from(employee);
         SecurityContextHolder.getContext().setAuthentication(

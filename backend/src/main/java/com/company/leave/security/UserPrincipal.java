@@ -49,7 +49,10 @@ public class UserPrincipal implements UserDetails, CredentialsContainer {
     }
 
     public static UserPrincipal from(Employee e) {
-        List<GrantedAuthority> auths = e.getRoles().stream()
+        // 권한은 하나지만 상위 권한은 하위 권한을 포함하므로, 쓸 수 있는 권한을 모두 펼쳐 둔다
+        // (예: 인사관리자 → HR_ADMIN·TEAM_LEAD·EMPLOYEE). @PreAuthorize 는 RoleHierarchy 로도 같은 결과
+        List<GrantedAuthority> auths = java.util.Arrays.stream(Role.values())
+                .filter(e::hasRole)
                 .map(Role::authority)
                 .map(SimpleGrantedAuthority::new)
                 .map(a -> (GrantedAuthority) a)

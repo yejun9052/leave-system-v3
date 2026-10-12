@@ -16,8 +16,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -36,7 +34,7 @@ public class EmployeeExcelService {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final String[] HEADERS =
-            {"이메일", "이름", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한(콤마)"};
+            {"이메일", "이름", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한"};
     /** 사번 기능 삭제 전 양식: 3번째 열이 "사번". 이 열은 건너뛰고 읽는다. */
     private static final String LEGACY_EMPLOYEE_NO_HEADER = "사번";
 
@@ -70,7 +68,7 @@ public class EmployeeExcelService {
                 row.createCell(3).setCellValue(orEmpty(e.position()));
                 row.createCell(4).setCellValue(orEmpty(e.phone()));
                 row.createCell(5).setCellValue(e.hireDate() != null ? e.hireDate().toString() : "");
-                row.createCell(6).setCellValue(String.join(",", e.roles()));
+                row.createCell(6).setCellValue(e.role().name());
             }
             for (int i = 0; i < HEADERS.length; i++) {
                 sheet.autoSizeColumn(i);
@@ -105,8 +103,8 @@ public class EmployeeExcelService {
                     continue;
                 }
                 String roles = cell(row, roleColumn);
-                if (StringUtils.hasText(roles) && Arrays.stream(roles.split(","))
-                        .map(String::trim).anyMatch(Role.SYSTEM_ADMIN.name()::equals)) {
+                if (StringUtils.hasText(roles) && Arrays.stream(roles.split(",")).map(String::trim)
+                        .anyMatch(t -> Role.SYSTEM_ADMIN.name().equalsIgnoreCase(t) || Role.SYSTEM_ADMIN.label().equals(t))) {
                     throw new BusinessException(ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
                 }
             }
@@ -128,7 +126,7 @@ public class EmployeeExcelService {
                             cell(row, 3 + shift),
                             cell(row, 4 + shift),
                             parseDate(cell(row, 5 + shift)),
-                            parseRoles(cell(row, 6 + shift)));
+                            parseRole(cell(row, 6 + shift)));
                     employeeService.create(req);
                     created++;
                 } catch (Exception ex) {
@@ -159,15 +157,28 @@ public class EmployeeExcelService {
         return LocalDate.parse(s.trim(), DATE_FMT);
     }
 
-    private Set<Role> parseRoles(String s) {
+    /**
+     * 권한 칸: 하나(EMPLOYEE·TEAM_LEAD·HR_ADMIN 또는 사원·팀장·인사관리자). 비우면 사원.
+     * 예전 양식처럼 콤마로 여러 개를 적었으면 그중 가장 높은 권한 하나로 받는다.
+     */
+    static Role parseRole(String s) {
         if (!StringUtils.hasText(s)) {
-            return Set.of(Role.EMPLOYEE);
+            return Role.EMPLOYEE;
         }
-        return Arrays.stream(s.split(","))
+        return Role.highest(Arrays.stream(s.split(","))
                 .map(String::trim)
                 .filter(StringUtils::hasText)
-                .map(Role::valueOf)
-                .collect(Collectors.toSet());
+                .map(EmployeeExcelService::roleOf)
+                .toList());
+    }
+
+    private static Role roleOf(String token) {
+        for (Role r : Role.values()) {
+            if (r.name().equalsIgnoreCase(token) || r.label().equals(token)) {
+                return r;
+            }
+        }
+        throw new BusinessException(ErrorCode.INVALID_INPUT, "알 수 없는 권한입니다: " + token);
     }
 
     private String cell(Row row, int idx) {

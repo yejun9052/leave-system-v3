@@ -80,7 +80,7 @@ class EmployeeServicePasswordTest {
         });
 
         service.create(new EmployeeRequests.Create(EMAIL, "신입", null, null, null,
-                LocalDate.of(2027, 1, 4), Set.of(Role.EMPLOYEE)));
+                LocalDate.of(2027, 1, 4), Role.EMPLOYEE));
 
         ArgumentCaptor<Employee> saved = ArgumentCaptor.forClass(Employee.class);
         verify(employeeRepository).save(saved.capture());
@@ -103,7 +103,7 @@ class EmployeeServicePasswordTest {
         when(employeeRepository.save(any(Employee.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = service.create(new EmployeeRequests.Create(EMAIL, "신입", null, null, null,
-                LocalDate.of(2027, 1, 4), Set.of(Role.EMPLOYEE)));
+                LocalDate.of(2027, 1, 4), Role.EMPLOYEE));
 
         ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(events.capture());

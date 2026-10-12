@@ -56,7 +56,7 @@ class EmployeeServiceRoleTest {
     void setUp() {
         service = new EmployeeService(employees, departments, encoder, events, license, sessions,
                 new TemporaryPasswordGenerator(), resets, new DepartmentLeadSync(departments, employees));
-        hr = employee(11L, false, Set.of(Role.HR_ADMIN));
+        hr = employee(11L, false, Role.HR_ADMIN);
         UserPrincipal principal = UserPrincipal.from(hr);
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities()));
@@ -68,9 +68,9 @@ class EmployeeServiceRoleTest {
     }
 
     @Test
-    void 다른_권한과_함께여도_시스템_관리자_권한으로는_직원을_만들_수_없다() {
+    void 시스템_관리자_권한으로는_직원을_만들_수_없다() {
         EmployeeRequests.Create req = new EmployeeRequests.Create("new@company.com", "신입", null, null, null,
-                LocalDate.of(2024, 1, 1), Set.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN));
+                LocalDate.of(2024, 1, 1), Role.SYSTEM_ADMIN);
         expectError(() -> service.create(req), ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         verify(employees, never()).save(any());
         verify(employees, never()).lockForUserCreation();
@@ -79,76 +79,83 @@ class EmployeeServiceRoleTest {
 
     @Test
     void 다른_직원에게_시스템_관리자_권한을_줄_수_없고_정보도_바뀌지_않는다() {
-        Employee target = employee(20L, false, Set.of(Role.EMPLOYEE));
+        Employee target = employee(20L, false, Role.EMPLOYEE);
         when(employees.findById(20L)).thenReturn(Optional.of(target));
-        expectError(() -> service.update(20L, update(Set.of(Role.SYSTEM_ADMIN))),
+        expectError(() -> service.update(20L, update(Role.SYSTEM_ADMIN)),
                 ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         assertThat(target.getEmail()).isEqualTo("user20@company.com");
-        assertThat(target.getRoles()).containsExactly(Role.EMPLOYEE);
+        assertThat(target.getRole()).isEqualTo(Role.EMPLOYEE);
     }
 
     @Test
     void 인사관리자는_자신에게_시스템_관리자_권한을_줄_수_없다() {
         when(employees.findById(hr.getId())).thenReturn(Optional.of(hr));
-        expectError(() -> service.update(hr.getId(), update(Set.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN))),
+        expectError(() -> service.update(hr.getId(), update(Role.SYSTEM_ADMIN)),
                 ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
-        assertThat(hr.getRoles()).containsExactly(Role.HR_ADMIN);
+        assertThat(hr.getRole()).isEqualTo(Role.HR_ADMIN);
     }
 
     @Test
     void 관리_전용_계정은_직원_수정으로_권한을_바꿀_수_없다() {
-        Employee admin = employee(1L, true, Set.of(Role.SYSTEM_ADMIN));
+        Employee admin = employee(1L, true, Role.SYSTEM_ADMIN);
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
-        for (Set<Role> roles : java.util.List.of(Set.of(Role.HR_ADMIN),
-                Set.of(Role.SYSTEM_ADMIN, Role.EMPLOYEE), Set.<Role>of())) {
-            expectError(() -> service.update(1L, update(roles)), ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
+        for (Role role : java.util.List.of(Role.HR_ADMIN, Role.TEAM_LEAD, Role.EMPLOYEE)) {
+            expectError(() -> service.update(1L, update(role)), ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
         }
-        assertThat(admin.getRoles()).containsExactly(Role.SYSTEM_ADMIN);
+        assertThat(admin.getRole()).isEqualTo(Role.SYSTEM_ADMIN);
     }
 
     @Test
     void 관리_전용_계정은_아이디와_권한은_그대로_두고_이름_입사일을_고칠_수_있다() {
-        Employee admin = employee(1L, true, Set.of(Role.SYSTEM_ADMIN));
+        Employee admin = employee(1L, true, Role.SYSTEM_ADMIN);
         String loginId = admin.getEmail();
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
 
         service.update(1L, new EmployeeRequests.Update(null, "시스템관리자(테스트)", null, null, null,
                 LocalDate.of(2023, 10, 6), null));
         service.update(1L, new EmployeeRequests.Update(null, "시스템관리자", null, null, null,
-                LocalDate.of(2023, 10, 6), Set.of(Role.SYSTEM_ADMIN)));
+                LocalDate.of(2023, 10, 6), Role.SYSTEM_ADMIN));
 
         assertThat(admin.getName()).isEqualTo("시스템관리자");
         assertThat(admin.getHireDate()).isEqualTo(LocalDate.of(2023, 10, 6));
         assertThat(admin.getEmail()).isEqualTo(loginId);
-        assertThat(admin.getRoles()).containsExactly(Role.SYSTEM_ADMIN);
+        assertThat(admin.getRole()).isEqualTo(Role.SYSTEM_ADMIN);
     }
 
     @Test
     void 일반_직원은_이메일을_비우면_고칠_수_없다() {
-        Employee user = employee(2L, false, Set.of(Role.EMPLOYEE));
+        Employee user = employee(2L, false, Role.EMPLOYEE);
         when(employees.findById(2L)).thenReturn(Optional.of(user));
 
         expectError(() -> service.update(2L, new EmployeeRequests.Update(" ", "수정", null, null, null,
-                LocalDate.of(2024, 1, 1), Set.of(Role.EMPLOYEE))), ErrorCode.INVALID_INPUT);
+                LocalDate.of(2024, 1, 1), Role.EMPLOYEE)), ErrorCode.INVALID_INPUT);
     }
 
     @Test
     void 관리_전용_계정도_자기_비밀번호는_바꿀_수_있다() {
-        Employee admin = employee(1L, true, Set.of(Role.SYSTEM_ADMIN));
+        Employee admin = employee(1L, true, Role.SYSTEM_ADMIN);
         admin.setTemporaryPassword(encoder.encode("old-password"));
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
         service.changeMyPassword(1L, "old-password", "new-password");
         assertThat(encoder.matches("new-password", admin.getPasswordHash())).isTrue();
         assertThat(admin.isPasswordChangeRequired()).isFalse();
-        assertThat(admin.getRoles()).containsExactly(Role.SYSTEM_ADMIN);
+        assertThat(admin.getRole()).isEqualTo(Role.SYSTEM_ADMIN);
     }
 
     @Test
-    void 일반_권한은_그대로_수정할_수_있다() {
-        Employee target = employee(20L, false, Set.of(Role.EMPLOYEE));
+    void 일반_권한은_하나로_바꿀_수_있다() {
+        Employee target = employee(20L, false, Role.EMPLOYEE);
         when(employees.findById(20L)).thenReturn(Optional.of(target));
-        service.update(20L, update(Set.of(Role.HR_ADMIN, Role.TEAM_LEAD)));
-        assertThat(target.getRoles()).containsExactlyInAnyOrder(Role.HR_ADMIN, Role.TEAM_LEAD);
+        service.update(20L, update(Role.HR_ADMIN));
+        assertThat(target.getRole()).isEqualTo(Role.HR_ADMIN);
+    }
+
+    @Test
+    void 권한을_비우면_사원이다() {
+        Employee target = employee(20L, false, Role.TEAM_LEAD);
+        when(employees.findById(20L)).thenReturn(Optional.of(target));
+        service.update(20L, update(null));
+        assertThat(target.getRole()).isEqualTo(Role.EMPLOYEE);
     }
 
     @Test
@@ -160,14 +167,14 @@ class EmployeeServiceRoleTest {
                 com.company.leave.employee.domain.EmployeeStatus.ACTIVE);
     }
 
-    private EmployeeRequests.Update update(Set<Role> roles) {
+    private EmployeeRequests.Update update(Role role) {
         return new EmployeeRequests.Update("changed@company.com", "수정", null, null, null,
-                LocalDate.of(2024, 1, 1), roles);
+                LocalDate.of(2024, 1, 1), role);
     }
 
-    private Employee employee(Long id, boolean system, Set<Role> roles) {
+    private Employee employee(Long id, boolean system, Role role) {
         Employee e = Employee.builder().email("user" + id + "@company.com").name("직원")
-                .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1)).systemAccount(system).roles(roles).build();
+                .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1)).systemAccount(system).role(role).build();
         ReflectionTestUtils.setField(e, "id", id);
         return e;
     }

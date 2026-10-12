@@ -13,7 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { ChangePasswordForm } from "@/features/auth/ChangePasswordForm";
 import { Badge } from "@/components/ui/badge";
-import { ROLE_LABEL, type Me, type Role } from "@/types";
+import { ROLE_LABEL, type Me } from "@/types";
 
 // 서버 검증과 동일: 이름 필수(100자), 직급 50자, 전화번호 30자
 const profileSchema = z.object({
@@ -23,7 +23,6 @@ const profileSchema = z.object({
 });
 type ProfileValues = z.infer<typeof profileSchema>;
 
-const ROLE_ORDER: Role[] = ["SYSTEM_ADMIN", "HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
 
 /** 입사일부터 오늘까지 근속 기간: "4년 3개월", 한 달이 안 되면 "1개월 미만" */
 function tenure(hireDate: string, today = new Date()): string {
@@ -38,7 +37,6 @@ function tenure(hireDate: string, today = new Date()): string {
 
 /** 읽기 전용 기본 정보: 관리자가 정하는 항목(이메일·부서·권한·입사일)과 프로필 값을 한눈에 */
 function BasicInfo({ user }: { user: Me }) {
-  const roles = ROLE_ORDER.filter((r) => user.roles.includes(r));
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: "이름", value: user.name },
     { label: "이메일", value: user.email },
@@ -48,7 +46,7 @@ function BasicInfo({ user }: { user: Me }) {
       label: "권한",
       value: (
         <span className="flex flex-wrap gap-1">
-          {roles.map((r) => <Badge key={r} variant="secondary">{ROLE_LABEL[r]}</Badge>)}
+          <Badge variant="secondary">{ROLE_LABEL[user.role]}</Badge>
           {user.systemAccount && <Badge variant="outline">관리 전용 계정</Badge>}
         </span>
       ),
