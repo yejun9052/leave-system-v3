@@ -20,6 +20,7 @@ import {
 import { formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
 import DepartmentFilter from "@/components/DepartmentFilter";
 import { useTableSort } from "@/lib/useTableSort";
+import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { useAuthStore } from "@/store/auth";
 import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
 import ForceCancelDialog from "./ForceCancelDialog";
@@ -80,6 +81,10 @@ export default function LeaveListTab() {
         page,
         size: PAGE_SIZE,
       }),
+  });
+  useArrowKeyNavigation({
+    onPrev: page > 0 ? () => setPage((p) => p - 1) : null,
+    onNext: data && page + 1 < data.totalPages ? () => setPage((p) => p + 1) : null,
   });
   // 서버가 휴가 시작일 최신순으로 페이지를 나눠 주므로 열 정렬은 지금 페이지 안에서만 한다
   const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {
