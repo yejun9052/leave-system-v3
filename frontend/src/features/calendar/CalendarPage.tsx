@@ -5,7 +5,7 @@ import interactionPlugin from "@fullcalendar/interaction";
 import type { DatesSetArg, EventClickArg, EventInput } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import {
   calendarApi,
   type CalendarEventDto,
@@ -166,7 +166,7 @@ export default function CalendarPage() {
   const pickSnapshot = useRef<DateSelection | null>(null);
   // 선택 모드에 들어온 뒤 아직 한 번도 누르지 않았으면 첫 탭을 시작일로 본다
   const [pickFresh, setPickFresh] = useState(false);
-  // 모바일 돋보기: 불러온 달 일정에서 이름(제목)으로 거른다(화면에서만)
+  // 이름 검색(모바일 돋보기·데스크톱 검색 칸): 불러온 일정에서 이름(제목)으로 거른다(화면에서만)
   const [query, setQuery] = useState("");
 
   /** 신청 기간 고르기(데스크톱 날짜 클릭, 모바일 선택 모드 탭) */
@@ -275,7 +275,11 @@ export default function CalendarPage() {
     closePanel();
   };
 
-  const calendarEvents: EventInput[] = filtered.map((e) => ({
+  // 이름(제목) 검색은 휴가·일정만 거른다(공휴일·연차 제한·연차 기간 표시는 그대로). 모바일 돋보기와 같은 규칙
+  const q = query.trim();
+  const calendarEvents: EventInput[] = filtered
+    .filter((e) => e.source === "HOLIDAY" || !q || e.title.includes(q))
+    .map((e) => ({
     id: e.id,
     title: e.title,
     start: e.start,
@@ -343,7 +347,6 @@ export default function CalendarPage() {
         map.set(d, [...(map.get(d) ?? []), mark]);
       }
     };
-    const q = query.trim();
     for (const e of events) {
       const kind: DayMark["kind"] =
         e.source === "HOLIDAY" ? "HOLIDAY" : e.source === "LEAVE_REQUEST" ? "LEAVE" : "EVENT";
@@ -356,7 +359,7 @@ export default function CalendarPage() {
     const order: DayMark["kind"][] = ["HOLIDAY", "BLACKOUT", "PERIOD", "LEAVE", "EVENT"];
     for (const list of map.values()) list.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
     return map;
-  }, [isMobile, viewMonth, events, blackouts, periodMarks, query]);
+  }, [isMobile, viewMonth, events, blackouts, periodMarks, q]);
 
   const focusedBlackouts = blackouts
     .filter((b) => b.startDate <= focused && b.endDate >= focused)
@@ -447,19 +450,41 @@ export default function CalendarPage() {
             )}
           </div>
 
-          <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
-            {VIEW_TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setView(t.key)}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  view === t.key ? "bg-background shadow-sm" : "text-muted-foreground",
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
+              {VIEW_TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setView(t.key)}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    view === t.key ? "bg-background shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="relative w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="이름으로 찾기"
+                aria-label="이름으로 찾기"
+                className="pl-9 pr-9"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="검색어 지우기"
+                  className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
 
           <Card>
