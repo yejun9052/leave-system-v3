@@ -29,6 +29,23 @@ class LeaveAccrualCalculatorTest {
         return p;
     }
 
+    @Test
+    @DisplayName("회계연도 시작일이 그 달에 없는 날(4월 31일)로 저장돼 있어도 말일로 보고 계산한다")
+    void 회계연도_시작일이_그_달에_없는_날이면_말일로_본다() {
+        LeavePolicy p = LeavePolicy.createDefault();
+        p.apply(new LeavePolicy.Settings(
+                GrantBasis.FISCAL_YEAR, 4, 31,
+                BigDecimal.valueOf(15), 2, BigDecimal.ONE, BigDecimal.valueOf(25),
+                true, 11,
+                false, true, false, 0, 0, 0,
+                false, BigDecimal.ZERO, true));
+
+        assertThat(calc.currentFiscalStart(LocalDate.of(2026, 5, 10), p)).isEqualTo(LocalDate.of(2026, 4, 30));
+        assertThat(calc.currentFiscalStart(LocalDate.of(2026, 4, 29), p)).isEqualTo(LocalDate.of(2025, 4, 30));
+        assertThat(calc.annualEntitlement(LocalDate.of(2020, 1, 1), LocalDate.of(2026, 5, 10), p))
+                .isEqualByComparingTo("17");
+    }
+
     @Nested
     @DisplayName("입사일 기준")
     class HireDateBasis {

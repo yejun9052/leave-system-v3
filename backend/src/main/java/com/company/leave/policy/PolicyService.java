@@ -32,6 +32,12 @@ public class PolicyService {
 
     @Transactional
     public PolicyDtos.Response update(PolicyDtos.UpdateRequest req) {
+        // 회계연도 시작일은 그 달에 있는 날이어야 한다(2월 30일·4월 31일 불가, 2월은 평년 기준 28일까지)
+        int lastDay = java.time.YearMonth.of(2025, req.fiscalStartMonth()).lengthOfMonth();
+        if (req.fiscalStartDay() > lastDay) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "회계연도 시작일: " + req.fiscalStartMonth() + "월은 "
+                    + lastDay + "일까지 있습니다.");
+        }
         LeavePolicy policy = getActivePolicy();
         policy.apply(req.toSettings());
         policy.changeBlackoutConflictMode(req.blackoutConflictMode());
