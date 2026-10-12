@@ -55,6 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>종일은 날짜, 반차는 "날짜(*)", 시간차는 "날짜(2h)". 여러 날 휴가는 주말·공휴일을 뺀 날마다 한 칸</li>
  *   <li>사용 = 사용일 칸 합계, 연차 = 부여, 추가일은 아직 정하지 않아 빈칸, 남은 연차 = 시스템 잔여(이월·소멸 반영)</li>
  *   <li>아래에 "경조사 사용 내역": 그해에 시작한 승인된 경조사 규정 휴가(생일 반차 포함)</li>
+ *   <li>그 아래에 같은 모양의 "공가 사용 내역": 그해에 시작한 승인된 공가(예비군 등 규정)</li>
  * </ul>
  */
 @Service
@@ -75,8 +76,13 @@ public class LeaveReportService {
     static final String NO_DEPARTMENT = "부서 없음";
     static final String CONDOLENCE_TITLE = "경조사 사용 내역";
     static final String CONDOLENCE_NONE = "해당 연도에 승인된 경조사 휴가가 없습니다.";
-    /** 연차 현황표 마지막 줄 바로 다음 줄부터 빈 줄 3개를 두고 경조사 표 제목 */
+    static final String OFFICIAL_TITLE = "공가 사용 내역";
+    static final String OFFICIAL_NONE = "해당 연도에 승인된 공가가 없습니다.";
+    /** 표 사이 빈 줄: 연차 현황표 → 경조사 표, 경조사 표 → 공가 표 */
     private static final int CONDOLENCE_GAP = 3;
+    /** 규정 표를 쓰는 휴가 종류 코드 */
+    private static final String CONDOLENCE_CODE = "CONDOLENCE";
+    private static final String OFFICIAL_CODE = "OFFICIAL";
 
     /** 받은 양식처럼 A열과 1행은 비워 두고 B2 부터 쓴다. */
     private static final int FIRST_COL = 1;
@@ -217,7 +223,10 @@ public class LeaveReportService {
                 }
             }
             mergeTeam(sheet, groupStart, r - 1);
-            writeCondolences(sheet, styles, r + CONDOLENCE_GAP, condolences(year, selected));
+            int next = writeRuleUses(sheet, styles, r + CONDOLENCE_GAP, CONDOLENCE_TITLE, "경조사 규정", CONDOLENCE_NONE,
+                    ruleUses(year, selected, CONDOLENCE_CODE));
+            writeRuleUses(sheet, styles, next + CONDOLENCE_GAP, OFFICIAL_TITLE, "공가 규정", OFFICIAL_NONE,
+                    ruleUses(year, selected, OFFICIAL_CODE));
             applyTemplateSize(sheet, dayColumns, rows.stream()
                     .map(pb -> departmentPath(pb.employee().getDepartment())).toList());
             wb.write(out);
@@ -307,14 +316,14 @@ public class LeaveReportService {
     }
 
     /**
-     * 경조사 사용 내역: 그해(1~12월)에 시작한 승인된 경조사 규정 휴가. 고른 대상만, 관리 전용 계정 제외.
+     * 규정 휴가 사용 내역(경조사·공가): 그해(1~12월)에 시작한 그 종류의 승인된 규정 휴가. 고른 대상만, 관리 전용 계정 제외.
      * 시작일 순, 같으면 이름순.
      */
-    private List<LeaveRequest> condolences(int year, Predicate<Employee> selected) {
+    private List<LeaveRequest> ruleUses(int year, Predicate<Employee> selected, String leaveTypeCode) {
         LocalDate from = LocalDate.of(year, 1, 1);
         LocalDate to = LocalDate.of(year, 12, 31);
         return requestRepository.findApprovedBetween(from, to).stream()
-                .filter(r -> r.getSpecialRuleName() != null)
+                .filter(r -> r.getSpecialRuleName() != null && leaveTypeCode.equals(r.getLeaveType().getCode()))
                 .filter(r -> !r.getStartDate().isBefore(from) && !r.getStartDate().isAfter(to))
                 .filter(r -> !r.getEmployee().isSystemAccount() && selected.test(r.getEmployee()))
                 .sorted(Comparator.comparing(LeaveRequest::getStartDate)
@@ -323,13 +332,16 @@ public class LeaveReportService {
     }
 
     /**
-     * 연차 현황표 아래의 "경조사 사용 내역" 표. 열: 번호 · 이름 · 부서 · 경조사 규정 · 사용일 · 일수.
+     * 연차 현황표 아래의 규정 휴가 표("경조사 사용 내역", "공가 사용 내역"). 열: 번호 · 이름 · 부서 · 규정 · 사용일 · 일수.
      * 규정과 사용일은 위 표의 좁은 열을 세 칸씩 합쳐 쓴다(위 표 너비를 바꾸지 않으려고).
+     *
+     * @return 표 마지막 줄 다음 줄 번호(다음 표를 이어 쓸 위치)
      */
-    private static void writeCondolences(Sheet sheet, Styles styles, int top, List<LeaveRequest> requests) {
-        styled(sheet.createRow(top).createCell(FIRST_COL), styles.sectionTitle).setCellValue(CONDOLENCE_TITLE);
+    private static int writeRuleUses(Sheet sheet, Styles styles, int top, String title, String ruleLabel,
+                                     String noneText, List<LeaveRequest> requests) {
+        styled(sheet.createRow(top).createCell(FIRST_COL), styles.sectionTitle).setCellValue(title);
         Row header = sheet.createRow(top + 1);
-        String[] labels = {"번호", "이름", "부서", "경조사 규정", "", "", "사용일", "", "", "일수"};
+        String[] labels = {"번호", "이름", "부서", ruleLabel, "", "", "사용일", "", "", "일수"};
         for (int i = 0; i < labels.length; i++) {
             styled(header.createCell(FIRST_COL + i), styles.header).setCellValue(labels[i]);
         }
@@ -341,9 +353,9 @@ public class LeaveReportService {
             for (int i = 0; i < labels.length; i++) {
                 styled(row.createCell(FIRST_COL + i), styles.cell);
             }
-            row.getCell(FIRST_COL).setCellValue(CONDOLENCE_NONE);
+            row.getCell(FIRST_COL).setCellValue(noneText);
             sheet.addMergedRegion(new CellRangeAddress(r, r, FIRST_COL, FIRST_COL + labels.length - 1));
-            return;
+            return r + 1;
         }
         for (int n = 0; n < requests.size(); n++, r++) {
             LeaveRequest req = requests.get(n);
@@ -361,9 +373,10 @@ public class LeaveReportService {
             row.getCell(FIRST_COL + 9).setCellValue(req.getDays().doubleValue());
             mergeCondolenceRow(sheet, r);
         }
+        return r;
     }
 
-    /** 경조사 표 한 줄: 규정(E~G), 사용일(H~J)을 세 칸씩 합친다. */
+    /** 규정 휴가 표 한 줄: 규정(E~G), 사용일(H~J)을 세 칸씩 합친다. */
     private static void mergeCondolenceRow(Sheet sheet, int row) {
         sheet.addMergedRegion(new CellRangeAddress(row, row, FIRST_COL + 3, FIRST_COL + 5));
         sheet.addMergedRegion(new CellRangeAddress(row, row, FIRST_COL + 6, FIRST_COL + 8));
