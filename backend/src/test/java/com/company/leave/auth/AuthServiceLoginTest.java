@@ -59,6 +59,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 class AuthServiceLoginTest {
 
     private static final String EMAIL = "user@company.com";
+
+    private static final String IP = "10.0.0.7";
     private static final String PASSWORD = "password1234!";
     private static final long EMPLOYEE_ID = 42L;
 
@@ -84,6 +86,7 @@ class AuthServiceLoginTest {
         authService = new AuthService(authenticationManager, employeeRepository, auditService,
                 loginAttemptService, securityContextRepository, csrfTokenRepository);
         request = new MockHttpServletRequest("POST", "/api/auth/login");
+        request.setRemoteAddr(IP);
         response = new MockHttpServletResponse();
     }
 
@@ -105,7 +108,7 @@ class AuthServiceLoginTest {
         ArgumentCaptor<SecurityContext> saved = ArgumentCaptor.forClass(SecurityContext.class);
         verify(securityContextRepository).saveContext(saved.capture(), eq(request), eq(response));
         assertThat(saved.getValue().getAuthentication()).isSameAs(authenticated);
-        verify(loginAttemptService).loginSucceeded(EMAIL);
+        verify(loginAttemptService).loginSucceeded(IP);
         verify(auditService).record(eq(EMPLOYEE_ID), anyString(), eq("LOGIN"), eq("auth"), isNull(),
                 anyString(), eq(true));
     }
@@ -169,7 +172,7 @@ class AuthServiceLoginTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
 
-        verify(loginAttemptService).loginFailed(EMAIL);
+        verify(loginAttemptService).loginFailed(IP);
         verify(securityContextRepository, never()).saveContext(any(), any(), any());
         assertThat(request.getSession(false)).isNull();
         verify(auditService).record(isNull(), eq(EMAIL), eq("LOGIN"), eq("auth"), isNull(),
@@ -177,12 +180,14 @@ class AuthServiceLoginTest {
     }
 
     @Test
-    void 잠금_상태면_인증을_시도하지_않고_시도_과다_오류를_낸다() {
-        when(loginAttemptService.isBlocked(EMAIL)).thenReturn(true);
+    void 접속_IP가_막혀_있으면_인증을_시도하지_않고_남은_시간을_알려준다() {
+        when(loginAttemptService.lockRemaining(IP)).thenReturn(java.util.Optional.of(java.time.Duration.ofSeconds(14 * 60 + 5)));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), request, response))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS));
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS);
+                    assertThat(ex.getMessage()).contains("이 PC").contains("15분 후");
+                });
 
         verify(authenticationManager, never()).authenticate(any());
         verify(securityContextRepository, never()).saveContext(any(), any(), any());

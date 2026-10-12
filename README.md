@@ -106,7 +106,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 - **알림**: 신청/승인/반려 인앱 알림(헤더 벨), 안 읽음 배지
 - **이벤트(감사) 로그**: 모든 생성·수정·삭제·로그인 활동을 AOP로 자동 기록, 관리자 전용 조회 화면(검색·페이지네이션·성공/실패)
 - **PWA**: 홈 화면 설치, 오프라인 셸, 반응형(모바일/PC)
-- **보안**: 비밀번호 BCrypt·응답 미노출, 로그인 브루트포스 잠금(5회·15분), CSP 등 보안 헤더, DB비번을 **Docker secrets** 로 분리, HttpOnly·Secure·SameSite 세션 쿠키 + CSRF 보호, 운영 Swagger 비활성, 컨테이너 비-root, 업로드 크기 제한 — 상세 [SECURITY.md](SECURITY.md)
+- **보안**: 비밀번호 BCrypt·응답 미노출, 로그인 브루트포스 차단(같은 PC에서 10회 실패 시 그 PC의 로그인 15분 차단, 계정은 잠그지 않음), CSP 등 보안 헤더, DB비번을 **Docker secrets** 로 분리, HttpOnly·Secure·SameSite 세션 쿠키 + CSRF 보호, 운영 Swagger 비활성, 컨테이너 비-root, 업로드 크기 제한 — 상세 [SECURITY.md](SECURITY.md)
 
 ## 테스트
 ```bash

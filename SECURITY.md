@@ -118,7 +118,7 @@ cp backend/build/libs/backend-obf.jar backend/app.jar   # 배포용 jar 를 난�
   - 계정 생성·엑셀 가져오기 시 **서버가 임시 비밀번호를 생성**하고 계정 생성 메일로만 전달합니다(관리자에게 비공개). 신규 계정은 **첫 로그인 시 비밀번호 변경 강제**(변경 전에는 login·csrf·me·logout·비밀번호 변경·라이선스 조회 외 API 차단, 403 PASSWORD_CHANGE_REQUIRED)
   - **재설정 링크**: 토큰은 SHA-256 해시만 저장, 30분 유효·1회용, 새 토큰 발급 시 이전 토큰 무효화, 비밀번호 찾기 응답은 계정 존재 여부와 무관하게 동일(계정 존재 비노출), 이메일당 1시간 3회 제한
   - 비밀번호 변경·재설정 시 **다른 세션 종료**(변경 시 현재 세션 ID 재발급, 재설정 시 해당 사용자의 모든 세션 종료)
-- **로그인 브루트포스 방어**: 이메일당 5회 실패 시 15분 잠금(HTTP 429)
+- **로그인 브루트포스 방어**: 접속 IP당 10회 연속 실패 시 그 IP의 로그인 시도를 15분 차단(HTTP 429, 남은 시간 안내). 계정은 잠그지 않아 다른 사람이 남의 아이디로 일부러 틀려도 본인 로그인은 막히지 않는다. IP 는 Caddy 의 X-Forwarded-For 기준이며 서버 재시작 시 기록이 지워진다
 - **보안 응답 헤더**: Content-Security-Policy, Referrer-Policy, Permissions-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff
 - **비밀정보 Docker secrets 분리**
 - 운영 프로파일에서 **Swagger/OpenAPI 문서 비활성**(API 명세 비노출)

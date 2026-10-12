@@ -65,20 +65,24 @@ public class AuthService {
     @Transactional(readOnly = true)
     public MeResponse login(LoginRequest request, HttpServletRequest httpRequest,
                             HttpServletResponse httpResponse) {
-        // 브루트포스 방어: 연속 실패 임계치 초과 시 일정 시간 차단
-        if (loginAttemptService.isBlocked(request.email())) {
+        // 브루트포스 방어: 계정이 아니라 접속한 PC(IP)에서 연속 실패가 많으면 그 IP의 로그인 시도를 잠시 막는다
+        String clientIp = httpRequest.getRemoteAddr();
+        java.util.Optional<java.time.Duration> locked = loginAttemptService.lockRemaining(clientIp);
+        if (locked.isPresent()) {
             auditService.record(null, request.email(), "LOGIN", "auth", null,
-                    "로그인 차단(시도 과다): " + request.email(), false);
-            throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS);
+                    "로그인 차단(시도 과다): " + request.email() + " · IP " + clientIp, false);
+            long minutes = Math.max(1, (locked.get().toSeconds() + 59) / 60);
+            throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS,
+                    "이 PC에서 로그인에 여러 번 실패해 잠시 막혔습니다. " + minutes + "분 후 다시 시도하세요.");
         }
         Authentication authentication;
         try {
             authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(request.email(), request.password()));
         } catch (AuthenticationException ex) {
-            loginAttemptService.loginFailed(request.email());
+            loginAttemptService.loginFailed(clientIp);
             auditService.record(null, request.email(), "LOGIN", "auth", null,
-                    "로그인 실패: " + request.email(), false);
+                    "로그인 실패: " + request.email() + " · IP " + clientIp, false);
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         Employee employee = employeeRepository.findByEmail(request.email())
@@ -86,7 +90,7 @@ public class AuthService {
         if (!employee.isActive()) {
             throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
         }
-        loginAttemptService.loginSucceeded(request.email());
+        loginAttemptService.loginSucceeded(clientIp);
         auditService.record(employee.getId(), employee.getName(), "LOGIN", "auth", null,
                 "로그인 성공", true);
         establishSession(authentication, employee.getId(), httpRequest, httpResponse);
