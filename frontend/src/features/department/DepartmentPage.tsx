@@ -49,6 +49,9 @@ type DialogMode =
 
 /** 끌어 놓을 곳: 부서 id(그 부서의 하위로) 또는 "root"(최상위로) */
 type DropTarget = number | "root";
+
+/** 부서 행 끝의 추가·수정·이동·삭제 버튼: 좁은 화면에서는 조금 작게 */
+const ROW_BUTTON = "h-8 w-8 sm:h-10 sm:w-10";
 type DragState = { dept: Department; x: number; y: number; target: DropTarget | null };
 
 /** 부서와 그 하위 부서 id 전부(자기 아래로는 옮길 수 없다) */
@@ -311,9 +314,12 @@ function DeptNode({
           <GripVertical className="h-4 w-4" />
         </span>
         <button
+          type="button"
           className="text-muted-foreground disabled:opacity-0"
           onClick={() => setOpen((o) => !o)}
           disabled={!hasChildren}
+          aria-label={open ? `${dept.name} 하위 부서 접기` : `${dept.name} 하위 부서 펼치기`}
+          aria-expanded={hasChildren ? open : undefined}
         >
           {hasChildren ? (
             open ? (
@@ -336,7 +342,7 @@ function DeptNode({
           onClick={() => onOpen(dept)}
         >
           <Building2 className="h-4 w-4 text-primary" />
-          <span className="font-medium">{dept.name}</span>
+          <span className="min-w-0 truncate font-medium">{dept.name}</span>
           {dept.leadName && (
             <Badge variant="secondary" className="gap-1">
               팀장 {dept.leadName}
@@ -351,17 +357,23 @@ function DeptNode({
           </Badge>
         </button>
 
-        <div className={cn("ml-auto flex items-center gap-1 opacity-0 transition-opacity", !drag && "group-hover:opacity-100")}>
-          <Button size="icon" variant="ghost" title="하위 부서 추가" onClick={() => onAddChild(dept.id)}>
+        {/* 마우스가 있는 화면에서만 올렸을 때 보인다. 터치 화면은 늘 보이고, 키보드로 버튼에 오면(focus-within) 보인다 */}
+        <div
+          className={cn(
+            "ml-auto flex shrink-0 items-center transition-opacity focus-within:opacity-100 sm:gap-1 [@media(hover:hover)]:opacity-0",
+            !drag && "group-hover:opacity-100",
+          )}
+        >
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="하위 부서 추가" aria-label={`${dept.name} 하위 부서 추가`} onClick={() => onAddChild(dept.id)}>
             <Plus className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" title="수정" onClick={() => onEdit(dept)}>
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="수정" aria-label={`${dept.name} 수정`} onClick={() => onEdit(dept)}>
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" title="이동" onClick={() => onMove(dept)}>
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="이동" aria-label={`${dept.name} 이동`} onClick={() => onMove(dept)}>
             <MoveRight className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" title="삭제" onClick={() => onDelete(dept)}>
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="삭제" aria-label={`${dept.name} 삭제`} onClick={() => onDelete(dept)}>
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
         </div>
