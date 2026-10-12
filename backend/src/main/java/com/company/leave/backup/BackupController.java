@@ -3,6 +3,7 @@ package com.company.leave.backup;
 import com.company.leave.backup.BackupDtos.BackupFile;
 import com.company.leave.backup.BackupDtos.Kind;
 import com.company.leave.backup.BackupDtos.Overview;
+import com.company.leave.backup.BackupDtos.SchedulePreview;
 import com.company.leave.backup.BackupDtos.Settings;
 import com.company.leave.backup.BackupDtos.SettingsRequest;
 import com.company.leave.common.dto.ApiResponse;
@@ -76,6 +77,13 @@ public class BackupController {
     @GetMapping("/settings")
     public ApiResponse<Settings> settings() {
         return ApiResponse.ok(settingsService.get());
+    }
+
+    @Operation(summary = "자동 백업 실행 시각 미리보기",
+            description = "저장하지 않고 cron(초 분 시 일 월 요일)을 해석해 설명·다음 실행 시각·겹침 안내를 준다.")
+    @GetMapping("/settings/preview")
+    public ApiResponse<SchedulePreview> previewSchedule(@RequestParam String cron) {
+        return ApiResponse.ok(settingsService.preview(cron));
     }
 
     @Operation(summary = "자동 백업 설정 변경", description = "저장하면 재시작 없이 바로 새 시각으로 예약된다.")

@@ -1,11 +1,11 @@
 package com.company.leave.backup;
 
-import com.company.leave.backup.BackupSettings.Frequency;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 
 public final class BackupDtos {
@@ -73,22 +73,29 @@ public final class BackupDtos {
     /**
      * 자동 백업 설정.
      *
+     * @param cron          실행 시각 cron 6칸(초 분 시 일 월 요일)
      * @param scheduleLabel 실행 시각 설명(예: "매일 02:00")
      * @param nextRunAt     다음 실행 시각(꺼져 있으면 null)
+     * @param nextRuns      앞으로 실행 시각 5개(꺼져 있어도 규칙대로)
      * @param warnings      다른 자동 작업과 같은 시각이면 그 안내(막지는 않음)
      */
-    public record Settings(boolean enabled, Frequency frequency, int dayOfWeek, LocalTime runTime, int intervalHours,
-                           int keepMonths, String scheduleLabel,
-                           LocalDateTime nextRunAt, List<String> warnings) {
+    public record Settings(boolean enabled, String cron, int keepMonths, String scheduleLabel,
+                           LocalDateTime nextRunAt, List<LocalDateTime> nextRuns, List<String> warnings) {
     }
 
-    /** 자동 백업 설정 변경. dayOfWeek: 1=월~7=일, runTime: "02:00", keepMonths: 보관 기간(개월) */
+    /** 자동 백업 설정 변경. cron: "0 0 2 * * *", keepMonths: 보관 기간(개월) */
     public record SettingsRequest(
             @NotNull Boolean enabled,
-            @NotNull Frequency frequency,
-            @Min(1) @Max(7) int dayOfWeek,
-            @NotNull LocalTime runTime,
-            @Min(1) @Max(24) int intervalHours,
+            @NotBlank @Size(max = 100) String cron,
             @Min(1) @Max(24) int keepMonths) {
+    }
+
+    /**
+     * 저장 전 cron 미리보기(설정 화면에서 칸을 고치는 중).
+     *
+     * @param error 저장할 수 없는 규칙이면 그 이유(그 외 null). 이때 나머지는 비어 있다
+     */
+    public record SchedulePreview(String cron, String error, String scheduleLabel, List<LocalDateTime> nextRuns,
+                                  List<String> warnings) {
     }
 }

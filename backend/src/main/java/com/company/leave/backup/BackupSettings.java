@@ -2,12 +2,9 @@ package com.company.leave.backup;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
-import java.time.LocalTime;
 import lombok.Getter;
 
 /** 자동 백업 설정(한 줄, id = 1). 주기·시각과 보관 기간(개월). */
@@ -18,30 +15,15 @@ public class BackupSettings {
 
     public static final int SINGLETON_ID = 1;
 
-    /** 매일 / 매주(요일) / N시간마다(0시부터 정각). */
-    public enum Frequency { DAILY, WEEKLY, HOURLY }
-
     @Id
     private Integer id;
 
     @Column(nullable = false)
     private boolean enabled;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private Frequency frequency;
-
-    /** 1 = 월요일 … 7 = 일요일 (매주일 때). */
-    @Column(name = "day_of_week", nullable = false)
-    private int dayOfWeek;
-
-    /** 매일·매주일 때 실행 시각. */
-    @Column(name = "run_time", nullable = false)
-    private LocalTime runTime;
-
-    /** N시간마다일 때 간격(1~24). */
-    @Column(name = "interval_hours", nullable = false)
-    private int intervalHours;
+    /** 실행 시각: cron 6칸(초 분 시 일 월 요일), 예 "0 10 0 * * *" = 매일 00:10. {@link BackupSchedule} */
+    @Column(nullable = false, length = 100)
+    private String cron;
 
     /** 최근 N개월 동안의 자동 백업은 모두 보관(1~24). */
     @Column(name = "keep_months", nullable = false)
@@ -57,23 +39,20 @@ public class BackupSettings {
     public static BackupSettings defaults() {
         BackupSettings s = new BackupSettings();
         s.id = SINGLETON_ID;
-        s.update(true, Frequency.DAILY, 1, LocalTime.of(2, 0), 6, 6);
+        s.update(true, BackupSchedule.DEFAULT_CRON, 6);
         return s;
     }
 
-    public void update(boolean enabled, Frequency frequency, int dayOfWeek, LocalTime runTime, int intervalHours,
-                       int keepMonths) {
+    /** cron 은 {@link BackupSchedule#problem} 으로 미리 확인한 값이어야 한다. */
+    public void update(boolean enabled, String cron, int keepMonths) {
         this.enabled = enabled;
-        this.frequency = frequency;
-        this.dayOfWeek = dayOfWeek;
-        this.runTime = runTime.withSecond(0).withNano(0);
-        this.intervalHours = intervalHours;
+        this.cron = new BackupSchedule(cron).cron();
         this.keepMonths = keepMonths;
         this.updatedAt = Instant.now();
     }
 
     /** 실행 시각 규칙. */
     public BackupSchedule schedule() {
-        return new BackupSchedule(frequency, dayOfWeek, runTime, intervalHours);
+        return new BackupSchedule(cron);
     }
 }

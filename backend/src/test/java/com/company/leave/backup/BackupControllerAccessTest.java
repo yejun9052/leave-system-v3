@@ -55,8 +55,7 @@ class BackupControllerAccessTest {
 
     private static final String NAME = "annual_leave_20261008_093000_manual.dump";
     private static final String SETTINGS = """
-            {"enabled":true,"frequency":"WEEKLY","dayOfWeek":1,"runTime":"03:30","intervalHours":6,
-             "keepMonths":6}
+            {"enabled":true,"cron":"0 30 3 * * MON","keepMonths":6}
             """;
     private static final String RESTORE = "/api/backups/" + NAME + "/restore";
     private static final String CONFIRM = "{\"confirm\":\"복원\"}";
@@ -102,6 +101,8 @@ class BackupControllerAccessTest {
             mvc.perform(get(DOWNLOAD)).andExpect(status().isForbidden());
             mvc.perform(delete("/api/backups/" + NAME)).andExpect(status().isForbidden());
             mvc.perform(get("/api/backups/settings")).andExpect(status().isForbidden());
+            mvc.perform(get("/api/backups/settings/preview").param("cron", "0 0 2 * * *"))
+                    .andExpect(status().isForbidden());
             mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON).content(SETTINGS))
                     .andExpect(status().isForbidden());
         }
@@ -180,9 +181,11 @@ class BackupControllerAccessTest {
     void 인사관리자는_자동_백업_설정을_보고_바꿀_수_있다() throws Exception {
         authenticate(Set.of(Role.HR_ADMIN));
         mvc.perform(get("/api/backups/settings")).andExpect(status().isOk());
+        mvc.perform(get("/api/backups/settings/preview").param("cron", "0 0 2 * * *")).andExpect(status().isOk());
         mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON).content(SETTINGS))
                 .andExpect(status().isOk());
         verify(settings).get();
+        verify(settings).preview("0 0 2 * * *");
         verify(settings).update(any());
     }
 
@@ -192,7 +195,7 @@ class BackupControllerAccessTest {
         mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON)
                 .content(SETTINGS.replace("\"keepMonths\":6", "\"keepMonths\":25"))).andExpect(status().isBadRequest());
         mvc.perform(put("/api/backups/settings").contentType(MediaType.APPLICATION_JSON)
-                .content(SETTINGS.replace("\"intervalHours\":6", "\"intervalHours\":0"))).andExpect(status().isBadRequest());
+                .content(SETTINGS.replace("0 30 3 * * MON", " "))).andExpect(status().isBadRequest());
         verifyNoInteractions(settings);
     }
 

@@ -35,24 +35,10 @@ export interface BackupOverview {
   dbVersion: string | null;
 }
 
-export type BackupFrequency = "DAILY" | "WEEKLY" | "HOURLY";
-
-export const BACKUP_FREQUENCY_LABEL: Record<BackupFrequency, string> = {
-  DAILY: "매일",
-  WEEKLY: "매주",
-  HOURLY: "N시간마다",
-};
-
-/** 1 = 월요일 … 7 = 일요일 */
-export const WEEKDAY_LABEL = ["", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"];
-
 export interface BackupSettingsForm {
   enabled: boolean;
-  frequency: BackupFrequency;
-  dayOfWeek: number;
-  /** "02:00" */
-  runTime: string;
-  intervalHours: number;
+  /** 실행 시각 cron 6칸(초 분 시 일 월 요일), 예 "0 10 0 * * *" = 매일 00:10 */
+  cron: string;
   /** 보관 기간(개월, 1~24): 이 기간 안의 자동 백업은 모두 남고, 더 오래된 자동 백업은 지워진다 */
   keepMonths: number;
 }
@@ -62,7 +48,18 @@ export interface BackupSettings extends BackupSettingsForm {
   scheduleLabel: string;
   /** 다음 실행 시각(꺼져 있으면 null) */
   nextRunAt: string | null;
+  /** 앞으로의 실행 시각 5개 */
+  nextRuns: string[];
   /** 다른 자동 작업과 같은 시각이면 안내(막지는 않음) */
+  warnings: string[];
+}
+
+/** 저장 전 cron 미리보기. error 가 있으면 저장할 수 없는 규칙 */
+export interface BackupSchedulePreview {
+  cron: string;
+  error: string | null;
+  scheduleLabel: string | null;
+  nextRuns: string[];
   warnings: string[];
 }
 
@@ -102,6 +99,8 @@ export const backupApi = {
   remove: (fileName: string) => unwrap<void>(api.delete(path(fileName))),
   settings: () => unwrap<BackupSettings>(api.get("/backups/settings")),
   updateSettings: (form: BackupSettingsForm) => unwrap<BackupSettings>(api.put("/backups/settings", form)),
+  previewSchedule: (cron: string) =>
+    unwrap<BackupSchedulePreview>(api.get("/backups/settings/preview", { params: { cron } })),
   /** 복원 전 확인(시스템 관리자만): 체크섬·파일 형식·DB 버전 */
   check: (fileName: string, source: RestoreSource) =>
     unwrap<RestoreCheck>(api.get(`${path(fileName)}/check`, { params: { source } })),

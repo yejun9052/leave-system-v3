@@ -1,6 +1,7 @@
 package com.company.leave.backup;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -15,14 +16,12 @@ import static org.mockito.Mockito.when;
 import com.company.leave.backup.BackupDtos.BackupFile;
 import com.company.leave.backup.BackupDtos.Kind;
 import com.company.leave.backup.BackupDtos.SettingsRequest;
-import com.company.leave.backup.BackupSettings.Frequency;
 import com.company.leave.batch.JobRunRecorder;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
@@ -85,8 +84,8 @@ class AutoBackupSchedulerTest {
         return LocalDateTime.ofInstant(trigger.nextExecution(ctx), SEOUL);
     }
 
-    private static SettingsRequest request(boolean enabled, Frequency frequency, LocalTime time, int hours) {
-        return new SettingsRequest(enabled, frequency, 3, time, hours, 6);
+    private static SettingsRequest request(boolean enabled, String cron) {
+        return new SettingsRequest(enabled, cron, 6);
     }
 
     @Test
@@ -100,7 +99,7 @@ class AutoBackupSchedulerTest {
     void 설정을_바꾸면_기존_예약을_취소하고_다음_실행_시각이_바로_바뀐다() {
         scheduler.onReady();
 
-        BackupDtos.Settings saved = settingsService.update(request(true, Frequency.DAILY, LocalTime.of(12, 3), 6));
+        BackupDtos.Settings saved = settingsService.update(request(true, "0 3 12 * * *"));
 
         verify(future).cancel(false);
         verify(taskScheduler, times(2)).schedule(any(Runnable.class), any(CronTrigger.class));
@@ -113,7 +112,7 @@ class AutoBackupSchedulerTest {
     void N시간마다로_바꾸면_다음_정각_간격으로_바뀐다() {
         scheduler.onReady();
 
-        settingsService.update(request(true, Frequency.HOURLY, LocalTime.of(2, 0), 5));
+        settingsService.update(request(true, "0 0 0/5 * * *"));
 
         assertThat(nextRun(scheduler.trigger())).isEqualTo(LocalDateTime.of(2026, 10, 8, 15, 0));
     }
@@ -122,7 +121,7 @@ class AutoBackupSchedulerTest {
     void 끄면_예약을_취소하고_다시_등록하지_않는다() {
         scheduler.onReady();
 
-        BackupDtos.Settings saved = settingsService.update(request(false, Frequency.DAILY, LocalTime.of(2, 0), 6));
+        BackupDtos.Settings saved = settingsService.update(request(false, "0 0 2 * * *"));
 
         verify(future).cancel(false);
         verify(taskScheduler, times(1)).schedule(any(Runnable.class), any(CronTrigger.class));
@@ -193,8 +192,44 @@ class AutoBackupSchedulerTest {
 
     @Test
     void 다른_작업과_같은_시각이면_경고를_돌려준다() {
-        BackupDtos.Settings saved = settingsService.update(request(true, Frequency.DAILY, LocalTime.of(0, 10), 6));
+        BackupDtos.Settings saved = settingsService.update(request(true, "0 10 0 * * *"));
 
         assertThat(saved.warnings()).singleElement().asString().contains("공휴일 동기화");
+    }
+
+    @Test
+    void 저장하면_cron_과_앞으로의_실행_시각_다섯_개를_돌려준다() {
+        BackupDtos.Settings saved = settingsService.update(request(true, "0 30 3 * * MON,THU"));
+
+        assertThat(saved.cron()).isEqualTo("0 30 3 * * MON,THU");
+        assertThat(saved.scheduleLabel()).isEqualTo("매주 월·목요일 03:30");
+        assertThat(saved.nextRuns()).hasSize(5).first().isEqualTo(LocalDateTime.of(2026, 10, 12, 3, 30));
+    }
+
+    @Test
+    void 잘못된_cron_이나_너무_잦은_실행은_저장하지_않고_예약도_그대로다() {
+        scheduler.onReady();
+
+        for (String bad : new String[] {"0 0 25 * * *", "0 */10 * * * *", "0 2 * * *"}) {
+            assertThatThrownBy(() -> settingsService.update(request(true, bad)))
+                    .as(bad)
+                    .isInstanceOfSatisfying(com.company.leave.common.exception.BusinessException.class,
+                            ex -> assertThat(ex.getMessage()).startsWith("자동 백업 실행 시각: "));
+        }
+        verify(taskScheduler, times(1)).schedule(any(Runnable.class), any(CronTrigger.class));
+        assertThat(nextRun(scheduler.trigger())).isEqualTo(LocalDateTime.of(2026, 10, 9, 2, 0));
+    }
+
+    @Test
+    void 미리보기는_저장하지_않고_설명과_다음_실행_시각_또는_문제를_알려준다() {
+        BackupDtos.SchedulePreview ok = settingsService.preview("0 0 4 L * *");
+        BackupDtos.SchedulePreview bad = settingsService.preview("0 */10 * * * *");
+
+        assertThat(ok.error()).isNull();
+        assertThat(ok.scheduleLabel()).isEqualTo("매월 말일 04:00");
+        assertThat(ok.nextRuns()).first().isEqualTo(LocalDateTime.of(2026, 10, 31, 4, 0));
+        assertThat(bad.error()).contains("1시간보다 자주");
+        assertThat(bad.nextRuns()).isEmpty();
+        assertThat(settingsService.get().cron()).isEqualTo("0 0 2 * * *");
     }
 }
