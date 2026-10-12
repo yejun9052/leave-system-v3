@@ -14,6 +14,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,6 +78,15 @@ public class GlobalExceptionHandler {
         ErrorCode code = ErrorCode.FORBIDDEN;
         return ResponseEntity.status(code.status())
                 .body(ApiResponse.error(code.name(), code.defaultMessage()));
+    }
+
+    /**
+     * 브라우저가 먼저 연결을 끊음(실시간 갱신 연결이 열린 탭을 닫거나 숨김 등). 정상적인 끝이고
+     * 응답을 받을 곳도 없으므로 오류로 남기지 않는다.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnected(AsyncRequestNotUsableException ex) {
+        log.debug("클라이언트 연결 끊김: {}", ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

@@ -61,6 +61,11 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 - `LeaveMessenger` creates in-app notifications (`notification/`). Mail is sent after commit via events and `@TransactionalEventListener` in `mail/*MailService`.
   - Notification `type` and `link` drive the frontend bell (action button, title color).
 
+**Realtime refresh (`realtime/`)**
+- `RealtimeHub` keeps SSE connections (`GET /api/realtime`). Signals carry no data, only the origin tab ID (`X-Client-Id`).
+- `RealtimeChangeInterceptor` broadcasts after every successful POST/PUT/PATCH/DELETE under `/api/**`. Personal ones (notifications, own password) go only to the actor. `JobRunRecorder.run` broadcasts after each scheduled job.
+- New endpoints need nothing extra. New background work that changes data outside a request or job should call `RealtimeHub.broadcast(null)`.
+
 **Policy (`policy/`)**
 - One `leave_policy` row.
 - Special leave rules (경조사, e.g. the birthday half day with an annual limit).
@@ -92,6 +97,8 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 - `features/<domain>/`: pages and dialogs. `layouts/AppLayout.tsx` holds the sidebar, header, notification bell and unread notice. `components/ui/` holds shadcn/Radix primitives.
 - State:
   - TanStack Query handles server state. After mutations, invalidate the related keys, e.g. `["dashboard"]`, `["notifications"]`, `["leavePreview"]`.
+  - `lib/useRealtime.ts` (in `AppLayout`) invalidates all queries when another tab or user changes data; hidden tabs disconnect.
+  - Screens that copy server data into an editable form use `lib/useServerForm.ts`, so a realtime refresh never wipes unsaved input (`ChangedElsewhereNotice`). Don't copy query data into form state with a plain `useEffect`.
   - zustand `store/auth.ts` holds the user and `hasAnyRole`.
 - Shared Korean formatting lives in `lib/leaveFormat.ts` (days, half-day labels, period split).
 - `types/index.ts` mirrors backend DTOs. Update both sides together.

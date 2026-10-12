@@ -5,6 +5,8 @@
 #
 # 접속 주소는 SITE_ADDRESS 로 결정 (도메인 → 자동 HTTPS / :80 → HTTP)
 {$SITE_ADDRESS} {
-	encode zstd gzip
+	# 실시간 갱신 연결(SSE)은 압축하면 신호가 모였다가 늦게 가므로 뺀다
+	@compress not path /api/realtime
+	encode @compress zstd gzip
 	reverse_proxy backend:8080
 }

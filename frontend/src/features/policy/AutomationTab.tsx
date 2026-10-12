@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Save } from "lucide-react";
 import { automationApi, type AutomationJob, type AutomationJobState } from "@/api/policy";
 import { extractErrorMessage } from "@/api/client";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
+import { useServerForm } from "@/lib/useServerForm";
+import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,14 +69,13 @@ function PromotionAutomation({
   const { toast } = useToast();
   const confirm = useConfirm();
   const qc = useQueryClient();
-  const [enabled, setEnabled] = useState(savedEnabled);
-  const [months, setMonths] = useState<number[]>(savedMonths);
-
-  // 저장 뒤 서버 값으로 다시 맞춘다
-  useEffect(() => {
-    setEnabled(savedEnabled);
-    setMonths(savedMonths);
-  }, [savedEnabled, savedMonths]);
+  // 저장·실시간 갱신으로 서버 값이 바뀌면 맞추되, 고치는 중이면 입력을 지우지 않고 알린다
+  const { form, setForm, changedElsewhere, reload, reset } = useServerForm({ enabled: savedEnabled, months: savedMonths });
+  const enabled = form?.enabled ?? savedEnabled;
+  const months = form?.months ?? savedMonths;
+  const setEnabled = (v: boolean) => setForm((f) => ({ enabled: v, months: f?.months ?? savedMonths }));
+  const setMonths = (update: (prev: number[]) => number[]) =>
+    setForm((f) => ({ enabled: f?.enabled ?? savedEnabled, months: update(f?.months ?? savedMonths) }));
 
   const sortedMonths = [...months].sort((a, b) => b - a);
   const monthsChanged = sortedMonths.join(",") !== savedMonths.join(",");
@@ -96,6 +96,7 @@ function PromotionAutomation({
   const save = useMutation({
     mutationFn: () => automationApi.updatePromotion(enabled, sortedMonths),
     onSuccess: (r) => {
+      reset({ enabled: r.promotionEnabled, months: r.promotionMonths });
       qc.setQueryData(["automation"], r);
       qc.invalidateQueries({ queryKey: ["policy"] });
       toast({ title: r.promotionEnabled ? "자동 발송을 켰습니다." : "자동 발송 설정을 저장했습니다.", variant: "success" });
@@ -136,6 +137,7 @@ function PromotionAutomation({
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
+        {changedElsewhere && <ChangedElsewhereNotice onReload={reload} />}
         <div className="space-y-2">
           <p className="text-sm font-medium">발송 시기 (사용 기한 기준)</p>
           <div className="flex flex-wrap gap-2">

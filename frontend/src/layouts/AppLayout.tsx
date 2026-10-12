@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { useRealtime } from "@/lib/useRealtime";
 import { dashboardApi } from "@/api/dashboard";
 import { formatDays } from "@/lib/leaveFormat";
 import { ROLE_LABEL, type Role } from "@/types";
@@ -55,6 +56,8 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
+  // 누가 데이터를 바꾸면 새로고침 없이 지금 화면을 다시 불러온다(비밀번호를 바꾸기 전에는 서버가 막으므로 연결하지 않음)
+  useRealtime(!!user && !user.passwordChangeRequired);
 
   // 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 "내 휴가" 메뉴를 보여 준다
   const visibleNav = NAV.filter((n) => !n.roles || hasAnyRole(...n.roles));

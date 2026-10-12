@@ -11,12 +11,21 @@ export interface ApiEnvelope<T> {
 }
 
 /**
+ * 이 탭의 ID. 데이터를 바꾸는 요청에 X-Client-Id 로 실어 보내면, 서버가 실시간 신호에 그대로 담아 준다
+ * → 바꾼 탭은 자기 신호를 무시한다(이미 스스로 다시 불러옴). randomUUID 는 HTTPS·localhost 에서만 있다.
+ */
+export const CLIENT_ID: string =
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+/**
  * 인증은 서버 세션(HttpOnly 쿠키)으로 처리되어 브라우저가 자동 전송한다.
  * CSRF: 서버가 내려준 XSRF-TOKEN 쿠키 값을 axios 가 X-XSRF-TOKEN 헤더로 자동 첨부(같은 출처 요청).
  */
 export const api = axios.create({
   baseURL: "/api",
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", "X-Client-Id": CLIENT_ID },
   xsrfCookieName: "XSRF-TOKEN",
   xsrfHeaderName: "X-XSRF-TOKEN",
 });

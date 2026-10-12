@@ -1,5 +1,6 @@
 package com.company.leave.batch;
 
+import com.company.leave.realtime.RealtimeHub;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Map;
@@ -7,6 +8,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
 /**
  * 자동 작업(스케줄러)의 마지막 실행 결과를 scheduled_job_runs 에 남긴다. 자동화 탭에서 보여 준다.
  * 기록에 실패해도 작업 자체는 막지 않는다(로그만 남김).
+ * 작업이 끝나면(성공·실패) 열려 있는 화면에 실시간 신호를 보내 바뀐 데이터를 다시 불러오게 한다.
  */
 @Component
 public class JobRunRecorder {
@@ -27,9 +30,17 @@ public class JobRunRecorder {
     private static final int MAX_MESSAGE = 500;
 
     private final JdbcTemplate jdbc;
+    /** 없으면(단위 테스트) 신호를 보내지 않는다 */
+    private final RealtimeHub realtime;
 
     public JobRunRecorder(JdbcTemplate jdbc) {
+        this(jdbc, null);
+    }
+
+    @Autowired
+    public JobRunRecorder(JdbcTemplate jdbc, RealtimeHub realtime) {
         this.jdbc = jdbc;
+        this.realtime = realtime;
     }
 
     /**
@@ -54,6 +65,10 @@ public class JobRunRecorder {
         } catch (RuntimeException ex) {
             save(job, startedAt, Instant.now(), false, "실패: " + ex.getMessage());
             throw ex;
+        } finally {
+            if (realtime != null) {
+                realtime.broadcast(null);
+            }
         }
     }
 

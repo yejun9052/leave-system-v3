@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.company.leave.realtime.RealtimeHub;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -59,6 +61,20 @@ class JobRunRecorderTest {
         assertThat(saves.get(1)[3]).isEqualTo(true);
         assertThat(saves.get(1)[4]).isEqualTo("재직자 20명 부여·재계산");
         assertThat(saves.get(1)[1]).isEqualTo(saves.get(0)[1]); // 같은 시작 시각
+    }
+
+    @Test
+    void 작업이_끝나면_성공이든_실패든_열린_화면에_실시간_신호를_보낸다() {
+        RealtimeHub realtime = mock(RealtimeHub.class);
+        JobRunRecorder withRealtime = new JobRunRecorder(jdbc, realtime);
+
+        withRealtime.run("leave-grant", () -> "재직자 20명 부여·재계산");
+        assertThatThrownBy(() -> withRealtime.run("holiday-sync", () -> {
+            throw new IllegalStateException("API 장애");
+        }));
+        withRealtime.skipped("promotion-auto", "자동 발송이 꺼져 있어 보내지 않음");
+
+        verify(realtime, times(2)).broadcast(null);
     }
 
     @Test

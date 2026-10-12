@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Save, Trash2, PlayCircle } from "lucide-react";
@@ -18,6 +18,8 @@ import {
 import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
 import { useTableSort, type SortValue } from "@/lib/useTableSort";
+import { useServerForm } from "@/lib/useServerForm";
+import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -121,27 +123,27 @@ export default function PolicyPage() {
   );
 }
 
+/** 정책 화면 입력: 서버 값에서 id 를 뺀 것 */
+function policyForm(p: Policy): Omit<Policy, "id"> {
+  const { id: _id, ...rest } = p;
+  void _id;
+  return rest;
+}
+
 function PolicyTab() {
   const { toast } = useToast();
   const confirm = useConfirm();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
-  const [form, setForm] = useState<Omit<Policy, "id"> | null>(null);
-
-  useEffect(() => {
-    if (data) {
-      const { id: _id, ...rest } = data;
-      void _id;
-      setForm(rest);
-    }
-  }, [data]);
+  const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? policyForm(data) : undefined);
 
   const set = <K extends keyof Omit<Policy, "id">>(k: K, v: Omit<Policy, "id">[K]) =>
     setForm((f) => (f ? { ...f, [k]: v } : f));
 
   const save = useMutation({
     mutationFn: () => policyApi.update(form!),
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      reset(policyForm(saved));
       toast({ title: "정책이 저장되었습니다.", variant: "success" });
       qc.invalidateQueries({ queryKey: ["policy"] });
     },
@@ -158,6 +160,11 @@ function PolicyTab() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
+      {changedElsewhere && (
+        <div className="lg:col-span-2">
+          <ChangedElsewhereNotice onReload={reload} />
+        </div>
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">부여 기준</CardTitle>

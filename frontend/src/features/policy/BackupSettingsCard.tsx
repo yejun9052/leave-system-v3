@@ -5,6 +5,8 @@ import { backupApi, type BackupSettings, type BackupSettingsForm } from "@/api/b
 import { extractErrorMessage } from "@/api/client";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
+import { useServerForm } from "@/lib/useServerForm";
+import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -64,11 +66,7 @@ export default function BackupSettingsCard() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["backupSettings"], queryFn: backupApi.settings });
-  const [form, setForm] = useState<BackupSettingsForm | null>(null);
-
-  useEffect(() => {
-    if (data) setForm(toForm(data));
-  }, [data]);
+  const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? toForm(data) : undefined);
 
   const cron = normalize(form?.cron ?? "");
   const debouncedCron = useDebounced(cron, 300);
@@ -82,6 +80,7 @@ export default function BackupSettingsCard() {
   const save = useMutation({
     mutationFn: (f: BackupSettingsForm) => backupApi.updateSettings({ ...f, cron: normalize(f.cron) }),
     onSuccess: (saved) => {
+      reset(toForm(saved));
       qc.setQueryData(["backupSettings"], saved);
       qc.invalidateQueries({ queryKey: ["automation"] });
       toast({
@@ -124,6 +123,7 @@ export default function BackupSettingsCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
+        {changedElsewhere && <ChangedElsewhereNotice onReload={reload} />}
         <div className="space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <Label>실행 시각</Label>
