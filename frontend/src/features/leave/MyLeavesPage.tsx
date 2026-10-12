@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import QueryError from "@/components/QueryError";
+import StatusReason from "./StatusReason";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { LEAVE_STATUS_LABEL, type LeaveRequestStatus } from "@/types";
@@ -53,6 +54,7 @@ export default function MyLeavesPage() {
   const [open, setOpen] = useState(false);
   const [requestWarning, setRequestWarning] = useState<string | null>(null);
   const canCancelOwn = !!user;
+  const today = todayString();
 
   const balanceQuery = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
   const requestsQuery = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
@@ -170,6 +172,7 @@ export default function MyLeavesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
+                      <StatusReason leave={r} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">{r.approverName ?? "-"}</TableCell>
                     <TableCell className="text-right">
@@ -191,7 +194,8 @@ export default function MyLeavesPage() {
                           <X className="h-4 w-4" /> 취소
                         </Button>
                       )}
-                      {canCancelOwn && r.employeeId === user?.id && r.status === "APPROVED" && (
+                      {/* 시작한 휴가는 서버가 취소 요청을 받지 않는다(이미 시작된 휴가) */}
+                      {canCancelOwn && r.employeeId === user?.id && r.status === "APPROVED" && r.startDate > today && (
                         <Button
                           size="sm"
                           variant="ghost"

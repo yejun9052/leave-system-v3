@@ -25,6 +25,7 @@ import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { useAuthStore } from "@/store/auth";
 import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
 import ForceCancelDialog from "./ForceCancelDialog";
+import StatusReason from "./StatusReason";
 
 const PAGE_SIZE = 20;
 
@@ -231,6 +232,7 @@ export default function LeaveListTab() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
+                      <StatusReason leave={r} />
                     </TableCell>
                     <TableCell>{r.approverName ?? "-"}</TableCell>
                     {canForceCancel && (

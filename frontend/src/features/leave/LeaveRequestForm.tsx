@@ -393,7 +393,7 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
       )}
       <div className="space-y-2">
         <Label>사유 (선택)</Label>
-        <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 개인 사유" />
+        <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="예: 개인 사유" />
       </div>
       {route && <p className="text-sm text-muted-foreground">{approvalRouteText(route)}</p>}
     </div>

@@ -343,7 +343,7 @@ function RejectDialog({
         </DialogHeader>
         <div className="space-y-2">
           <Label>반려 사유</Label>
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="사유를 입력하세요" />
+          <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="사유를 입력하세요" />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
