@@ -41,6 +41,7 @@ import { extractErrorMessage } from "@/api/client";
 import { cn } from "@/lib/utils";
 import { flattenDepartments } from "@/lib/departmentTree";
 import { useMediaQuery } from "@/lib/useMediaQuery";
+import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import LeaveEntryPanel from "./LeaveEntryPanel";
 import DayContextMenu, { type DayMenuTarget } from "./DayContextMenu";
 import DayDetailDialog from "./DayDetailDialog";
@@ -53,6 +54,7 @@ import {
   isWeekend,
   localDateString,
   monthGridDates,
+  shiftMonth,
   todayString,
   useDateSelection,
   type DateSelection,
@@ -251,6 +253,19 @@ export default function CalendarPage() {
       return today.slice(0, 7) === month ? today : `${month}-01`;
     });
   };
+
+  // ←/→ 키로 이전·다음 달. 데스크톱은 FullCalendar 의 이전·다음 버튼과 같은 동작
+  const calendarRef = useRef<FullCalendar>(null);
+  const moveMonth = (delta: -1 | 1) => {
+    if (isMobile) {
+      changeMobileMonth(shiftMonth(viewMonth, delta));
+      return;
+    }
+    const api = calendarRef.current?.getApi();
+    if (delta < 0) api?.prev();
+    else api?.next();
+  };
+  useArrowKeyNavigation({ onPrev: () => moveMonth(-1), onNext: () => moveMonth(1) });
 
   /** 모바일 칸 탭: 다른 달 날짜면 그 달로 이동하며 선택, 선택 모드면 신청 기간을 고른다 */
   const onMobileSelect = (date: string) => {
@@ -561,6 +576,7 @@ export default function CalendarPage() {
             <CardContent className="p-2 sm:p-4">
               <div onContextMenu={onContextMenu}>
                 <FullCalendar
+                  ref={calendarRef}
                   plugins={[dayGridPlugin, interactionPlugin]}
                   initialView="dayGridMonth"
                   initialDate={`${viewMonth}-01`}

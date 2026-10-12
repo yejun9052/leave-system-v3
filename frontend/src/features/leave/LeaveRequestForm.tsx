@@ -305,6 +305,11 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
     setReason,
     route,
   } = form;
+  // 신청할 수 없는(회색) 종류는 맨 아래로. 같은 묶음 안에서는 원래 순서를 지킨다
+  const orderedTypes = [
+    ...usableTypes.filter((t) => !blockedReasons.has(t.id)),
+    ...usableTypes.filter((t) => blockedReasons.has(t.id)),
+  ];
 
   return (
     <div className="space-y-4">
@@ -315,7 +320,7 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
             <SelectValue placeholder="종류 선택" />
           </SelectTrigger>
           <SelectContent>
-            {usableTypes.map((t) => (
+            {orderedTypes.map((t) => (
               <SelectItem key={t.id} value={String(t.id)} disabled={blockedReasons.has(t.id)}>
                 {t.name} ({formatDays(t.deductDays)}일 차감)
                 {blockedReasons.has(t.id) && " · 선택 불가"}

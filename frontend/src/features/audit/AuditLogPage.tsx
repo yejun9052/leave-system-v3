@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/dateFormat";
 import { useTableSort } from "@/lib/useTableSort";
+import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 
 // 삭제·반려성 동작은 붉은 배지로 강조
 const NEGATIVE_ACTIONS = new Set(["DELETE", "reject", "cancel", "cancel_reject", "force_cancel"]);
@@ -28,6 +29,10 @@ export default function AuditLogPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["auditLogs", { search, page }],
     queryFn: () => auditApi.list(search, page, 30),
+  });
+  useArrowKeyNavigation({
+    onPrev: page > 0 ? () => setPage((p) => p - 1) : null,
+    onNext: data && page + 1 < data.totalPages ? () => setPage((p) => p + 1) : null,
   });
   // 서버가 최신순으로 페이지를 나눠 주므로 정렬은 지금 페이지 안에서만 한다
   const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {

@@ -37,6 +37,7 @@ import {
   SortableTableHead,
 } from "@/components/ui/table";
 import { useTableSort } from "@/lib/useTableSort";
+import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import {
   Dialog,
   DialogContent,
@@ -98,6 +99,10 @@ export default function EmployeePage() {
     queryKey: ["employees", { search, page, departments: [...departmentIds] }],
     queryFn: () =>
       employeeApi.search({ keyword: search || undefined, departmentIds: [...departmentIds], page, size: 15 }),
+  });
+  useArrowKeyNavigation({
+    onPrev: page > 0 ? () => setPage((p) => p - 1) : null,
+    onNext: data && page + 1 < data.totalPages ? () => setPage((p) => p + 1) : null,
   });
   // 서버가 이름순으로 페이지를 나눠 주므로 정렬은 지금 페이지 안에서만 한다
   const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {
