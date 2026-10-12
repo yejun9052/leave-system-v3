@@ -190,6 +190,26 @@ class AuthServiceLoginTest {
     }
 
     @Test
+    void 같은_브라우저에_남은_로그인_유지_세션이_있어도_유지_없이_로그인하면_넘어오지_않는다() {
+        인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
+        // 공용 PC: 앞사람이 로그인 유지로 쓰던 세션이 남아 있고, 이 요청에서 필터가 쿠키 유지 표시를 켜 둠
+        MockHttpSession 앞사람 = new MockHttpSession();
+        앞사람.setAttribute("rememberMeUntil", System.currentTimeMillis() + 86_400_000L);
+        앞사람.setMaxInactiveInterval(30 * 24 * 3600);
+        request.setSession(앞사람);
+        request.setAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR, true);
+        int defaultInterval = new MockHttpSession().getMaxInactiveInterval();
+
+        authService.login(new LoginRequest(EMAIL, PASSWORD, false), request, response);
+
+        assertThat(앞사람.isInvalid()).isTrue();
+        assertThat(request.getSession(false)).isNotSameAs(앞사람);
+        assertThat(request.getSession(false).getAttribute("rememberMeUntil")).isNull();
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(defaultInterval);
+        assertThat(request.getAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR)).isNull();
+    }
+
+    @Test
     void 비밀번호가_틀리면_인증_실패로_처리하고_실패_횟수를_기록하며_세션을_만들지_않는다() {
         when(authenticationManager.authenticate(any()))
                 .thenThrow(new BadCredentialsException("bad"));
