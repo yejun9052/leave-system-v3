@@ -102,13 +102,13 @@ export type HalfDayPart = "AM" | "PM";
 
 export const HALF_DAY_LABEL: Record<HalfDayPart, string> = { AM: "오전", PM: "오후" };
 
-/** 연차 차감 방식: 연차처럼 차감 / 회사 규정(연차 먼저 소진) / 법정 기준(연차와 무관) */
+/** 연차 차감 방식: 일반 연차 차감 / 연차 소진 완료 후 사용 / 연차와 무관 */
 export type AnnualDeductionMode = "DEDUCT" | "EXHAUST_FIRST" | "NONE";
 
 export const ANNUAL_DEDUCTION_LABEL: Record<AnnualDeductionMode, string> = {
-  DEDUCT: "연차처럼 차감",
-  EXHAUST_FIRST: "회사 규정: 연차 먼저 소진",
-  NONE: "법정 기준: 연차와 무관",
+  DEDUCT: "일반 연차 차감",
+  EXHAUST_FIRST: "연차 소진 완료 후 사용",
+  NONE: "연차와 무관",
 };
 
 export interface LeaveType {
