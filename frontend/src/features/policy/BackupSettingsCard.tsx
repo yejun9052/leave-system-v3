@@ -14,15 +14,20 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 
-/** cron 6칸: 이름과 쓸 수 있는 값 안내 */
-const FIELDS = [
-  { name: "초", hint: "0" },
-  { name: "분", hint: "0-59" },
-  { name: "시", hint: "0-23 · 0/6" },
-  { name: "일", hint: "1-31 · L(말일)" },
-  { name: "월", hint: "1-12" },
-  { name: "요일", hint: "MON-SUN · 1-5" },
+/**
+ * 화면에 보이는 숫자 칸(월 → 일 → 시 → 분 순). index 는 cron 6칸(초 분 시 일 월 요일) 중 위치.
+ * 비우면 매월·매일처럼 모든 값(*). 초는 화면에 두지 않고 저장된 값을 그대로 둔다.
+ */
+const NUMBER_FIELDS = [
+  { index: 4, name: "월", hint: "1~12", every: "매월", unit: "개월" },
+  { index: 3, name: "일", hint: "1~31", every: "매일", unit: "일" },
+  { index: 2, name: "시", hint: "0~23", every: "매시", unit: "시간" },
+  { index: 1, name: "분", hint: "0~59", every: "매분", unit: "분" },
 ] as const;
+
+/** 요일 버튼 순서(월~일)와 cron 이름 */
+const DAY_CODES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
 /** 자주 쓰는 실행 시각 */
 const PRESETS = [
@@ -44,6 +49,52 @@ function splitCron(cron: string): string[] {
   return [...head, rest, "", "", "", "", "", ""].slice(0, 6);
 }
 
+/** 숫자 칸에 보일 값: 숫자·쉼표·범위만 그대로 보이고, *·L·0/6 같은 값은 빈 칸(설명은 placeholder 로). */
+const numberValue = (part: string) => (/^[\d,-]+$/.test(part) ? part : "");
+
+/** 빈 칸일 때 회색 글씨: "매월", "말일", "6시간마다" 등. 숫자로 못 읽는 값은 cron 그대로. */
+function numberPlaceholder(part: string, field: (typeof NUMBER_FIELDS)[number]): string {
+  if (part === "" || part === "*" || part === "?") return field.every;
+  if (part === "L") return "말일";
+  const step = /^(?:\*|\d+)\/(\d+)$/.exec(part);
+  return step ? `${step[1]}${field.unit}마다` : part;
+}
+
+/** cron 요일 칸 하나(MON, 1, 0·7=일) → 0(월)~6(일). 못 읽으면 -1. */
+function dayIndex(token: string): number {
+  if (/^[0-7]$/.test(token)) return (Number(token) + 6) % 7;
+  return DAY_CODES.indexOf(token);
+}
+
+/** 요일 칸 → 고른 요일(0=월). 모든 요일(*)이면 빈 집합, 버튼으로 나타낼 수 없는 값이면 null. */
+function parseDays(part: string): Set<number> | null {
+  if (part === "" || part === "*" || part === "?") return new Set();
+  const days = new Set<number>();
+  for (const token of part.toUpperCase().split(",")) {
+    const [a, b, extra] = token.split("-");
+    const from = dayIndex(a);
+    const to = b === undefined ? from : dayIndex(b);
+    if (extra !== undefined || from < 0 || to < from) return null;
+    for (let d = from; d <= to; d++) days.add(d);
+  }
+  return days;
+}
+
+/** 고른 요일 → 요일 칸. 아무것도 안 고르거나 다 고르면 *, 3일 이상 이어지면 MON-FRI 처럼 범위로. */
+function formatDays(days: Set<number>): string {
+  if (days.size === 0 || days.size === 7) return "*";
+  const sorted = [...days].sort((x, y) => x - y);
+  const parts: string[] = [];
+  for (let i = 0; i < sorted.length; ) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+    if (j - i >= 2) parts.push(`${DAY_CODES[sorted[i]]}-${DAY_CODES[sorted[j]]}`);
+    else for (let k = i; k <= j; k++) parts.push(DAY_CODES[sorted[k]]);
+    i = j + 1;
+  }
+  return parts.join(",");
+}
+
 function toForm(s: BackupSettings): BackupSettingsForm {
   return { enabled: s.enabled, cron: s.cron, keepMonths: s.keepMonths };
 }
@@ -59,7 +110,7 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 /**
- * 정책 → 백업 → 자동 백업 설정. 실행 시각은 cron 6칸(초 분 시 일 월 요일)을 숫자로 직접 보고 고친다.
+ * 정책 → 백업 → 자동 백업 설정. 실행 시각은 월·일·시·분 숫자 칸과 요일 버튼으로 고치고, 저장은 cron 6칸(초 분 시 일 월 요일)으로 한다.
  * 고치는 동안 서버가 해석한 설명·다음 실행 시각·겹침 경고를 바로 보여 주고, 저장하면 재시작 없이 새 시각으로 예약된다.
  */
 export default function BackupSettingsCard() {
@@ -98,10 +149,19 @@ export default function BackupSettingsCard() {
     setForm((f) => (f ? { ...f, [key]: value } : f));
   const fields = splitCron(form.cron);
   const setField = (i: number, value: string) => {
-    const next = [...fields];
-    next[i] = value.replace(/\s+/g, "");
+    // 빈 칸은 모든 값(*)으로, 화면에 없는 초는 비어 있을 때만 0으로 채운다
+    const next = fields.map((p, k) => (p !== "" ? p : k === 0 ? "0" : "*"));
+    next[i] = value === "" ? "*" : value;
     set("cron", next.join(" "));
   };
+  const days = parseDays(fields[5]);
+  const toggleDay = (d: number) => {
+    const next = new Set(days ?? []);
+    if (next.has(d)) next.delete(d);
+    else next.add(d);
+    setField(5, formatDays(next));
+  };
+  const lastDay = fields[3] === "L";
 
   const dirty = form.enabled !== data.enabled || form.keepMonths !== data.keepMonths || cron !== data.cron;
   // 미리보기가 지금 입력과 같은 값을 해석했을 때만 믿는다
@@ -127,7 +187,7 @@ export default function BackupSettingsCard() {
         <div className="space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <Label>실행 시각</Label>
-            <span className="text-xs text-muted-foreground">cron 6칸 · 서버 시간(한국)</span>
+            <span className="text-xs text-muted-foreground">서버 시간(한국)</span>
           </div>
 
           <div className="flex flex-wrap gap-1.5">
@@ -146,31 +206,65 @@ export default function BackupSettingsCard() {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" role="group" aria-label="cron 칸">
-            {FIELDS.map((f, i) => (
-              <label key={f.name} className="flex flex-col items-center gap-1 rounded-lg border bg-muted/30 p-2">
-                <Input
-                  value={fields[i]}
-                  onChange={(e) => setField(i, e.target.value)}
-                  aria-label={`cron ${f.name}`}
-                  className="h-11 text-center font-mono text-lg font-semibold tabular-nums"
-                  spellCheck={false}
-                />
-                <span className="text-sm font-medium">{f.name}</span>
-                <span className="text-[11px] leading-tight text-muted-foreground">{f.hint}</span>
-              </label>
-            ))}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="실행 날짜와 시각">
+            {NUMBER_FIELDS.map((f) => {
+              const part = fields[f.index];
+              return (
+                <div key={f.name} className="flex flex-col items-center gap-1 rounded-lg border bg-muted/30 p-2">
+                  <label className="flex w-full flex-col items-center gap-1">
+                    <Input
+                      value={numberValue(part)}
+                      placeholder={numberPlaceholder(part, f)}
+                      onChange={(e) => setField(f.index, e.target.value.replace(/[^\d,-]/g, ""))}
+                      inputMode="numeric"
+                      aria-label={f.name}
+                      className="h-11 text-center text-lg font-semibold tabular-nums placeholder:text-sm placeholder:font-normal"
+                      spellCheck={false}
+                    />
+                    <span className="text-sm font-medium">{f.name}</span>
+                  </label>
+                  {f.index === 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => setField(3, lastDay ? "" : "L")}
+                      aria-pressed={lastDay}
+                      className={cn(
+                        "rounded-full border px-2 text-[11px] leading-5 transition-colors",
+                        lastDay ? "border-primary bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      말일
+                    </button>
+                  ) : (
+                    <span className="text-[11px] leading-5 text-muted-foreground">{f.hint}</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="shrink-0 text-xs text-muted-foreground">직접 입력</span>
-            <Input
-              value={form.cron}
-              onChange={(e) => set("cron", e.target.value)}
-              aria-label="cron 직접 입력"
-              className="font-mono"
-              spellCheck={false}
-            />
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="요일">
+            <span className="mr-1 text-sm font-medium">요일</span>
+            {DAY_LABELS.map((label, d) => {
+              const on = days?.has(d) ?? false;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => toggleDay(d)}
+                  aria-pressed={on}
+                  className={cn(
+                    "h-8 w-8 rounded-full border text-sm transition-colors",
+                    on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            <span className="ml-1 text-xs text-muted-foreground">
+              {days === null ? `직접 입력한 요일: ${fields[5]}` : days.size === 0 ? "고르지 않으면 요일 상관없이" : ""}
+            </span>
           </div>
 
           <div
@@ -212,13 +306,22 @@ export default function BackupSettingsCard() {
             ))}
 
           <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer select-none">cron 쓰는 법</summary>
+            <summary className="cursor-pointer select-none">입력하는 법 · cron 으로 직접 입력</summary>
             <ul className="mt-1.5 space-y-0.5 pl-4">
-              <li><code>*</code> 모든 값 · <code>,</code> 여러 개(예: 요일 <code>MON,THU</code>) · <code>-</code> 범위(예: <code>MON-FRI</code>)</li>
-              <li><code>/</code> 간격(예: 시 <code>0/6</code> = 0·6·12·18시) · <code>L</code> 말일(일 칸)</li>
-              <li>예: <code>0 10 0 * * *</code> 매일 00:10 · <code>0 0 3 * * MON</code> 매주 월요일 03:00</li>
-              <li>백업은 1시간보다 자주 실행할 수 없고, 초는 0처럼 숫자 하나로 둡니다.</li>
+              <li>칸을 비우면 매월·매일처럼 모든 값입니다. 여러 개는 쉼표(예: 시 <code>2,14</code>), 범위는 <code>-</code>(예: 일 <code>1-7</code>).</li>
+              <li>예: 월 비움 · 일 비움 · 시 <code>0</code> · 분 <code>10</code> = 매일 00:10 / 일 <code>1</code> · 시 <code>4</code> · 분 <code>0</code> = 매월 1일 04:00</li>
+              <li>백업은 1시간보다 자주 실행할 수 없습니다.</li>
             </ul>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="shrink-0">cron 6칸(초 분 시 일 월 요일)</span>
+              <Input
+                value={form.cron}
+                onChange={(e) => set("cron", e.target.value)}
+                aria-label="cron 직접 입력"
+                className="h-8 font-mono text-xs"
+                spellCheck={false}
+              />
+            </div>
           </details>
         </div>
 
