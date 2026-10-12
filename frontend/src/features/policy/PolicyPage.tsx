@@ -20,6 +20,7 @@ import {
 import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
 import { useTableSort, type SortValue } from "@/lib/useTableSort";
+import { todayString } from "@/lib/dateFormat";
 import { useServerForm } from "@/lib/useServerForm";
 import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
@@ -857,7 +858,7 @@ function BlackoutTab() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: rows = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayString();
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const [name, setName] = useState("");

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { todayString } from "@/lib/dateFormat";
 import {
   Bar,
   BarChart,
@@ -42,12 +43,6 @@ import { LeaveRequestDialog } from "@/features/leave/MyLeavesPage";
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** 오늘(브라우저 시간) yyyy-MM-dd */
-function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /** "2026-10-08" → 자정 기준 Date */
 function parseIso(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
@@ -56,7 +51,7 @@ function parseIso(iso: string): Date {
 
 /** 오늘부터 그 날까지 남은 날 수(오늘 0, 내일 1) */
 function daysFromToday(iso: string): number {
-  return Math.round((parseIso(iso).getTime() - parseIso(todayIso()).getTime()) / DAY_MS);
+  return Math.round((parseIso(iso).getTime() - parseIso(todayString()).getTime()) / DAY_MS);
 }
 
 /** "2026-10-08" → "2026.10.08" */
@@ -349,7 +344,7 @@ function UpcomingHolidays({ className }: { className?: string }) {
   const year = new Date().getFullYear();
   const thisYear = useQuery({ queryKey: ["holidays", year], queryFn: () => holidayApi.list(year) });
   const nextYear = useQuery({ queryKey: ["holidays", year + 1], queryFn: () => holidayApi.list(year + 1) });
-  const today = todayIso();
+  const today = todayString();
   const upcoming: Holiday[] = [...(thisYear.data ?? []), ...(nextYear.data ?? [])]
     .filter((h) => h.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -397,7 +392,7 @@ function initial(name: string): string {
 function TeamSchedule({ className, leaves, loaded }: { className?: string; leaves: TeamLeave[]; loaded: boolean }) {
   const [range, setRange] = useState<"today" | "week">("today");
   const hasDept = useAuthStore((s) => s.user?.departmentId != null);
-  const today = todayIso();
+  const today = todayString();
   const shown = range === "today" ? leaves.filter((l) => l.startDate <= today && l.endDate >= today) : leaves;
   const people = [...new Map(shown.map((l) => [l.employeeId, l.employeeName])).entries()];
 

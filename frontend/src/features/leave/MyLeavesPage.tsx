@@ -19,6 +19,7 @@ import {
   SortableTableHead,
 } from "@/components/ui/table";
 import { useTableSort } from "@/lib/useTableSort";
+import { todayString } from "@/lib/dateFormat";
 import {
   Dialog,
   DialogContent,
@@ -236,7 +237,7 @@ export function LeaveRequestDialog({ onClose, onSaved }: {
   onClose: () => void;
   onSaved: (warning?: string | null) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayString();
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const form = useLeaveRequestForm({ start, end, onSaved });

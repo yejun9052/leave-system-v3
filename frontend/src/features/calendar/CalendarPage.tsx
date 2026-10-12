@@ -129,8 +129,8 @@ export default function CalendarPage() {
   const canApply = useAuthStore((s) => !!s.user);
   const [range, setRange] = useState<{ start: string; end: string }>(() => {
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-    const end = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().slice(0, 10);
+    const start = localDateString(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const end = localDateString(new Date(now.getFullYear(), now.getMonth() + 2, 0));
     return { start, end };
   });
   // 보기 탭은 주소(?view=department 등)와 맞춘다: 대시보드 "팀 캘린더 보기"가 부서 탭으로 바로 연다
@@ -437,8 +437,9 @@ export default function CalendarPage() {
   };
 
   const onDatesSet = (arg: DatesSetArg) => {
-    const start = arg.start.toISOString().slice(0, 10);
-    const end = arg.end.toISOString().slice(0, 10);
+    // 보이는 첫날 ~ 마지막 날(arg.end 는 다음 날 자정이라 1ms 앞). 서버는 끝 날짜를 포함한다
+    const start = localDateString(arg.start);
+    const end = localDateString(new Date(arg.end.getTime() - 1));
     setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
     // 모바일 요약 카드: 다른 달로 넘기면 그 달의 오늘(없으면 1일)을 보여 준다
     const month = localDateString(arg.view.currentStart).slice(0, 7);
@@ -690,12 +691,12 @@ function EventDialog({
   const isEdit = !!event;
   const [form, setForm] = useState<CalendarEventInput>({
     title: event?.title ?? "",
-    startDate: event?.start ?? new Date().toISOString().slice(0, 10),
+    startDate: event?.start ?? todayString(),
     // stored end is exclusive for allDay; convert back to inclusive for editing
     endDate:
       event && event.allDay
         ? new Date(new Date(event.end).getTime() - 86400000).toISOString().slice(0, 10)
-        : event?.end ?? new Date().toISOString().slice(0, 10),
+        : event?.end ?? todayString(),
     allDay: event?.allDay ?? true,
     scope: (event?.scope as "COMPANY" | "DEPARTMENT") ?? "COMPANY",
     departmentId: event?.departmentId ?? null,

@@ -37,6 +37,7 @@ import {
   SortableTableHead,
 } from "@/components/ui/table";
 import { useTableSort } from "@/lib/useTableSort";
+import { todayString } from "@/lib/dateFormat";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { invalidateOrgData } from "@/lib/invalidate";
 import {
@@ -410,7 +411,7 @@ function EmployeeDialog({
     departmentId: employee?.departmentId ?? null,
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
-    hireDate: employee?.hireDate ?? new Date().toISOString().slice(0, 10),
+    hireDate: employee?.hireDate ?? todayString(),
     role: employee?.role ?? "EMPLOYEE",
   });
 
