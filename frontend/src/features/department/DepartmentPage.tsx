@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { departmentApi } from "@/api/departments";
 import { flattenDepartments } from "@/lib/departmentTree";
+import { invalidateOrgData } from "@/lib/invalidate";
 import type { Department } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,7 +76,7 @@ export default function DepartmentPage() {
     queryFn: departmentApi.tree,
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["departments"] });
+  const invalidate = () => invalidateOrgData(qc);
 
   const nameById = useMemo(() => new Map(flattenDepartments(tree).map((d) => [d.id, d.name])), [tree]);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -414,11 +415,9 @@ function DepartmentDialog({
         return departmentApi.create({ name, parentId: mode.parentId });
       }
       if (mode.type === "edit") {
-        return departmentApi.update(mode.dept.id, {
-          name,
-          leadId: mode.dept.leadId, // 팀장은 사용자 관리에서 지정 (여기서는 보존)
-          sortOrder: mode.dept.sortOrder,
-        });
+        // 부서장은 사용자 관리에서 정한다. leadId 를 보내지 않으면 서버가 지금 부서장을 그대로 둔다
+        // (창을 연 때의 값을 보내면 그사이 사용자 관리에서 바뀐 부서장을 되돌려 버린다)
+        return departmentApi.update(mode.dept.id, { name, sortOrder: mode.dept.sortOrder });
       }
       return departmentApi.move(mode.dept.id, newParentId === "root" ? null : Number(newParentId));
     },

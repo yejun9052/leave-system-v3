@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/table";
 import { useTableSort } from "@/lib/useTableSort";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
+import { invalidateOrgData } from "@/lib/invalidate";
 import {
   Dialog,
   DialogContent,
@@ -115,7 +116,7 @@ export default function EmployeePage() {
     status: (e) => STATUS_RANK.indexOf(e.status),
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["employees"] });
+  const invalidate = () => invalidateOrgData(qc);
 
   const resignMutation = useMutation({
     mutationFn: (id: number) => employeeApi.resign(id),

@@ -7,6 +7,8 @@ interface AuthState {
   initialized: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   loadMe: () => Promise<void>;
+  /** 로그인한 채로 내 정보(이름·부서·권한)만 다시 받는다. 실패하면 그대로 둔다(세션이 끊겼으면 다음 요청이 로그인 화면으로 보냄) */
+  refreshMe: () => Promise<void>;
   logout: () => Promise<void>;
   hasAnyRole: (...roles: Role[]) => boolean;
   isManager: () => boolean;
@@ -34,6 +36,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user, initialized: true });
     } catch {
       set({ user: null, initialized: true });
+    }
+  },
+
+  refreshMe: async () => {
+    if (!get().user) return;
+    try {
+      const user = await authApi.me();
+      set({ user });
+    } catch {
+      // 그대로 둔다
     }
   },
 
