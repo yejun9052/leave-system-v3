@@ -87,7 +87,7 @@ export default function PolicyPage() {
         <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="policy">연차 정책</TabsTrigger>
           <TabsTrigger value="types">휴가 종류</TabsTrigger>
-          <TabsTrigger value="rules">포상 · 경조사</TabsTrigger>
+          <TabsTrigger value="rules">포상 · 경조사 · 공가</TabsTrigger>
           <TabsTrigger value="blackout">블랙아웃</TabsTrigger>
           <TabsTrigger value="holidays">공휴일</TabsTrigger>
           <TabsTrigger value="promotion">촉진 · 미사용</TabsTrigger>
@@ -679,21 +679,15 @@ function RulesTab() {
   const { data: awards = [] } = useQuery({ queryKey: ["awardRules"], queryFn: policyRulesApi.awards });
   const { data: specials = [] } = useQuery({ queryKey: ["specialRules"], queryFn: policyRulesApi.specials });
   const { data: types = [] } = useQuery({ queryKey: ["leaveTypes", "all"], queryFn: () => leaveTypeApi.list(true) });
-  // 규정을 붙일 수 있는 종류: 연차와 무관한 휴가(경조사·공가 등). 규정이 있으면 신청할 때 하나를 골라야 한다
+  // 규정을 붙일 수 있는 종류: 연차와 무관한 휴가(경조사·공가 등). 종류마다 카드를 따로 둔다
   const ruleTypes = types.filter((t) => t.annualDeductionMode === "NONE" && t.active);
+  // 종류가 꺼졌거나 연차 차감으로 바뀌어 카드가 없는 규정도 고치거나 지울 수 있게 따로 모아 보여 준다
+  const orphans = specials.filter((r) => !ruleTypes.some((t) => t.code === r.leaveTypeCode));
   const typeName = (code: string | null) => types.find((t) => t.code === code)?.name ?? code ?? "-";
 
   const [aYears, setAYears] = useState(5);
   const [aDays, setADays] = useState(3);
   const [aName, setAName] = useState("");
-  const [sName, setSName] = useState("");
-  const [sType, setSType] = useState("CONDOLENCE");
-  const [sDays, setSDays] = useState(1);
-  /** 연간 사용 횟수: 비우면 제한 없음 */
-  const [sLimit, setSLimit] = useState("");
-  const [editingSpecial, setEditingSpecial] = useState<SpecialRule | null>(null);
-  const sLimitValue = sLimit.trim() === "" ? null : Number(sLimit);
-  const sLimitInvalid = sLimitValue != null && (!Number.isInteger(sLimitValue) || sLimitValue < 1);
 
   const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
   const addAward = useMutation({
@@ -704,23 +698,6 @@ function RulesTab() {
   const delAward = useMutation({
     mutationFn: (id: number) => policyRulesApi.removeAward(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["awardRules"] }),
-    onError: err,
-  });
-  const addSpecial = useMutation({
-    mutationFn: () =>
-      policyRulesApi.createSpecial({
-        name: sName,
-        days: sDays,
-        leaveTypeCode: sType,
-        sortOrder: 0,
-        annualLimit: sLimitValue,
-      }),
-    onSuccess: () => { setSName(""); setSLimit(""); qc.invalidateQueries({ queryKey: ["specialRules"] }); },
-    onError: err,
-  });
-  const delSpecial = useMutation({
-    mutationFn: (id: number) => policyRulesApi.removeSpecial(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["specialRules"] }),
     onError: err,
   });
 
@@ -756,63 +733,109 @@ function RulesTab() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">경조사·공가 규정</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            규정이 있는 휴가 종류는 신청할 때 규정 하나를 골라야 하고, 규정 일수까지 쓸 수 있습니다(연차에서 빼지 않음).
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      {ruleTypes.map((t) => (
+        <SpecialRuleCard key={t.code} typeCode={t.code} typeName={t.name}
+          rules={specials.filter((r) => r.leaveTypeCode === t.code)} />
+      ))}
+      {orphans.length > 0 && <SpecialRuleCard typeName="그 밖의" rules={orphans} typeNameOf={typeName} />}
+    </div>
+  );
+}
+
+/** 경조사·공가처럼 연차와 무관한 휴가 종류 하나의 규정: 추가 칸 + 목록. 규정이 있으면 신청할 때 하나를 골라야 한다 */
+function SpecialRuleCard({
+  typeCode,
+  typeName,
+  rules,
+  typeNameOf,
+}: {
+  /** 규정을 추가할 휴가 종류. 없으면 목록만(신청에 쓰이지 않는 규정 모음) */
+  typeCode?: string;
+  typeName: string;
+  rules: SpecialRule[];
+  /** 여러 종류가 섞인 목록이면 종류 열을 보여 준다 */
+  typeNameOf?: (code: string | null) => string;
+}) {
+  const { toast } = useToast();
+  const confirm = useConfirm();
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const [days, setDays] = useState(1);
+  /** 연간 사용 횟수: 비우면 제한 없음 */
+  const [limit, setLimit] = useState("");
+  const [editing, setEditing] = useState<SpecialRule | null>(null);
+  const limitValue = limit.trim() === "" ? null : Number(limit);
+  const limitInvalid = limitValue != null && (!Number.isInteger(limitValue) || limitValue < 1);
+  const reasonLabel = typeCode === "CONDOLENCE" ? "사유/관계" : "사유";
+
+  const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
+  const add = useMutation({
+    mutationFn: () =>
+      policyRulesApi.createSpecial({ name, days, leaveTypeCode: typeCode!, sortOrder: 0, annualLimit: limitValue }),
+    onSuccess: () => { setName(""); setLimit(""); qc.invalidateQueries({ queryKey: ["specialRules"] }); },
+    onError: err,
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => policyRulesApi.removeSpecial(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["specialRules"] }),
+    onError: err,
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{typeName} 규정</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          {typeCode
+            ? "신청할 때 규정 하나를 골라야 하고, 규정 일수까지 쓸 수 있습니다(연차에서 빼지 않음)."
+            : "휴가 종류가 꺼졌거나 연차에서 빼는 방식으로 바뀌어, 신청할 때 쓰이지 않는 규정입니다."}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {typeCode && (
           <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1"><Label className="text-xs">휴가 종류</Label>
-              <Select value={sType} onValueChange={setSType}>
-                <SelectTrigger className="w-32" aria-label="규정을 붙일 휴가 종류"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {(ruleTypes.length ? ruleTypes : [{ code: "CONDOLENCE", name: "경조사 휴가" }]).map((t) => (
-                    <SelectItem key={t.code} value={t.code}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select></div>
-            <div className="space-y-1 flex-1"><Label className="text-xs">사유/관계</Label>
-              <Input value={sName} onChange={(e) => setSName(e.target.value)}
-                placeholder={sType === "OFFICIAL" ? "예: 예비군" : "예: 본인 결혼"} /></div>
+            <div className="space-y-1 flex-1"><Label className="text-xs">{reasonLabel}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={`${typeName} ${reasonLabel}`}
+                placeholder={typeCode === "CONDOLENCE" ? "예: 본인 결혼" : typeCode === "OFFICIAL" ? "예: 예비군" : "예: 사유"} /></div>
             <div className="space-y-1"><Label className="text-xs">일수</Label>
-              <Input type="number" step="0.5" className="w-20" value={sDays} onChange={(e) => setSDays(Number(e.target.value))} /></div>
+              <Input type="number" step="0.5" className="w-20" value={days} onChange={(e) => setDays(Number(e.target.value))}
+                aria-label={`${typeName} 일수`} /></div>
             <div className="space-y-1"><Label className="text-xs">연간 횟수</Label>
-              <Input type="number" min={1} className="w-28" value={sLimit} placeholder="제한 없음"
-                onChange={(e) => setSLimit(e.target.value)} /></div>
+              <Input type="number" min={1} className="w-28" value={limit} placeholder="제한 없음"
+                onChange={(e) => setLimit(e.target.value)} aria-label={`${typeName} 연간 횟수`} /></div>
             <Button
               size="sm"
               onClick={async () => {
                 const ok = await confirm({
-                  title: `${typeName(sType)} '${sName}' 규정을 추가할까요?`,
-                  description: `${sDays}일이 부여되는 규정으로 추가합니다.` +
-                    (sLimitValue != null ? ` 1년(1~12월)에 ${sLimitValue}회까지 쓸 수 있습니다.` : ""),
+                  title: `${typeName} '${name}' 규정을 추가할까요?`,
+                  description: `${days}일이 부여되는 규정으로 추가합니다.` +
+                    (limitValue != null ? ` 1년(1~12월)에 ${limitValue}회까지 쓸 수 있습니다.` : ""),
                   confirmText: "추가",
                 });
-                if (ok) addSpecial.mutate();
+                if (ok) add.mutate();
               }}
-              disabled={!sName.trim() || sLimitInvalid}
+              disabled={!name.trim() || limitInvalid}
             ><Plus className="h-4 w-4" /> 추가</Button>
           </div>
-          {sLimitInvalid && <p className="text-xs text-destructive">연간 횟수는 1 이상의 정수로 입력해 주세요.</p>}
-          <RuleTable
-            rows={specials.map((s) => ({
-              id: s.id,
-              cells: [typeName(s.leaveTypeCode), s.name, `${s.days}일`, s.annualLimit != null ? `${s.annualLimit}회` : "제한 없음"],
-              values: [typeName(s.leaveTypeCode), s.name, s.days, s.annualLimit ?? Number.MAX_SAFE_INTEGER],
-            }))}
-            headers={["종류", "사유/관계", "일수", "연간 횟수"]}
-            onEdit={(id) => setEditingSpecial(specials.find((s) => s.id === id) ?? null)}
-            onDelete={async (id) => {
-              const ok = await confirm({ title: "규정을 삭제할까요?", confirmText: "삭제", destructive: true });
-              if (ok) delSpecial.mutate(id);
-            }} />
-        </CardContent>
-      </Card>
-      {editingSpecial && <SpecialRuleEditDialog rule={editingSpecial} onClose={() => setEditingSpecial(null)} />}
-    </div>
+        )}
+        {limitInvalid && <p className="text-xs text-destructive">연간 횟수는 1 이상의 정수로 입력해 주세요.</p>}
+        <RuleTable
+          rows={rules.map((r) => {
+            const cells = [r.name, `${r.days}일`, r.annualLimit != null ? `${r.annualLimit}회` : "제한 없음"];
+            const values: SortValue[] = [r.name, r.days, r.annualLimit ?? Number.MAX_SAFE_INTEGER];
+            return typeNameOf
+              ? { id: r.id, cells: [typeNameOf(r.leaveTypeCode), ...cells], values: [typeNameOf(r.leaveTypeCode), ...values] }
+              : { id: r.id, cells, values };
+          })}
+          headers={typeNameOf ? ["종류", "사유", "일수", "연간 횟수"] : [reasonLabel, "일수", "연간 횟수"]}
+          onEdit={(id) => setEditing(rules.find((r) => r.id === id) ?? null)}
+          onDelete={async (id) => {
+            const ok = await confirm({ title: `${typeName} 규정을 삭제할까요?`, confirmText: "삭제", destructive: true });
+            if (ok) remove.mutate(id);
+          }} />
+      </CardContent>
+      {editing && <SpecialRuleEditDialog rule={editing} onClose={() => setEditing(null)} />}
+    </Card>
   );
 }
 
