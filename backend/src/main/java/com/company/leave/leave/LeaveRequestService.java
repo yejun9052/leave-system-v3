@@ -736,6 +736,7 @@ public class LeaveRequestService {
      *   <li>처리 대상: segments(등록이면 금지 기간 전체, 늘려 수정하면 새로 늘어난 날짜만)와 하루라도 겹치는 신청 건 전체</li>
      *   <li>결재 대기 → 자동 반려. 승인·취소 요청 중 → "모두 취소"면 자동 취소, "승인된 휴가만 유지"면 유지</li>
      *   <li>금지 기간에도 신청할 수 있는 종류(경조사·공가 등)는 처리하지 않는다(목록에서도 뺀다)</li>
+     *   <li>오늘 전에 시작한(이미 쓰고 있거나 지난) 휴가는 상태와 관계없이 처리하지 않는다(유지 목록)</li>
      * </ul>
      */
     @Transactional(readOnly = true)
@@ -750,9 +751,12 @@ public class LeaveRequestService {
                 .sorted(Comparator.comparing(LeaveRequest::getStartDate)
                         .thenComparing(r -> r.getEmployee().getName()))
                 .toList();
+        LocalDate today = LocalDate.now();
         for (LeaveRequest r : candidates) {
             boolean inSegment = segments.stream().anyMatch(s -> s.overlaps(r.getStartDate(), r.getEndDate()));
-            if (inSegment && r.isAwaitingApproval()) {
+            if (r.getStartDate().isBefore(today)) {
+                kept.add(r); // 이미 시작했거나 지난 휴가는 건드리지 않는다(지난 날짜를 금지 기간에 넣어도 쓴 연차가 돌아오지 않게)
+            } else if (inSegment && r.isAwaitingApproval()) {
                 reject.add(r);
             } else if (inSegment && mode == BlackoutConflictMode.CANCEL_ALL) {
                 cancel.add(r);
