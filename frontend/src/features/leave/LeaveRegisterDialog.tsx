@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { Loader2, Search, X } from "lucide-react";
 import { employeeApi } from "@/api/employees";
 import { leaveApi } from "@/api/leave";
@@ -97,10 +98,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
       }),
     onSuccess: () => {
       toast({ title: "휴가를 등록했습니다. 바로 승인 상태입니다.", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["calendarEvents"] });
-      qc.invalidateQueries({ queryKey: ["calendarDay"] });
-      qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
-      qc.invalidateQueries({ queryKey: ["leaveList"] });
+      invalidateLeaveData(qc);
       onClose();
     },
     onError: async (e) => {

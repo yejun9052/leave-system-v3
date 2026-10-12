@@ -335,13 +335,8 @@ export default function CalendarPage() {
     selector.clear();
   };
 
-  const onLeaveSaved = () => {
-    qc.invalidateQueries({ queryKey: ["myRequests"] });
-    qc.invalidateQueries({ queryKey: ["myBalance"] });
-    qc.invalidateQueries({ queryKey: ["calendarEvents"] });
-    qc.invalidateQueries({ queryKey: ["calendarDay"] });
-    closePanel();
-  };
+  // 다시 불러오기는 신청 폼(invalidateLeaveData)이 맡는다
+  const onLeaveSaved = () => closePanel();
 
   // 이름(제목) 검색은 휴가·일정만 거른다(공휴일·연차 제한·연차 기간 표시는 그대로). 모바일 돋보기와 같은 규칙
   const q = query.trim();
@@ -460,7 +455,11 @@ export default function CalendarPage() {
     if (ev && ev.editable) setEditing(ev);
   };
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["calendarEvents"] });
+  // 날짜 상세·모바일 요약 카드(calendarDay)도 일정을 보여 준다
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ["calendarEvents"] });
+    void qc.invalidateQueries({ queryKey: ["calendarDay"] });
+  };
 
   const remove = useMutation({
     mutationFn: (id: number) => calendarApi.remove(id),

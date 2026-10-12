@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import axios from "axios";
 import { CalendarPlus, Check, X, Inbox } from "lucide-react";
 import { leaveApi } from "@/api/leave";
@@ -91,11 +92,7 @@ export default function ApprovalsPage() {
     reason: (r) => (r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason),
   });
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
-    qc.invalidateQueries({ queryKey: ["calendarEvents"] });
-    qc.invalidateQueries({ queryKey: ["leaveList"] });
-  };
+  const invalidate = () => invalidateLeaveData(qc);
   const onError = (e: unknown) => {
     toast({ title: extractErrorMessage(e), variant: "destructive" });
     if (isAlreadyProcessed(e)) invalidate();

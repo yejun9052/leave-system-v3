@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { LEAVE_STATUS_LABEL, type LeaveRequestStatus } from "@/types";
@@ -70,9 +71,7 @@ export default function MyLeavesPage() {
         title: approved ? "취소 요청되었습니다. 결재자가 승인하면 확정됩니다." : "신청이 취소되었습니다.",
         variant: "success",
       });
-      qc.invalidateQueries({ queryKey: ["myRequests"] });
-      qc.invalidateQueries({ queryKey: ["myBalance"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      invalidateLeaveData(qc);
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
@@ -216,9 +215,6 @@ export default function MyLeavesPage() {
       {open && <LeaveRequestDialog onClose={() => setOpen(false)} onSaved={(warning) => {
         setRequestWarning(warning ?? null);
         setOpen(false);
-        qc.invalidateQueries({ queryKey: ["myRequests"] });
-        qc.invalidateQueries({ queryKey: ["myBalance"] });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
       }} />}
     </div>
   );

@@ -107,7 +107,8 @@ export default function PromotionTab() {
         variant: "success",
       });
       setSelected(new Set());
-      qc.invalidateQueries({ queryKey: ["promotionTargets"] });
+      // 자동화 탭의 "지금 실행하면 보낼 대상"과 알림도 바뀐다
+      for (const key of ["promotionTargets", "automation", "notifications"]) void qc.invalidateQueries({ queryKey: [key] });
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });

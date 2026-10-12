@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { Pencil, Plus, Save, Trash2, PlayCircle } from "lucide-react";
 import {
   policyApi,
@@ -145,14 +146,19 @@ function PolicyTab() {
     onSuccess: (saved) => {
       reset(policyForm(saved));
       toast({ title: "정책이 저장되었습니다.", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["policy"] });
+      void qc.invalidateQueries({ queryKey: ["policy"] });
+      // 반차·시간차 허용, 사전 신청 기한 등이 신청 미리보기와 잔여 연차에 바로 반영되게
+      invalidateLeaveData(qc);
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
   const grant = useMutation({
     mutationFn: () => leaveAdminApi.grantAll(),
-    onSuccess: (r) => toast({ title: `${r.granted}명 연차 부여/재계산 완료`, variant: "success" }),
+    onSuccess: (r) => {
+      toast({ title: `${r.granted}명 연차 부여/재계산 완료`, variant: "success" });
+      invalidateLeaveData(qc);
+    },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 

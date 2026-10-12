@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { leaveApi, type ApprovalRoute, type LeaveRequestCreate } from "@/api/leave";
 import { HALF_DAY_LABEL, type HalfDayPart, type LeaveType } from "@/types";
 import { Input } from "@/components/ui/input";
@@ -226,8 +227,8 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     onSuccess: (response) => {
       toast({ title: "휴가를 신청했습니다.", description: response.requestWarning ?? undefined,
         variant: response.requestWarning ? "default" : "success" });
-      qc.invalidateQueries({ queryKey: ["leavePreview"] });
-      qc.invalidateQueries({ queryKey: ["eligibility"] });
+      // 신청한 화면(내 휴가·대시보드·캘린더)과 상관없이 같은 목록을 새로 받는다
+      invalidateLeaveData(qc);
       onSaved(response.requestWarning);
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),

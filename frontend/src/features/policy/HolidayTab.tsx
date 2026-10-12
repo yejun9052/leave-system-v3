@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { RefreshCw } from "lucide-react";
 import { holidayApi, type HolidaySyncResult } from "@/api/holidays";
 import { extractErrorMessage } from "@/api/client";
@@ -33,7 +34,9 @@ export default function HolidayTab() {
     mutationFn: () => holidayApi.sync(year),
     onSuccess: (r) => {
       setResult(r);
-      qc.invalidateQueries({ queryKey: ["holidays", year] });
+      void qc.invalidateQueries({ queryKey: ["holidays"] });
+      // 공휴일이 바뀌면 캘린더 표시와 그날 휴가의 차감 일수(조정·환원)가 바뀐다
+      invalidateLeaveData(qc);
       toast({ title: `${r.year}년 공휴일 동기화 완료`, variant: "success" });
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),

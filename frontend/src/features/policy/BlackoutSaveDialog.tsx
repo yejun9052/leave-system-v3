@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import {
   BLACKOUT_CONFLICT_LABEL,
@@ -95,9 +96,9 @@ export default function BlackoutSaveDialog({
             : undefined,
         variant: "success",
       });
-      for (const key of ["blackouts", "leaveList", "pendingApprovals", "calendarEvents", "calendarDay", "myBalance"]) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
+      void qc.invalidateQueries({ queryKey: ["blackouts"] });
+      // 겹친 휴가가 자동 반려·취소됐을 수 있다
+      invalidateLeaveData(qc);
       onClose();
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),

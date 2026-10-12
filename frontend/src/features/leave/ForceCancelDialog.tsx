@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { extractErrorMessage } from "@/api/client";
 import { leaveApi } from "@/api/leave";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,7 @@ export default function ForceCancelDialog({ leave, onClose }: { leave: ForceCanc
     mutationFn: () => leaveApi.cancel(leave.id, reason.trim()),
     onSuccess: () => {
       toast({ title: "휴가를 강제 취소했습니다.", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["calendarDay"] });
-      qc.invalidateQueries({ queryKey: ["calendarEvents"] });
-      qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
-      qc.invalidateQueries({ queryKey: ["leaveList"] });
+      invalidateLeaveData(qc);
       onClose();
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),

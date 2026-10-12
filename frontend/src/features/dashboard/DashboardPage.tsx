@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -37,7 +37,6 @@ import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/components/ui/toast";
 import { LeaveRequestDialog } from "@/features/leave/MyLeavesPage";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -76,8 +75,6 @@ function period(start: string, end: string): string {
 export default function DashboardPage() {
   const { user, isManager } = useAuthStore();
   const manager = isManager();
-  const qc = useQueryClient();
-  const { toast } = useToast();
   const [applying, setApplying] = useState(false);
   const now = new Date();
 
@@ -103,11 +100,8 @@ export default function DashboardPage() {
       {applying && (
         <LeaveRequestDialog
           onClose={() => setApplying(false)}
-          onSaved={(warning) => {
-            setApplying(false);
-            if (warning) toast({ title: warning, variant: "destructive" });
-            for (const key of ["dashboard", "myRequests", "myBalance"]) qc.invalidateQueries({ queryKey: [key] });
-          }}
+          // 다시 불러오기와 경고(신청 완료 알림의 설명)는 신청 폼이 맡는다
+          onSaved={() => setApplying(false)}
         />
       )}
     </div>
