@@ -15,6 +15,7 @@ import com.company.leave.department.dto.DepartmentRequests;
 import com.company.leave.department.dto.DepartmentResponse;
 import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.domain.Employee;
+import com.company.leave.employee.domain.Role;
 import com.company.leave.employee.repository.EmployeeRepository;
 import java.time.LocalDate;
 import java.util.List;
@@ -139,7 +140,7 @@ class DepartmentServiceTreeAndMoveTest {
         }
 
         @Test
-        void 수정에서_팀장을_비우면_팀장이_해제되고_정렬순서가_없으면_그대로_둔다() {
+        void 이름만_고치면_부서장과_정렬순서는_그대로_둔다() {
             Department 개발팀 = new Department("개발팀", null, 3);
             ReflectionTestUtils.setField(개발팀, "id", 2L);
             개발팀.assignLead(employee(20L, "김팀장"));
@@ -148,8 +149,25 @@ class DepartmentServiceTreeAndMoveTest {
             DepartmentResponse updated = service.update(2L, new DepartmentRequests.Update("플랫폼팀", null, null));
 
             assertThat(updated.name()).isEqualTo("플랫폼팀");
-            assertThat(updated.leadId()).isNull();
+            assertThat(updated.leadId()).isEqualTo(20L); // 화면에 남은 옛 값(null)으로 지워지지 않는다
             assertThat(updated.sortOrder()).isEqualTo(3);
+        }
+
+        @Test
+        void 팀장_권한이_없거나_퇴사한_직원은_부서장으로_지정할_수_없다() {
+            Department 개발팀 = new Department("개발팀", null, 3);
+            ReflectionTestUtils.setField(개발팀, "id", 2L);
+            when(departments.findById(2L)).thenReturn(Optional.of(개발팀));
+            Employee 사원 = Employee.builder().email("e@company.com").name("이사원").role(Role.EMPLOYEE).build();
+            ReflectionTestUtils.setField(사원, "id", 31L);
+            when(employees.findById(31L)).thenReturn(Optional.of(사원));
+
+            assertThatThrownBy(() -> service.update(2L, new DepartmentRequests.Update("개발팀", 31L, null)))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
+                        assertThat(ex.getMessage()).contains("이사원");
+                    });
+            assertThat(개발팀.getLead()).isNull();
         }
     }
 
@@ -215,7 +233,7 @@ class DepartmentServiceTreeAndMoveTest {
 
     private static Employee employee(Long id, String name) {
         Employee e = Employee.builder().email("e" + id + "@company.com").name(name)
-                .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1)).build();
+                .passwordHash("hash").hireDate(LocalDate.of(2024, 1, 1)).role(Role.TEAM_LEAD).build();
         ReflectionTestUtils.setField(e, "id", id);
         return e;
     }

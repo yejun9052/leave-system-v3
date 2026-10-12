@@ -8,6 +8,7 @@ import com.company.leave.department.dto.DepartmentRequests;
 import com.company.leave.department.dto.DepartmentResponse;
 import com.company.leave.department.repository.DepartmentRepository;
 import com.company.leave.employee.domain.Employee;
+import com.company.leave.employee.domain.Role;
 import com.company.leave.employee.repository.EmployeeRepository;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -82,7 +83,7 @@ public class DepartmentService {
         int sortOrder = req.sortOrder() != null ? req.sortOrder() : 0;
         Department dept = new Department(req.name(), parent, sortOrder);
         if (req.leadId() != null) {
-            dept.assignLead(getEmployee(req.leadId()));
+            dept.assignLead(leadCandidate(req.leadId()));
         }
         Department saved = departmentRepository.save(dept);
         return toResponse(saved);
@@ -95,7 +96,11 @@ public class DepartmentService {
         if (req.sortOrder() != null) {
             dept.changeSortOrder(req.sortOrder());
         }
-        dept.assignLead(req.leadId() != null ? getEmployee(req.leadId()) : null);
+        // 부서장은 사용자 관리(팀장 권한·소속 부서)에서 자동으로 정해진다(DepartmentLeadSync).
+        // 보내지 않으면 그대로 둔다: 이름만 고칠 때 화면에 남아 있던 옛 값으로 덮어써 부서장이 지워지지 않게
+        if (req.leadId() != null) {
+            dept.assignLead(leadCandidate(req.leadId()));
+        }
         return toResponse(dept);
     }
 
@@ -143,6 +148,16 @@ public class DepartmentService {
     private Employee getEmployee(Long id) {
         return employeeRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND));
+    }
+
+    /** 부서장으로 지정할 수 있는 사람: 재직 중이고 팀장 이상 권한, 관리 전용 계정은 아님(결재함을 쓸 수 있어야 한다). */
+    private Employee leadCandidate(Long id) {
+        Employee e = getEmployee(id);
+        if (!e.isActive() || e.isSystemAccount() || !e.hasRole(Role.TEAM_LEAD)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT,
+                    "부서장은 재직 중인 팀장 이상 권한의 직원만 지정할 수 있습니다: " + e.getName());
+        }
+        return e;
     }
 
     private DepartmentResponse toResponse(Department d) {
