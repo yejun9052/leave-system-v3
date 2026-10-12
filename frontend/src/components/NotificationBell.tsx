@@ -84,6 +84,16 @@ export default function NotificationBell({ open, onOpenChange }: {
     return () => document.removeEventListener("mousedown", onClick);
   }, [setOpen]);
 
+  // Esc 로 닫는다
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, setOpen]);
+
   // 열면 모두 읽음(종을 누르든 상단 안내를 누르든 같음)
   useEffect(() => {
     if (!open || unread === 0) return;
@@ -95,7 +105,15 @@ export default function NotificationBell({ open, onOpenChange }: {
 
   return (
     <div className="relative" ref={ref}>
-      <Button variant="ghost" size="icon" onClick={toggle} className="relative" aria-label="알림">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={toggle}
+        className="relative"
+        aria-label="알림"
+        aria-expanded={open}
+        aria-controls="notification-panel"
+      >
         <Bell className="h-5 w-5" />
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -104,7 +122,11 @@ export default function NotificationBell({ open, onOpenChange }: {
         )}
       </Button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border bg-popover shadow-lg">
+        // 좁은 화면(360px)에서는 종 오른쪽의 이름 칸 때문에 320px 패널이 왼쪽으로 잘려, 화면 양옆 16px 에 맞춰 편다
+        <div
+          id="notification-panel"
+          className="fixed inset-x-4 top-16 z-50 overflow-hidden rounded-lg border bg-popover shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80"
+        >
           <div className="border-b px-4 py-2 text-sm font-semibold">알림</div>
           <ul className="max-h-96 overflow-y-auto">
             {items.length > 0 ? (
