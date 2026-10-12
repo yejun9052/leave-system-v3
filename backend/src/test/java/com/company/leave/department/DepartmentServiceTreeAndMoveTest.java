@@ -66,6 +66,29 @@ class DepartmentServiceTreeAndMoveTest {
         }
 
         @Test
+        void 부서_인원은_하위_부서까지_합치고_직속_인원은_따로_준다() {
+            Department 경영지원팀 = department(1L, "경영지원팀", null);
+            Department 일팀 = department(2L, "1팀", 경영지원팀);
+            Department 이팀 = department(3L, "2팀", 경영지원팀);
+            Department 파트 = department(4L, "1팀 파트", 일팀);
+            Department 연구소 = department(5L, "연구소", null);
+            when(departments.findAllByOrderBySortOrderAscNameAsc()).thenReturn(List.of(경영지원팀, 일팀, 이팀, 파트, 연구소));
+            when(employees.countGroupByDepartment()).thenReturn(List.<Object[]>of(
+                    new Object[] {1L, 2L}, new Object[] {2L, 3L}, new Object[] {3L, 4L}, new Object[] {4L, 1L},
+                    new Object[] {5L, 6L}));
+
+            List<DepartmentResponse> tree = service.getTree();
+
+            DepartmentResponse 경영 = tree.get(0);
+            assertThat(경영.memberCount()).isEqualTo(10L); // 2 + 1팀(3 + 파트 1) + 2팀 4
+            assertThat(경영.directMemberCount()).isEqualTo(2L);
+            assertThat(경영.children()).extracting(DepartmentResponse::memberCount).containsExactly(4L, 4L);
+            assertThat(경영.children().get(0).directMemberCount()).isEqualTo(3L);
+            assertThat(tree.get(1).memberCount()).isEqualTo(6L); // 다른 트리에는 더하지 않는다
+            assertThat(service.getFlat()).extracting(DepartmentResponse::memberCount).containsExactly(10L, 4L, 4L, 1L, 6L);
+        }
+
+        @Test
         void 상위_부서를_찾을_수_없는_부서는_최상위에_보인다() {
             Department 없는상위 = department(9L, "사라진 상위", null);
             Department 고아 = department(2L, "고아 부서", 없는상위);

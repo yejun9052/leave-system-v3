@@ -22,10 +22,6 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
     @Query("select count(e) from Employee e where e.department.id = :departmentId")
     long countByDepartmentId(@Param("departmentId") Long departmentId);
 
-    /** 부서 소속 직원 수(관리 전용 계정 포함). 화면 표시용. */
-    @Query("select count(e) from Employee e where e.department.id = :departmentId")
-    long countMembersByDepartmentId(@Param("departmentId") Long departmentId);
-
     /** 상태별 전체(관리 전용 계정 포함). 연차 부여용: 관리 전용 계정도 휴가를 쓸 수 있다. */
     List<Employee> findByStatus(EmployeeStatus status);
 

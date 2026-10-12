@@ -11,8 +11,10 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.repository.EmployeeRepository;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,13 +37,14 @@ public class DepartmentService {
     @Transactional(readOnly = true)
     public List<DepartmentResponse> getTree() {
         List<Department> all = departmentRepository.findAllByOrderBySortOrderAscNameAsc();
-        Map<Long, Long> memberCounts = memberCountMap();
+        Map<Long, Long> direct = memberCountMap();
+        Map<Long, Long> total = withSubtree(all, direct);
 
         Map<Long, DepartmentResponse> nodes = new HashMap<>();
         for (Department d : all) {
             String leadName = d.getLead() != null ? d.getLead().getName() : null;
             nodes.put(d.getId(), DepartmentResponse.of(d, leadName,
-                    memberCounts.getOrDefault(d.getId(), 0L)));
+                    total.getOrDefault(d.getId(), 0L), direct.getOrDefault(d.getId(), 0L)));
         }
 
         List<DepartmentResponse> roots = new ArrayList<>();
@@ -63,11 +66,13 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public List<DepartmentResponse> getFlat() {
-        Map<Long, Long> memberCounts = memberCountMap();
-        return departmentRepository.findAllByOrderBySortOrderAscNameAsc().stream()
+        List<Department> all = departmentRepository.findAllByOrderBySortOrderAscNameAsc();
+        Map<Long, Long> direct = memberCountMap();
+        Map<Long, Long> total = withSubtree(all, direct);
+        return all.stream()
                 .map(d -> DepartmentResponse.of(d,
                         d.getLead() != null ? d.getLead().getName() : null,
-                        memberCounts.getOrDefault(d.getId(), 0L)))
+                        total.getOrDefault(d.getId(), 0L), direct.getOrDefault(d.getId(), 0L)))
                 .toList();
     }
 
@@ -141,9 +146,31 @@ public class DepartmentService {
     }
 
     private DepartmentResponse toResponse(Department d) {
+        Map<Long, Long> direct = memberCountMap();
+        long own = direct.getOrDefault(d.getId(), 0L);
+        long total = withSubtree(departmentRepository.findAllByOrderBySortOrderAscNameAsc(), direct)
+                .getOrDefault(d.getId(), own);
         return DepartmentResponse.of(d,
                 d.getLead() != null ? d.getLead().getName() : null,
-                employeeRepository.countMembersByDepartmentId(d.getId()));
+                total, own);
+    }
+
+    /**
+     * 하위 부서까지 합친 인원: 각 부서의 직속 인원을 자기와 모든 상위 부서에 더한다.
+     * 목록에 없는 상위(고아)에서 멈추고, 혹시 모를 순환에서도 멈춘다.
+     */
+    static Map<Long, Long> withSubtree(List<Department> all, Map<Long, Long> direct) {
+        Set<Long> ids = new HashSet<>();
+        all.forEach(d -> ids.add(d.getId()));
+        Map<Long, Long> total = new HashMap<>();
+        for (Department d : all) {
+            long count = direct.getOrDefault(d.getId(), 0L);
+            Set<Long> seen = new HashSet<>();
+            for (Department p = d; p != null && ids.contains(p.getId()) && seen.add(p.getId()); p = p.getParent()) {
+                total.merge(p.getId(), count, Long::sum);
+            }
+        }
+        return total;
     }
 
     private Map<Long, Long> memberCountMap() {

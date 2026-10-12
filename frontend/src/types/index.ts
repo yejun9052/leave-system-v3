@@ -42,7 +42,10 @@ export interface Department {
   leadId: number | null;
   leadName: string | null;
   sortOrder: number;
+  /** 인원: 하위 부서까지 합친 수 */
   memberCount: number;
+  /** 직속 인원 */
+  directMemberCount: number;
   children: Department[];
 }
 

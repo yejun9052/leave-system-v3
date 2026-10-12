@@ -341,7 +341,11 @@ function DeptNode({
               팀장 {dept.leadName}
             </Badge>
           )}
-          <Badge variant="outline" className="gap-1 text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="gap-1 text-muted-foreground"
+            title={`하위 부서 포함 ${dept.memberCount}명 · 직속 ${dept.directMemberCount}명`}
+          >
             <Users className="h-3 w-3" /> {dept.memberCount}
           </Badge>
         </button>
