@@ -16,9 +16,7 @@ import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.repository.LeaveTypeRepository;
 import com.company.leave.policy.PolicyService;
-import com.company.leave.policy.domain.ServiceAwardRule;
 import com.company.leave.policy.domain.SpecialLeaveRule;
-import com.company.leave.policy.repository.ServiceAwardRuleRepository;
 import com.company.leave.policy.repository.SpecialLeaveRuleRepository;
 import java.time.LocalDate;
 import java.util.List;
@@ -44,7 +42,6 @@ class LeaveDataInitializerTest {
     @Mock private LeaveTypeRepository leaveTypeRepository;
     @Mock private HolidayRepository holidayRepository;
     @Mock private PolicyService policyService;
-    @Mock private ServiceAwardRuleRepository awardRuleRepository;
     @Mock private SpecialLeaveRuleRepository specialRuleRepository;
 
     @Test
@@ -70,13 +67,12 @@ class LeaveDataInitializerTest {
     }
 
     @Test
-    void 처음_설치하면_근속_포상과_경조사_규정을_만든다() {
+    void 처음_설치하면_경조사_규정을_만들고_근속_포상_규칙은_만들지_않는다() {
         비어_있음();
 
         초기화(null);
 
-        List<ServiceAwardRule> awards = 저장된_목록(awardRuleRepository);
-        assertThat(awards).extracting(ServiceAwardRule::getYears).containsExactly(5, 10, 20);
+        // 포상 규칙은 관리자가 직접 등록한다(초기화는 포상 규칙 저장소를 쓰지 않는다)
         List<SpecialLeaveRule> rules = 저장된_목록(specialRuleRepository);
         assertThat(rules).extracting(SpecialLeaveRule::getName)
                 .containsExactly("본인 결혼", "배우자 출산", "자녀 결혼", "부모/배우자 사망", "조부모/형제자매 사망");
@@ -96,13 +92,11 @@ class LeaveDataInitializerTest {
     void 이미_데이터가_있으면_아무것도_만들지_않는다() {
         when(leaveTypeRepository.count()).thenReturn(7L);
         when(holidayRepository.count()).thenReturn(19L);
-        when(awardRuleRepository.count()).thenReturn(3L);
         when(specialRuleRepository.count()).thenReturn(5L);
 
         초기화(null);
 
         verify(leaveTypeRepository, never()).saveAll(anyList());
-        verify(awardRuleRepository, never()).saveAll(anyList());
         verify(specialRuleRepository, never()).saveAll(anyList());
         verify(holidayRepository, never()).save(any());
         verify(policyService).getActivePolicy();
@@ -142,13 +136,12 @@ class LeaveDataInitializerTest {
     private void 비어_있음() {
         when(leaveTypeRepository.count()).thenReturn(0L);
         when(holidayRepository.count()).thenReturn(0L);
-        when(awardRuleRepository.count()).thenReturn(0L);
         when(specialRuleRepository.count()).thenReturn(0L);
     }
 
     private void 초기화(String holidayApiKey) {
-        new LeaveDataInitializer(leaveTypeRepository, holidayRepository, policyService, awardRuleRepository,
-                specialRuleRepository, new HolidayApiProperties("https://example.invalid", holidayApiKey))
+        new LeaveDataInitializer(leaveTypeRepository, holidayRepository, policyService, specialRuleRepository,
+                new HolidayApiProperties("https://example.invalid", holidayApiKey))
                 .run(new DefaultApplicationArguments());
     }
 

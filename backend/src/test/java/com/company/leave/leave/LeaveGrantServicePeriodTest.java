@@ -17,7 +17,6 @@ import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.repository.LeaveBalanceRepository;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.LeavePolicy;
-import com.company.leave.policy.repository.ServiceAwardRuleRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -52,7 +51,6 @@ class LeaveGrantServicePeriodTest {
     @Mock private LeaveBalanceRepository balanceRepository;
     @Mock private LeaveBalanceService balanceService;
     @Mock private PolicyService policyService;
-    @Mock private ServiceAwardRuleRepository awardRuleRepository;
 
     private LeaveGrantService service;
     private final LeavePolicy policy = LeavePolicy.createDefault();
@@ -63,7 +61,7 @@ class LeaveGrantServicePeriodTest {
     @BeforeEach
     void setUp() {
         service = new LeaveGrantService(employeeRepository, balanceRepository, balanceService, PERIODS,
-                policyService, awardRuleRepository);
+                policyService);
         직원 = Employee.builder().email("user@company.com").passwordHash("h").name("홍길동").hireDate(입사).build();
         ReflectionTestUtils.setField(직원, "id", 10L);
         지금_기간 = PERIODS.currentYear(입사, policy);

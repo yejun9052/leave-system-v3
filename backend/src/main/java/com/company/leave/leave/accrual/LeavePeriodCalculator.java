@@ -6,6 +6,7 @@ import com.company.leave.policy.domain.LeavePolicy;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,10 +25,19 @@ public class LeavePeriodCalculator {
 
     private final LeaveAccrualCalculator accrualCalculator;
     private final WorkdayCalculator workdayCalculator;
+    private final ServiceAwardLookup awards;
 
+    /** 포상 없이 계산만(테스트 등). */
     public LeavePeriodCalculator(LeaveAccrualCalculator accrualCalculator, WorkdayCalculator workdayCalculator) {
+        this(accrualCalculator, workdayCalculator, ServiceAwardLookup.NONE);
+    }
+
+    @Autowired
+    public LeavePeriodCalculator(LeaveAccrualCalculator accrualCalculator, WorkdayCalculator workdayCalculator,
+                                 ServiceAwardLookup awards) {
         this.accrualCalculator = accrualCalculator;
         this.workdayCalculator = workdayCalculator;
+        this.awards = awards;
     }
 
     /** 연차 기간 [start, end] (양 끝 포함). */
@@ -67,12 +77,24 @@ public class LeavePeriodCalculator {
     /**
      * year 기간에 부여할(또는 부여될 것으로 예상하는) 연차 일수. 이월분은 넣지 않는다.
      * 입사 첫 기간(1년 미만)은 오늘까지 쌓인 월차, 그 뒤 기간은 기간 시작일 기준 근속 연차.
+     * 기간 시작일에 근속 N년이 되었고 N년 포상 규칙이 있으면 그 기간에 한 번 포상 일수를 더한다.
      */
     public BigDecimal entitlement(LocalDate hireDate, int year, LeavePolicy policy) {
         if (hireDate == null) {
             return BigDecimal.ZERO;
         }
-        return accrualCalculator.annualEntitlement(hireDate, referenceDate(hireDate, year, policy), policy);
+        BigDecimal base = accrualCalculator.annualEntitlement(hireDate, referenceDate(hireDate, year, policy), policy);
+        return base.add(serviceAward(hireDate, year, policy));
+    }
+
+    /** year 기간의 장기근속 포상 일수: 기간 시작일에 채운 근속 연수의 포상 규칙(없으면 0). */
+    public BigDecimal serviceAward(LocalDate hireDate, int year, LeavePolicy policy) {
+        if (hireDate == null) {
+            return BigDecimal.ZERO;
+        }
+        LocalDate start = startOf(hireDate, year, policy);
+        int years = start.isBefore(hireDate) ? 0 : LeaveAccrualCalculator.completedYears(hireDate, start);
+        return years < 1 ? BigDecimal.ZERO : awards.bonusDays(years); // 입사 첫 기간에는 포상이 없다
     }
 
     /** 연차 산정 기준일. */

@@ -10,7 +10,6 @@ import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.repository.LeaveBalanceRepository;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.LeavePolicy;
-import com.company.leave.policy.repository.ServiceAwardRuleRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import org.slf4j.Logger;
@@ -33,20 +32,17 @@ public class LeaveGrantService {
     private final LeaveBalanceService balanceService;
     private final LeavePeriodCalculator periods;
     private final PolicyService policyService;
-    private final ServiceAwardRuleRepository awardRuleRepository;
 
     public LeaveGrantService(EmployeeRepository employeeRepository,
                              LeaveBalanceRepository balanceRepository,
                              LeaveBalanceService balanceService,
                              LeavePeriodCalculator periods,
-                             PolicyService policyService,
-                             ServiceAwardRuleRepository awardRuleRepository) {
+                             PolicyService policyService) {
         this.employeeRepository = employeeRepository;
         this.balanceRepository = balanceRepository;
         this.balanceService = balanceService;
         this.periods = periods;
         this.policyService = policyService;
-        this.awardRuleRepository = awardRuleRepository;
     }
 
     /** 특정 사용자의 특정 연차 기간을 (재)부여한다. 이월 규칙도 함께 반영. */
@@ -111,14 +107,8 @@ public class LeaveGrantService {
     }
 
     private LeaveBalance grant(Employee employee, int year, LeavePolicy policy) {
+        // 장기근속 포상(근속 N년이 되는 기간에 한 번)도 포함된 부여 일수
         BigDecimal entitlement = periods.entitlement(employee.getHireDate(), year, policy);
-
-        // [일시 중지 2026-09-30] 장기근속 포상 자동 가산. 정책 정리 전까지 연차 부여에 포상을 더하지 않는다.
-        // 다시 켤 때: 근속 연수는 LeaveAccrualCalculator.completedYears(2월 29일 입사자도 기념일 기준)를 쓸 것.
-        // int completedYears = LeaveAccrualCalculator.completedYears(employee.getHireDate(), periodStart);
-        // BigDecimal bonus = awardRuleRepository.findByYears(completedYears)
-        //         .map(r -> r.getBonusDays()).orElse(BigDecimal.ZERO);
-        // entitlement = entitlement.add(bonus);
 
         LeaveBalance balance = balanceService.getOrCreate(employee.getId(), year);
         balance.setGranted(entitlement);

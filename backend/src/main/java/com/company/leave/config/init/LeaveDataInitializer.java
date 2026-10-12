@@ -8,9 +8,7 @@ import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.repository.LeaveTypeRepository;
 import com.company.leave.policy.PolicyService;
-import com.company.leave.policy.domain.ServiceAwardRule;
 import com.company.leave.policy.domain.SpecialLeaveRule;
-import com.company.leave.policy.repository.ServiceAwardRuleRepository;
 import com.company.leave.policy.repository.SpecialLeaveRuleRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -35,20 +33,17 @@ public class LeaveDataInitializer implements ApplicationRunner {
     private final LeaveTypeRepository leaveTypeRepository;
     private final HolidayRepository holidayRepository;
     private final PolicyService policyService;
-    private final ServiceAwardRuleRepository awardRuleRepository;
     private final SpecialLeaveRuleRepository specialRuleRepository;
     private final HolidayApiProperties holidayApiProperties;
 
     public LeaveDataInitializer(LeaveTypeRepository leaveTypeRepository,
                                 HolidayRepository holidayRepository,
                                 PolicyService policyService,
-                                ServiceAwardRuleRepository awardRuleRepository,
                                 SpecialLeaveRuleRepository specialRuleRepository,
                                 HolidayApiProperties holidayApiProperties) {
         this.leaveTypeRepository = leaveTypeRepository;
         this.holidayRepository = holidayRepository;
         this.policyService = policyService;
-        this.awardRuleRepository = awardRuleRepository;
         this.specialRuleRepository = specialRuleRepository;
         this.holidayApiProperties = holidayApiProperties;
     }
@@ -81,13 +76,7 @@ public class LeaveDataInitializer implements ApplicationRunner {
             log.info("2026년 공휴일 시드 완료(공휴일 API 키 없음 → 하드코딩 대체 데이터)");
         }
 
-        if (awardRuleRepository.count() == 0) {
-            awardRuleRepository.saveAll(List.of(
-                    new ServiceAwardRule(5, new BigDecimal("3.0"), "5년 근속 포상"),
-                    new ServiceAwardRule(10, new BigDecimal("5.0"), "10년 근속 포상"),
-                    new ServiceAwardRule(20, new BigDecimal("10.0"), "20년 근속 포상")));
-            log.info("장기근속 포상 규칙 시드 완료");
-        }
+        // 장기근속 포상 규칙은 기본으로 넣지 않는다. 관리자가 정책 › 포상·경조사에서 직접 등록한다
 
         if (specialRuleRepository.count() == 0) {
             specialRuleRepository.saveAll(List.of(
