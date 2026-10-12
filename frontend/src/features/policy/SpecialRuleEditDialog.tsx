@@ -53,7 +53,8 @@ export default function SpecialRuleEditDialog({ rule, onClose }: { rule: Special
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>사유/관계</Label>
+            {/* 카드와 같게: 경조사는 "사유/관계", 공가 등은 "사유" */}
+            <Label>{rule.leaveTypeCode === "CONDOLENCE" ? "사유/관계" : "사유"}</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">

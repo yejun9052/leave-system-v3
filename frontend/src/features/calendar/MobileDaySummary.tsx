@@ -27,7 +27,7 @@ interface SummaryItem {
 }
 
 /**
- * 모바일: 고른 날의 요약(큰 날짜·요일·연월, 일정 카드 목록)과 "+ 추가"·하단 추가 버튼. 달력 아래에 둔다.
+ * 모바일: 고른 날의 요약(큰 날짜·요일·연월, 일정 카드 목록)과 "+ 휴가 신청"·하단 신청 버튼. 달력 아래에 둔다.
  * 이름 검색어가 있으면 휴가·일정을 이름(제목)으로 거른다(공휴일·연차 제한은 그대로).
  */
 export default function MobileDaySummary({
@@ -106,7 +106,7 @@ export default function MobileDaySummary({
             onClick={() => onApply(date)}
             className="rounded-full border border-primary px-3 py-1.5 text-xs font-semibold text-primary"
           >
-            + 추가
+            + 휴가 신청
           </button>
         )}
       </div>
@@ -140,7 +140,7 @@ export default function MobileDaySummary({
           className="flex h-14 w-full items-center justify-between rounded-full bg-secondary px-6 text-secondary-foreground"
         >
           <span className="font-semibold">
-            {m}월 {d}일에 추가
+            {m}월 {d}일 휴가 신청
           </span>
           <Plus className="h-6 w-6" aria-hidden />
         </button>

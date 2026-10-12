@@ -171,7 +171,7 @@ function PromotionAutomation({
           <p className="mb-2 font-medium">발송 규칙</p>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>
-              매일 <b className="text-foreground">09:00</b>에 직원마다 사용 기한(입사 기념일 전날)을 확인해, 고른 시기에
+              매일 <b className="text-foreground">09:00</b>에 직원마다 사용 기한(연차 기간의 마지막 날)을 확인해, 고른 시기에
               들어왔고 남은 연차가 있으면 안내 메일과 앱 알림을 보냅니다.
             </li>
             <li>

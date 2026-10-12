@@ -497,7 +497,7 @@ function LeaveTypeTab() {
                     </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{t.code}</TableCell>
-                  <TableCell>{formatDays(t.deductDays)}</TableCell>
+                  <TableCell>{formatDays(t.deductDays)}일</TableCell>
                   <TableCell>{PORTION_LABEL[t.portion] ?? "-"}</TableCell>
                   <TableCell>{ANNUAL_DEDUCTION_LABEL[t.annualDeductionMode] ?? "-"}</TableCell>
                   <TableCell>{t.allowedDuringBlackout ? "가능" : "-"}</TableCell>

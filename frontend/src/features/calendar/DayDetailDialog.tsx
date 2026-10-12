@@ -161,7 +161,8 @@ export default function DayDetailDialog({
             </section>
 
             <section className="space-y-2">
-              <h3 className="text-sm font-semibold">회사 일정</h3>
+              {/* 회사 일정과 부서 일정이 함께 나온다 */}
+              <h3 className="text-sm font-semibold">일정</h3>
               {events.length === 0 ? (
                 <p className="text-sm text-muted-foreground">등록된 일정이 없습니다.</p>
               ) : (
