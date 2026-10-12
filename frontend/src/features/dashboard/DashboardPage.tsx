@@ -300,12 +300,13 @@ function UsageDonut({ className, used, remaining, expired, granted, periodEnd }:
   const empty = slices.length === 0;
 
   return (
-    <Card className={className}>
+    <Card className={cn("flex flex-col", className)}>
       <CardHeader className="pb-2">
         <CardTitle className="text-lg">내 연차 사용 현황</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col items-center gap-6 sm:flex-row sm:justify-center">
+      {/* 옆 카드가 더 길어도 차트는 남는 높이의 가운데, 안내 문구는 카드 맨 아래 */}
+      <CardContent className="flex flex-1 flex-col gap-4">
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 sm:flex-row">
           <div className="relative h-48 w-48 shrink-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -330,7 +331,7 @@ function UsageDonut({ className, used, remaining, expired, granted, periodEnd }:
             </div>
           </div>
         </div>
-        <p className="text-center text-xs text-muted-foreground">
+        <p className="mt-auto text-center text-xs text-muted-foreground">
           {periodEnd
             ? `남은 연차는 사용 기한(${dotted(periodEnd)})이 지나면 회사 정책에 따라 이월되거나 소멸됩니다.`
             : "미사용 연차는 회사 정책에 따라 처리됩니다."}
@@ -407,7 +408,7 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
   const people = [...new Map(shown.map((l) => [l.employeeId, l.employeeName])).entries()];
 
   return (
-    <Card className={className}>
+    <Card className={cn("flex flex-col", className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">팀 일정</CardTitle>
         <Select value={range} onValueChange={(v) => setRange(v as "today" | "week")}>
@@ -420,11 +421,14 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
           </SelectContent>
         </Select>
       </CardHeader>
-      <CardContent className="space-y-4">
+      {/* 옆 카드가 더 길어도 "팀 캘린더 보기"는 카드 맨 아래, 비었을 때 안내는 남는 높이의 가운데 */}
+      <CardContent className="flex flex-1 flex-col gap-4">
         {!hasDept ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">부서가 정해지지 않아 팀 일정이 없습니다.</p>
+          <p className="flex flex-1 items-center justify-center py-8 text-center text-sm text-muted-foreground">
+            부서가 정해지지 않아 팀 일정이 없습니다.
+          </p>
         ) : shown.length === 0 ? (
-          <div className="flex flex-col items-center gap-1 py-6 text-center">
+          <div className="flex flex-1 flex-col items-center justify-center gap-1 py-6 text-center">
             <Users className="mb-2 h-8 w-8 text-muted-foreground" />
             <p className="font-medium">
               {!loaded ? "불러오는 중…" : range === "today" ? "오늘 휴가 중인 팀원이 없어요" : "이번 주 휴가 예정인 팀원이 없어요"}
@@ -432,7 +436,7 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
             {loaded && <p className="text-sm text-muted-foreground">모두 함께 근무 중이에요! 🎉</p>}
           </div>
         ) : (
-          <>
+          <div className="flex-1 space-y-4">
             <div className="flex -space-x-2">
               {people.slice(0, 4).map(([id, name]) => (
                 <span key={id} title={name}
@@ -458,9 +462,9 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
               ))}
               {shown.length > 5 && <li className="text-xs text-muted-foreground">외 {shown.length - 5}건</li>}
             </ul>
-          </>
+          </div>
         )}
-        <div className="flex justify-end">
+        <div className="mt-auto flex justify-end">
           <Link to="/calendar?view=department" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
             팀 캘린더 보기 <ArrowRight className="h-4 w-4" />
           </Link>
