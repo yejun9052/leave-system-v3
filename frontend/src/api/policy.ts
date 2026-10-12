@@ -95,8 +95,6 @@ export interface Blackout {
 export const policyRulesApi = {
   awards: () => unwrap<AwardRule[]>(api.get("/policy/award-rules")),
   createAward: (b: Omit<AwardRule, "id">) => unwrap<AwardRule>(api.post("/policy/award-rules", b)),
-  updateAward: (id: number, b: Omit<AwardRule, "id">) =>
-    unwrap<AwardRule>(api.put(`/policy/award-rules/${id}`, b)),
   removeAward: (id: number) => unwrap<void>(api.delete(`/policy/award-rules/${id}`)),
 
   specials: () => unwrap<SpecialRule[]>(api.get("/policy/special-rules")),
