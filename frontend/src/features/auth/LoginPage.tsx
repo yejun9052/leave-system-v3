@@ -70,15 +70,24 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-primary"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-              />
-              로그인 유지 <span className="text-muted-foreground">(30일 · 공용 PC에서는 체크하지 마세요)</span>
-            </label>
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 shrink-0 accent-primary"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  aria-describedby="remember-me-note"
+                />
+                <span className="whitespace-nowrap">
+                  로그인 유지 <span className="text-muted-foreground">(30일)</span>
+                </span>
+              </label>
+              {/* 좁은 화면에서 첫 줄이 쪼개지지 않게 주의 문구는 아래 줄로(체크박스 폭만큼 들여쓰기) */}
+              <p id="remember-me-note" className="pl-6 text-xs text-muted-foreground">
+                공용 PC에서는 체크하지 마세요.
+              </p>
+            </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
