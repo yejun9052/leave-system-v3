@@ -61,7 +61,7 @@ class AutomationServiceTest {
         assertThat(o.jobs()).extracting(AutomationService.Job::schedule)
                 .containsExactly("매일 00:10", "매일 01:00", "매일 09:00", "매일 02:00");
         assertThat(o.jobs()).extracting(AutomationService.Job::state).containsExactly(
-                AutomationService.State.ALWAYS, AutomationService.State.ALWAYS, AutomationService.State.OFF,
+                AutomationService.State.ALWAYS, AutomationService.State.ALWAYS, AutomationService.State.ON,
                 AutomationService.State.ON);
     }
 
@@ -83,6 +83,16 @@ class AutomationServiceTest {
         AutomationService.Job promotion = o.jobs().get(2);
         assertThat(promotion.state()).isEqualTo(AutomationService.State.ON);
         assertThat(promotion.description()).contains("기한 6개월 전·2개월 전");
+    }
+
+    @Test
+    void 촉진_자동_발송을_끄면_꺼짐이다() {
+        policy.applyAutomation(false, List.of(6, 2));
+
+        AutomationService.Overview o = service.overview();
+
+        assertThat(o.promotionEnabled()).isFalse();
+        assertThat(o.jobs().get(2).state()).isEqualTo(AutomationService.State.OFF);
     }
 
     @Test

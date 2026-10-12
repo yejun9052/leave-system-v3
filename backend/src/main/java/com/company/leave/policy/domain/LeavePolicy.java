@@ -87,7 +87,7 @@ public class LeavePolicy extends BaseTimeEntity {
     // --- 촉진 / 이월 ---
     /** 연차 촉진 자동 발송 ON/OFF. 자동화 탭에서 따로 저장한다({@link #applyAutomation}). */
     @Column(name = "promotion_enabled", nullable = false)
-    private boolean promotionEnabled = false;
+    private boolean promotionEnabled = true;
 
     /** 자동 발송 시기: 사용 기한 몇 개월 전(1~6, 쉼표 구분, 예 "6,2"). */
     @Column(name = "promotion_months", nullable = false, length = 20)

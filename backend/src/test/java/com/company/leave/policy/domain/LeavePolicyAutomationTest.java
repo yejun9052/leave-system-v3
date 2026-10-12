@@ -14,10 +14,10 @@ import org.junit.jupiter.api.Test;
 class LeavePolicyAutomationTest {
 
     @Test
-    void 기본은_꺼져_있고_발송_시기는_6개월_전과_2개월_전이다() {
+    void 기본은_켜져_있고_발송_시기는_6개월_전과_2개월_전이다() {
         LeavePolicy policy = LeavePolicy.createDefault();
 
-        assertThat(policy.isPromotionEnabled()).isFalse();
+        assertThat(policy.isPromotionEnabled()).isTrue();
         assertThat(policy.getPromotionMonths()).containsExactly(6, 2);
     }
 
