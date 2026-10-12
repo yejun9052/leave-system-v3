@@ -135,6 +135,12 @@ function formatDays(days: Set<number>): string {
   return parts.join(",");
 }
 
+/** 보관 기간 칸 값이 1~24 개월(정수)인지 */
+function isValidKeepMonths(text: string): boolean {
+  const months = Number(text);
+  return text.trim() !== "" && Number.isInteger(months) && months >= 1 && months <= 24;
+}
+
 function toForm(s: BackupSettings): BackupSettingsForm {
   return { enabled: s.enabled, cron: s.cron, keepMonths: s.keepMonths };
 }
@@ -159,6 +165,8 @@ export default function BackupSettingsCard() {
   const { data, error, refetch } = useQuery({ queryKey: ["backupSettings"], queryFn: backupApi.settings });
   const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? toForm(data) : undefined);
   const [recent, setRecent] = useState<RecentSchedule[]>(readRecent);
+  // 보관 기간 칸: 비우고 다시 쓰는 중에는 글자로 두고(바로 1 이 들어가 "16"이 되지 않게), 1~24 일 때만 값에 넣는다
+  const [keepText, setKeepText] = useState<string | null>(null);
 
   const cron = normalize(form?.cron ?? "");
   const debouncedCron = useDebounced(cron, 300);
@@ -233,6 +241,7 @@ export default function BackupSettingsCard() {
   // 실행 시각을 바꾸지 않았으면 미리보기와 상관없이 켜기·끄기·보관 기간만 저장할 수 있다
   const cronChanged = cron !== data.cron;
   const blockedByCron = cronChanged && (!!cronError || checking);
+  const keepInvalid = keepText !== null && !isValidKeepMonths(keepText);
 
   return (
     <Card>
@@ -408,8 +417,20 @@ export default function BackupSettingsCard() {
           <Label htmlFor="keep-months">보관 기간 (자동 백업)</Label>
           <div className="flex items-center gap-1.5">
             <span className="text-sm">최대</span>
-            <Input id="keep-months" type="number" min={1} max={24} className="w-20" value={form.keepMonths}
-              onChange={(e) => set("keepMonths", Math.max(1, Math.min(24, Math.trunc(Number(e.target.value) || 1))))} />
+            <Input
+              id="keep-months"
+              type="number"
+              min={1}
+              max={24}
+              className="w-20"
+              value={keepText ?? form.keepMonths}
+              aria-invalid={keepInvalid}
+              onChange={(e) => {
+                setKeepText(e.target.value);
+                if (isValidKeepMonths(e.target.value)) set("keepMonths", Number(e.target.value));
+              }}
+              onBlur={() => setKeepText(null)}
+            />
             <span className="text-sm">개월 동안 저장 (1~24)</span>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -427,7 +448,7 @@ export default function BackupSettingsCard() {
         </div>
 
         <div className="flex justify-end">
-          <Button onClick={() => save.mutate(form)} disabled={!dirty || blockedByCron || save.isPending}>
+          <Button onClick={() => save.mutate(form)} disabled={!dirty || blockedByCron || keepInvalid || save.isPending}>
             <Save className="h-4 w-4" /> 저장
           </Button>
         </div>

@@ -912,10 +912,11 @@ function BlackoutTab() {
         <BlackoutSaveDialog
           editing={saving.editing}
           initial={saving.initial}
-          onClose={() => {
+          // 취소·닫기로 돌아오면 입력한 명칭을 그대로 둔다
+          onSaved={() => {
             if (saving.initial) setName("");
-            setSaving(null);
           }}
+          onClose={() => setSaving(null)}
         />
       )}
     </Card>

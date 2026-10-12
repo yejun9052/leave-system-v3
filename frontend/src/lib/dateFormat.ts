@@ -21,6 +21,12 @@ export function localDateString(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** 연도 입력 칸 값이 쓸 수 있는 연도(2000~2100)인지. 칸을 비우는 중("")이면 false */
+export function isValidYear(text: string): boolean {
+  const year = Number(text);
+  return text.trim() !== "" && Number.isInteger(year) && year >= 2000 && year <= 2100;
+}
+
 /** 로컬 시간 기준 오늘 "YYYY-MM-DD" */
 export function todayString(): string {
   return localDateString(new Date());
