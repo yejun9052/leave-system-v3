@@ -42,6 +42,12 @@ public final class AuditLabels {
         ACTIONS.put("download", "내려받기");
         ACTIONS.put("restore", "데이터 복원");
         ACTIONS.put("read-all", "알림 읽음");
+        ACTIONS.put("sync", "동기화");
+        ACTIONS.put("mail_send", "메일 발송");
+        ACTIONS.put("blackout_reject", "금지 기간 자동 반려");
+        ACTIONS.put("blackout_cancel", "금지 기간 자동 취소");
+        ACTIONS.put("PASSWORD_RESET", "비밀번호 재설정");
+        ACTIONS.put("PASSWORD_RESET_REQUEST", "비밀번호 찾기 요청");
 
         RESOURCES.put("auth", "인증");
         RESOURCES.put("employees", "사용자");
@@ -54,6 +60,9 @@ public final class AuditLabels {
         RESOURCES.put("notifications", "알림");
         RESOURCES.put("reports", "리포트");
         RESOURCES.put("backups", "백업");
+        RESOURCES.put("holidays", "공휴일");
+        RESOURCES.put("license", "라이선스");
+        RESOURCES.put("mail", "메일");
     }
 
     public static String action(String code) {

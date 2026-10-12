@@ -1,5 +1,6 @@
 package com.company.leave.mail;
 
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailException;
@@ -22,10 +23,12 @@ public class AccountMailService {
 
     private final JavaMailSender mailSender;
     private final AccountMailProperties properties;
+    private final MailRecorder recorder;
 
-    public AccountMailService(JavaMailSender mailSender, AccountMailProperties properties) {
+    public AccountMailService(JavaMailSender mailSender, AccountMailProperties properties, MailRecorder recorder) {
         this.mailSender = mailSender;
         this.properties = properties;
+        this.recorder = recorder;
     }
 
     @Async
@@ -62,8 +65,10 @@ public class AccountMailService {
         try {
             mailSender.send(message);
             log.info("[{}] 메일 발송 완료: {}", kind, to);
+            recorder.record(kind, List.of(to), List.of(), mail.subject(), null);
         } catch (MailException ex) {
             log.warn("[{}] 메일 발송 실패: {} ({})", kind, to, ex.getMessage());
+            recorder.record(kind, List.of(to), List.of(), mail.subject(), ex.getMessage());
         }
     }
 }

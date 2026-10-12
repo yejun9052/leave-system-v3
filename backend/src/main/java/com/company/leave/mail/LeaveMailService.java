@@ -27,10 +27,12 @@ public class LeaveMailService {
 
     private final JavaMailSender mailSender;
     private final AccountMailProperties properties;
+    private final MailRecorder recorder;
 
-    public LeaveMailService(JavaMailSender mailSender, AccountMailProperties properties) {
+    public LeaveMailService(JavaMailSender mailSender, AccountMailProperties properties, MailRecorder recorder) {
         this.mailSender = mailSender;
         this.properties = properties;
+        this.recorder = recorder;
     }
 
     @Async
@@ -42,8 +44,10 @@ public class LeaveMailService {
         try {
             mailSender.send(toMimeMessage(mail));
             log.info("[휴가 메일] 발송 완료: {} → {}{}", mail.subject(), mail.to(), ccNote(mail));
+            recorder.record("휴가 메일", mail.to(), mail.cc(), mail.subject(), null);
         } catch (MailException | MessagingException ex) {
             log.warn("[휴가 메일] 발송 실패: {} → {}{} ({})", mail.subject(), mail.to(), ccNote(mail), ex.getMessage());
+            recorder.record("휴가 메일", mail.to(), mail.cc(), mail.subject(), ex.getMessage());
         }
     }
 

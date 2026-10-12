@@ -31,7 +31,7 @@ class AuditLabelsTest {
     @Test
     void 모르는_코드는_그대로_보여주고_대상이_없으면_null_이다() {
         assertThat(AuditLabels.action("unknown_action")).isEqualTo("unknown_action");
-        assertThat(AuditLabels.resource("holidays")).isEqualTo("holidays");
+        assertThat(AuditLabels.resource("unknown-resource")).isEqualTo("unknown-resource");
         assertThat(AuditLabels.resource(null)).isNull();
     }
 }

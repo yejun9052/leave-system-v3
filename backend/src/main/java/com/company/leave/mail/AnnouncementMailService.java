@@ -2,6 +2,7 @@ package com.company.leave.mail;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.MailException;
@@ -24,10 +25,12 @@ public class AnnouncementMailService {
 
     private final JavaMailSender mailSender;
     private final AccountMailProperties properties;
+    private final MailRecorder recorder;
 
-    public AnnouncementMailService(JavaMailSender mailSender, AccountMailProperties properties) {
+    public AnnouncementMailService(JavaMailSender mailSender, AccountMailProperties properties, MailRecorder recorder) {
         this.mailSender = mailSender;
         this.properties = properties;
+        this.recorder = recorder;
     }
 
     @Async
@@ -39,8 +42,10 @@ public class AnnouncementMailService {
         try {
             mailSender.send(toMimeMessage(mail));
             log.info("[공지 메일] 발송 완료: {} → {}명", mail.subject(), mail.bcc().size());
+            recorder.record("공지 메일", mail.bcc(), List.of(), mail.subject(), null);
         } catch (MailException | MessagingException ex) {
             log.warn("[공지 메일] 발송 실패: {} → {}명 ({})", mail.subject(), mail.bcc().size(), ex.getMessage());
+            recorder.record("공지 메일", mail.bcc(), List.of(), mail.subject(), ex.getMessage());
         }
     }
 

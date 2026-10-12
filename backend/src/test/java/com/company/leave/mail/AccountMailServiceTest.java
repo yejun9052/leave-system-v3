@@ -68,7 +68,7 @@ class AccountMailServiceTest {
 
     @Test
     void 링크_기준_주소_끝에_슬래시가_있어도_주소가_중복되지_않는다() {
-        new AccountMailService(mailSender, new AccountMailProperties(FROM, BASE_URL + "/"))
+        new AccountMailService(mailSender, new AccountMailProperties(FROM, BASE_URL + "/"), MailRecorder.NONE)
                 .onPasswordReset(new AccountMailEvents.PasswordReset(TO, "홍길동", "token"));
 
         assertThat(보낸_메일().getText())
@@ -107,7 +107,7 @@ class AccountMailServiceTest {
     // --- 테스트 도구 ---
 
     private AccountMailService 서비스() {
-        return new AccountMailService(mailSender, new AccountMailProperties(FROM, BASE_URL));
+        return new AccountMailService(mailSender, new AccountMailProperties(FROM, BASE_URL), MailRecorder.NONE);
     }
 
     private SimpleMailMessage 보낸_메일() {

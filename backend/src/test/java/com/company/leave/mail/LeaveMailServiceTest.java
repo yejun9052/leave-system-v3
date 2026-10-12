@@ -37,7 +37,8 @@ class LeaveMailServiceTest {
     void setUp() {
         sender = mock(JavaMailSender.class);
         when(sender.createMimeMessage()).thenAnswer(inv -> new MimeMessage(Session.getInstance(new Properties())));
-        service = new LeaveMailService(sender, new AccountMailProperties("no-reply@company.com", "http://localhost"));
+        service = new LeaveMailService(sender,
+                new AccountMailProperties("no-reply@company.com", "http://localhost"), MailRecorder.NONE);
     }
 
     @Test

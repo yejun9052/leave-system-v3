@@ -99,7 +99,7 @@ class AnnouncementMailTest {
         JavaMailSender sender = mock(JavaMailSender.class);
         when(sender.createMimeMessage()).thenAnswer(inv -> new MimeMessage(Session.getInstance(new Properties())));
         AnnouncementMailService service = new AnnouncementMailService(sender,
-                new AccountMailProperties("연차관리 <no-reply@company.com>", BASE));
+                new AccountMailProperties("연차관리 <no-reply@company.com>", BASE), MailRecorder.NONE);
 
         service.onAnnouncement(new AnnouncementMail(List.of("a@company.com", "b@company.com"), "제목", "본문", "<p>본문</p>"));
 
@@ -115,7 +115,7 @@ class AnnouncementMailTest {
     @Test
     void 받는_사람이_없으면_보내지_않는다() {
         JavaMailSender sender = mock(JavaMailSender.class);
-        new AnnouncementMailService(sender, new AccountMailProperties("no-reply@company.com", BASE))
+        new AnnouncementMailService(sender, new AccountMailProperties("no-reply@company.com", BASE), MailRecorder.NONE)
                 .onAnnouncement(new AnnouncementMail(List.of(), "제목", "본문", "<p>본문</p>"));
 
         verify(sender, never()).send(any(MimeMessage.class));
