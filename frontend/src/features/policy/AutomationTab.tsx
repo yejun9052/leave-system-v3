@@ -92,8 +92,9 @@ function PromotionAutomation({
   });
   const shownPreview = !monthsChanged ? preview : sortedMonths.length === 0 ? [] : (draftPreview.data ?? preview);
 
+  // 서버와 같은 순서(큰 값부터)로 둔다: 껐다 켜서 [2,6] 처럼 순서만 바뀌면 고치는 중으로 보여 남이 바꾼 값을 받지 않았다
   const toggleMonth = (m: number) =>
-    setMonths((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+    setMonths((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m].sort((a, b) => b - a)));
 
   const save = useMutation({
     mutationFn: () => automationApi.updatePromotion(enabled, sortedMonths),

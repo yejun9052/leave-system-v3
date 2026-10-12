@@ -19,7 +19,12 @@ export function useServerForm<T>(server: T | undefined) {
   latest.current = server;
 
   useEffect(() => {
-    if (serverJson === null || serverJson === base.current) return;
+    if (serverJson === null) return;
+    // 남이 바꿨다가 원래대로 되돌렸으면 안내를 끈다
+    if (serverJson === base.current) {
+      setChangedElsewhere(false);
+      return;
+    }
     const editing = form !== null && base.current !== null && JSON.stringify(form) !== base.current;
     if (!editing || JSON.stringify(form) === serverJson) {
       base.current = serverJson;
