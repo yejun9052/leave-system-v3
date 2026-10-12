@@ -14,6 +14,7 @@ export default function LoginPage() {
   const login = useAuthStore((s) => s.login);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,7 +25,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, rememberMe);
       navigate(from, { replace: true });
     } catch (err) {
       setError(extractErrorMessage(err, "로그인에 실패했습니다."));
@@ -69,6 +70,15 @@ export default function LoginPage() {
                 required
               />
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-primary"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              로그인 유지 <span className="text-muted-foreground">(30일 · 공용 PC에서는 체크하지 마세요)</span>
+            </label>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}

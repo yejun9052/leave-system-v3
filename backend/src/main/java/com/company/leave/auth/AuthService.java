@@ -7,9 +7,11 @@ import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.repository.EmployeeRepository;
+import com.company.leave.security.RememberMeSessionFilter;
 import com.company.leave.security.UserPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.Clock;
 import java.util.List;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -44,6 +46,7 @@ public class AuthService {
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SecurityContextLogoutHandler securityContextLogoutHandler = new SecurityContextLogoutHandler();
     private final CsrfLogoutHandler csrfLogoutHandler;
+    private final Clock clock = Clock.systemDefaultZone();
 
     public AuthService(AuthenticationManager authenticationManager,
                        EmployeeRepository employeeRepository,
@@ -92,8 +95,11 @@ public class AuthService {
         }
         loginAttemptService.loginSucceeded(clientIp);
         auditService.record(employee.getId(), employee.getName(), "LOGIN", "auth", null,
-                "로그인 성공", true);
+                request.rememberMe() ? "로그인 성공(로그인 유지 30일)" : "로그인 성공", true);
         establishSession(authentication, employee.getId(), httpRequest, httpResponse);
+        if (request.rememberMe()) {
+            RememberMeSessionFilter.start(httpRequest, clock);
+        }
         return MeResponse.from(employee);
     }
 

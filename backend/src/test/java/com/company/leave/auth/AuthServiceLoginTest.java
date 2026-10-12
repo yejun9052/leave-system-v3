@@ -46,6 +46,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.security.web.authentication.SpringSessionRememberMeServices;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -161,6 +162,31 @@ class AuthServiceLoginTest {
         Cookie csrfCookie = response.getCookie("XSRF-TOKEN");
         assertThat(csrfCookie).isNotNull();
         assertThat(csrfCookie.getMaxAge()).isZero();
+    }
+
+    @Test
+    void 로그인_유지를_체크하면_세션을_30일로_늘리고_세션_쿠키를_브라우저를_닫아도_남게_한다() {
+        인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
+
+        authService.login(new LoginRequest(EMAIL, PASSWORD, true), request, response);
+
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(30 * 24 * 60 * 60);
+        assertThat(request.getSession(false).getAttribute("rememberMeUntil")).isInstanceOf(Long.class);
+        assertThat(request.getAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR)).isEqualTo(true);
+        verify(auditService).record(eq(EMPLOYEE_ID), anyString(), eq("LOGIN"), eq("auth"), isNull(),
+                eq("로그인 성공(로그인 유지 30일)"), eq(true));
+    }
+
+    @Test
+    void 로그인_유지를_체크하지_않으면_세션은_기본_만료를_따른다() {
+        인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
+        int defaultInterval = new MockHttpSession().getMaxInactiveInterval();
+
+        authService.login(new LoginRequest(EMAIL, PASSWORD, null), request, response);
+
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(defaultInterval);
+        assertThat(request.getSession(false).getAttribute("rememberMeUntil")).isNull();
+        assertThat(request.getAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR)).isNull();
     }
 
     @Test

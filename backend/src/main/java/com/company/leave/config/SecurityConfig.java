@@ -3,6 +3,7 @@ package com.company.leave.config;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.security.AccountStateFilter;
 import com.company.leave.security.CustomUserDetailsService;
+import com.company.leave.security.RememberMeSessionFilter;
 import com.company.leave.security.RestAuthEntryPoints;
 import com.company.leave.security.SessionTolerantSecurityContextRepository;
 import java.util.Arrays;
@@ -96,6 +97,8 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(authEntryPoints.authenticationEntryPoint())
                         .accessDeniedHandler(authEntryPoints.accessDeniedHandler()))
+                // 로그인 유지(30일) 세션: 남은 시간으로 만료를 맞추고, 지났으면 끝낸다 (아래 재직 확인보다 먼저)
+                .addFilterBefore(new RememberMeSessionFilter(), AnonymousAuthenticationFilter.class)
                 // 세션 인증 사용자의 재직 상태·역할을 매 요청 DB 로 재확인 (인가 판단 전)
                 .addFilterBefore(new AccountStateFilter(userDetailsService, authEntryPoints),
                         AnonymousAuthenticationFilter.class);

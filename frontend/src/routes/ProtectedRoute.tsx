@@ -16,7 +16,7 @@ export function ProtectedRoute({ roles }: { roles?: Role[] }) {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   }
 
   if (roles && !roles.some((r) => roleIncludes(user.role, r))) {

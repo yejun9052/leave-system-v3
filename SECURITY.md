@@ -112,7 +112,8 @@ cp backend/build/libs/backend-obf.jar backend/app.jar   # 배포용 jar 를 난�
   - 세션 쿠키 `SESSION`: **HttpOnly · Secure · SameSite=Lax** (JS에서 읽을 수 없음)
   - **CSRF 보호**: `GET /api/auth/csrf` 로 `XSRF-TOKEN` 쿠키 발급 → POST/PUT/PATCH/DELETE 는 `X-XSRF-TOKEN` 헤더 필수(없으면 403)
   - **로그인 시 세션 ID 재발급**(세션 고정 방어), 로그아웃(`POST /api/auth/logout`) 시 세션 폐기
-  - 세션 미사용 만료 2시간(`SESSION_TIMEOUT`), 서버 재시작 후에도 세션 유지(DB 저장)
+  - 세션 미사용 만료 2시간(`SESSION_TIMEOUT`), 서버 재시작 후에도 세션 유지(DB 저장). 세션 쿠키는 브라우저를 닫으면 지워진다
+  - **로그인 유지(선택, 30일)**: 로그인 화면에서 체크한 경우만. 그 세션의 만료를 로그인 시각 + 30일로 고정(사용해도 늘어나지 않음)하고 세션 쿠키에 만료일을 붙인다. 별도 토큰 없이 같은 서버 세션이라 퇴사·비밀번호 변경 시 강제 종료가 그대로 적용된다. 이벤트 로그에 "로그인 성공(로그인 유지 30일)"로 남는다
   - **퇴사 처리 시 해당 직원의 세션 즉시 폐기**
 - **비밀번호 수명주기**
   - 계정 생성·엑셀 가져오기 시 **서버가 임시 비밀번호를 생성**하고 계정 생성 메일로만 전달합니다(관리자에게 비공개). 신규 계정은 **첫 로그인 시 비밀번호 변경 강제**(변경 전에는 login·csrf·me·logout·비밀번호 변경·라이선스 조회 외 API 차단, 403 PASSWORD_CHANGE_REQUIRED)

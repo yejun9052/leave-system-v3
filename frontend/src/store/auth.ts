@@ -5,7 +5,7 @@ import { authApi } from "@/api/auth";
 interface AuthState {
   user: Me | null;
   initialized: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   loadMe: () => Promise<void>;
   logout: () => Promise<void>;
   hasAnyRole: (...roles: Role[]) => boolean;
@@ -20,9 +20,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   initialized: false,
 
-  login: async (email, password) => {
+  login: async (email, password, rememberMe = false) => {
     await authApi.csrf();
-    const user = await authApi.login(email, password);
+    const user = await authApi.login(email, password, rememberMe);
     await authApi.csrf();
     set({ user, initialized: true });
   },
