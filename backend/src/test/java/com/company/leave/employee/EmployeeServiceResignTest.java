@@ -55,6 +55,9 @@ class EmployeeServiceResignTest {
     @Mock private PasswordResetService passwordResetService;
     @Mock private DepartmentLeadSync leadSync;
 
+    /** 퇴사 처리하는 인사관리자 */
+    private static final Long HR_ID = 11L;
+
     private EmployeeService service;
     private final Department 개발팀 = department(3L, "개발팀");
 
@@ -73,7 +76,7 @@ class EmployeeServiceResignTest {
             Employee 직원 = employee(30L, Set.of(Role.EMPLOYEE), false);
             when(employees.findById(30L)).thenReturn(Optional.of(직원));
 
-            service.resign(30L, LocalDate.of(2026, 10, 31));
+            service.resign(HR_ID, 30L, LocalDate.of(2026, 10, 31));
 
             assertThat(직원.getStatus()).isEqualTo(EmployeeStatus.RESIGNED);
             assertThat(직원.getResignedDate()).isEqualTo(LocalDate.of(2026, 10, 31));
@@ -86,7 +89,7 @@ class EmployeeServiceResignTest {
             Employee 직원 = employee(30L, Set.of(Role.EMPLOYEE), false);
             when(employees.findById(30L)).thenReturn(Optional.of(직원));
 
-            service.resign(30L, null);
+            service.resign(HR_ID, 30L, null);
 
             assertThat(직원.getResignedDate()).isEqualTo(LocalDate.now());
         }
@@ -96,7 +99,7 @@ class EmployeeServiceResignTest {
             Employee 팀장 = employee(20L, Set.of(Role.EMPLOYEE, Role.TEAM_LEAD), false);
             when(employees.findById(20L)).thenReturn(Optional.of(팀장));
 
-            service.resign(20L, LocalDate.of(2026, 10, 31));
+            service.resign(HR_ID, 20L, LocalDate.of(2026, 10, 31));
 
             verify(leadSync).afterSave(팀장, 3L, true);
         }
@@ -106,7 +109,7 @@ class EmployeeServiceResignTest {
             Employee 관리계정 = employee(1L, Set.of(Role.SYSTEM_ADMIN), true);
             when(employees.findById(1L)).thenReturn(Optional.of(관리계정));
 
-            assertThatThrownBy(() -> service.resign(1L, LocalDate.of(2026, 10, 31)))
+            assertThatThrownBy(() -> service.resign(HR_ID, 1L, LocalDate.of(2026, 10, 31)))
                     .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.SYSTEM_ACCOUNT_CANNOT_RESIGN));
             assertThat(관리계정.getStatus()).isEqualTo(EmployeeStatus.ACTIVE);
@@ -114,10 +117,22 @@ class EmployeeServiceResignTest {
         }
 
         @Test
+        void 인사관리자는_본인을_퇴사_처리할_수_없다() {
+            Employee 인사 = employee(HR_ID, Set.of(Role.HR_ADMIN), false);
+            when(employees.findById(HR_ID)).thenReturn(Optional.of(인사));
+
+            assertThatThrownBy(() -> service.resign(HR_ID, HR_ID, null))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.SELF_RESIGN_NOT_ALLOWED));
+            assertThat(인사.getStatus()).isEqualTo(EmployeeStatus.ACTIVE);
+            verify(sessionTerminator, never()).terminateAll(anyLong());
+        }
+
+        @Test
         void 없는_직원은_퇴사_처리할_수_없다() {
             when(employees.findById(99L)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.resign(99L, null))
+            assertThatThrownBy(() -> service.resign(HR_ID, 99L, null))
                     .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.EMPLOYEE_NOT_FOUND));
             verify(sessionTerminator, never()).terminateAll(anyLong());

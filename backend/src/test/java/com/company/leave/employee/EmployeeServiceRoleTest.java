@@ -81,7 +81,7 @@ class EmployeeServiceRoleTest {
     void 다른_직원에게_시스템_관리자_권한을_줄_수_없고_정보도_바뀌지_않는다() {
         Employee target = employee(20L, false, Role.EMPLOYEE);
         when(employees.findById(20L)).thenReturn(Optional.of(target));
-        expectError(() -> service.update(20L, update(Role.SYSTEM_ADMIN)),
+        expectError(() -> service.update(hr.getId(), 20L, update(Role.SYSTEM_ADMIN)),
                 ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         assertThat(target.getEmail()).isEqualTo("user20@company.com");
         assertThat(target.getRole()).isEqualTo(Role.EMPLOYEE);
@@ -90,7 +90,7 @@ class EmployeeServiceRoleTest {
     @Test
     void 인사관리자는_자신에게_시스템_관리자_권한을_줄_수_없다() {
         when(employees.findById(hr.getId())).thenReturn(Optional.of(hr));
-        expectError(() -> service.update(hr.getId(), update(Role.SYSTEM_ADMIN)),
+        expectError(() -> service.update(hr.getId(), hr.getId(), update(Role.SYSTEM_ADMIN)),
                 ErrorCode.SYSTEM_ADMIN_ROLE_RESTRICTED);
         assertThat(hr.getRole()).isEqualTo(Role.HR_ADMIN);
     }
@@ -100,7 +100,7 @@ class EmployeeServiceRoleTest {
         Employee admin = employee(1L, true, Role.SYSTEM_ADMIN);
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
         for (Role role : java.util.List.of(Role.HR_ADMIN, Role.TEAM_LEAD, Role.EMPLOYEE)) {
-            expectError(() -> service.update(1L, update(role)), ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
+            expectError(() -> service.update(hr.getId(), 1L, update(role)), ErrorCode.SYSTEM_ACCOUNT_ROLE_IMMUTABLE);
         }
         assertThat(admin.getRole()).isEqualTo(Role.SYSTEM_ADMIN);
     }
@@ -111,9 +111,9 @@ class EmployeeServiceRoleTest {
         String loginId = admin.getEmail();
         when(employees.findById(1L)).thenReturn(Optional.of(admin));
 
-        service.update(1L, new EmployeeRequests.Update(null, "시스템관리자(테스트)", null, null, null,
+        service.update(hr.getId(), 1L, new EmployeeRequests.Update(null, "시스템관리자(테스트)", null, null, null,
                 LocalDate.of(2023, 10, 6), null));
-        service.update(1L, new EmployeeRequests.Update(null, "시스템관리자", null, null, null,
+        service.update(hr.getId(), 1L, new EmployeeRequests.Update(null, "시스템관리자", null, null, null,
                 LocalDate.of(2023, 10, 6), Role.SYSTEM_ADMIN));
 
         assertThat(admin.getName()).isEqualTo("시스템관리자");
@@ -127,7 +127,7 @@ class EmployeeServiceRoleTest {
         Employee user = employee(2L, false, Role.EMPLOYEE);
         when(employees.findById(2L)).thenReturn(Optional.of(user));
 
-        expectError(() -> service.update(2L, new EmployeeRequests.Update(" ", "수정", null, null, null,
+        expectError(() -> service.update(hr.getId(), 2L, new EmployeeRequests.Update(" ", "수정", null, null, null,
                 LocalDate.of(2024, 1, 1), Role.EMPLOYEE)), ErrorCode.INVALID_INPUT);
     }
 
@@ -146,15 +146,29 @@ class EmployeeServiceRoleTest {
     void 일반_권한은_하나로_바꿀_수_있다() {
         Employee target = employee(20L, false, Role.EMPLOYEE);
         when(employees.findById(20L)).thenReturn(Optional.of(target));
-        service.update(20L, update(Role.HR_ADMIN));
+        service.update(hr.getId(), 20L, update(Role.HR_ADMIN));
         assertThat(target.getRole()).isEqualTo(Role.HR_ADMIN);
+    }
+
+    @Test
+    void 인사관리자는_본인의_권한을_바꿀_수_없지만_다른_정보는_고칠_수_있다() {
+        when(employees.findById(hr.getId())).thenReturn(Optional.of(hr));
+
+        for (Role lower : java.util.List.of(Role.TEAM_LEAD, Role.EMPLOYEE)) {
+            expectError(() -> service.update(hr.getId(), hr.getId(), update(lower)), ErrorCode.SELF_ROLE_CHANGE_NOT_ALLOWED);
+        }
+        assertThat(hr.getRole()).isEqualTo(Role.HR_ADMIN);
+
+        service.update(hr.getId(), hr.getId(), update(Role.HR_ADMIN));
+        assertThat(hr.getName()).isEqualTo("수정");
+        assertThat(hr.getRole()).isEqualTo(Role.HR_ADMIN);
     }
 
     @Test
     void 권한을_비우면_사원이다() {
         Employee target = employee(20L, false, Role.TEAM_LEAD);
         when(employees.findById(20L)).thenReturn(Optional.of(target));
-        service.update(20L, update(null));
+        service.update(hr.getId(), 20L, update(null));
         assertThat(target.getRole()).isEqualTo(Role.EMPLOYEE);
     }
 

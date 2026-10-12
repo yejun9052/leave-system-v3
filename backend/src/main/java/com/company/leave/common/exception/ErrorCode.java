@@ -38,6 +38,10 @@ public enum ErrorCode {
             "관리 전용 계정의 권한은 변경할 수 없습니다."),
     SYSTEM_ACCOUNT_CANNOT_RESIGN(HttpStatus.BAD_REQUEST,
             "관리 전용 계정은 퇴사 처리할 수 없습니다."),
+    SELF_RESIGN_NOT_ALLOWED(HttpStatus.BAD_REQUEST,
+            "본인은 퇴사 처리할 수 없습니다. 다른 관리자에게 요청하세요."),
+    SELF_ROLE_CHANGE_NOT_ALLOWED(HttpStatus.BAD_REQUEST,
+            "본인의 권한은 바꿀 수 없습니다. 다른 관리자에게 요청하세요."),
 
     // 부서
     DEPARTMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "부서를 찾을 수 없습니다."),

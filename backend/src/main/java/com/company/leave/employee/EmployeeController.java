@@ -82,7 +82,7 @@ public class EmployeeController {
     @PutMapping("/{id}")
     public ApiResponse<EmployeeResponse> update(
             @PathVariable Long id, @Valid @RequestBody EmployeeRequests.Update req) {
-        return ApiResponse.ok(employeeService.update(id, req));
+        return ApiResponse.ok(employeeService.update(SecurityUtils.currentEmployeeId(), id, req));
     }
 
     @Operation(summary = "사용자 퇴사 처리")
@@ -91,7 +91,7 @@ public class EmployeeController {
     public ApiResponse<Void> resign(
             @PathVariable Long id,
             @RequestParam(required = false) LocalDate resignedDate) {
-        employeeService.resign(id, resignedDate);
+        employeeService.resign(SecurityUtils.currentEmployeeId(), id, resignedDate);
         return ApiResponse.ok();
     }
 

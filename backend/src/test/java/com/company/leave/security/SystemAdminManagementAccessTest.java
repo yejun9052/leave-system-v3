@@ -2,6 +2,7 @@ package com.company.leave.security;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -124,7 +125,7 @@ class SystemAdminManagementAccessTest {
         when(employees.search(any(), any())).thenReturn(Page.empty(PageRequest.of(0, 20)));
         mvc.perform(get("/api/employees")).andExpect(status().isOk());
         String body = """
-                {"email":"new@company.com","name":"직원","hireDate":"2024-01-01","roles":["HR_ADMIN"]}
+                {"email":"new@company.com","name":"직원","hireDate":"2024-01-01","role":"HR_ADMIN"}
                 """;
         mvc.perform(post("/api/employees").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isOk());
@@ -132,7 +133,7 @@ class SystemAdminManagementAccessTest {
                 .andExpect(status().isOk());
         verify(employees).search(any(), any());
         verify(employees).create(any());
-        verify(employees).update(eq(20L), any());
+        verify(employees).update(anyLong(), eq(20L), any());
     }
 
     @Test

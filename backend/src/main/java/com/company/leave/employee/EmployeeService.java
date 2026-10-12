@@ -133,8 +133,11 @@ public class EmployeeService {
         return EmployeeResponse.from(saved);
     }
 
+    /**
+     * 사용자 수정. actorId 는 수정하는 관리자: 본인의 권한은 바꿀 수 없다(실수로 자기 관리 권한을 잃지 않게).
+     */
     @Transactional
-    public EmployeeResponse update(Long id, EmployeeRequests.Update req) {
+    public EmployeeResponse update(Long actorId, Long id, EmployeeRequests.Update req) {
         Employee employee = getEntity(id);
         // 관리 전용 계정은 이름·부서·직위·연락처·입사일만 고친다. 아이디(admin)와 권한은 그대로
         boolean system = employee.isSystemAccount();
@@ -145,6 +148,9 @@ public class EmployeeService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "이메일을 입력해 주세요.");
         }
         Role role = system ? employee.getRole() : resolveRole(req.role());
+        if (id.equals(actorId) && role != employee.getRole()) {
+            throw new BusinessException(ErrorCode.SELF_ROLE_CHANGE_NOT_ALLOWED);
+        }
         if (!system) {
             validateEmailUnique(req.email(), id);
         }
@@ -164,11 +170,15 @@ public class EmployeeService {
         return EmployeeResponse.from(employee);
     }
 
+    /** 퇴사 처리. actorId 는 처리하는 관리자: 본인은 퇴사 처리할 수 없다. */
     @Transactional
-    public void resign(Long id, LocalDate resignedDate) {
+    public void resign(Long actorId, Long id, LocalDate resignedDate) {
         Employee employee = getEntity(id);
         if (employee.isSystemAccount()) {
             throw new BusinessException(ErrorCode.SYSTEM_ACCOUNT_CANNOT_RESIGN);
+        }
+        if (id.equals(actorId)) {
+            throw new BusinessException(ErrorCode.SELF_RESIGN_NOT_ALLOWED);
         }
         boolean wasTeamLead = DepartmentLeadSync.isActiveTeamLead(employee);
         employee.resign(resignedDate != null ? resignedDate : LocalDate.now());

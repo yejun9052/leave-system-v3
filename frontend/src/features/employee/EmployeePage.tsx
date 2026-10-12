@@ -56,6 +56,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { cn } from "@/lib/utils";
 import { extractErrorMessage } from "@/api/client";
+import { useAuthStore } from "@/store/auth";
 
 const ALL_ROLES: Role[] = ["HR_ADMIN", "TEAM_LEAD", "EMPLOYEE"];
 const STATUS_LABEL: Record<EmployeeStatus, string> = {
@@ -68,6 +69,7 @@ const STATUS_RANK: EmployeeStatus[] = ["ACTIVE", "ON_LEAVE", "RESIGNED"];
 
 export default function EmployeePage() {
   const qc = useQueryClient();
+  const myId = useAuthStore((s) => s.user?.id);
   const { toast } = useToast();
   const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -262,9 +264,9 @@ export default function EmployeePage() {
                         <Button size="icon" variant="ghost" title="수정" onClick={() => setEditing(e)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        {/* 관리 전용 계정은 이메일이 없고 퇴사 처리할 수 없다 */}
+                        {/* 관리 전용 계정은 이메일이 없고 퇴사 처리할 수 없다. 본인도 퇴사 처리할 수 없다 */}
                         {!e.systemAccount && <ResetPasswordButton employee={e} />}
-                        {e.systemAccount ? null : e.status === "RESIGNED" ? (
+                        {e.systemAccount || e.id === myId ? null : e.status === "RESIGNED" ? (
                           <Button
                             size="icon"
                             variant="ghost"
@@ -393,6 +395,9 @@ function EmployeeDialog({
   const isEdit = !!employee;
   // 관리 전용 계정: 아이디(admin)와 권한은 고칠 수 없고 이름·부서·직급·연락처·입사일만
   const isSystem = !!employee?.systemAccount;
+  // 본인: 실수로 자기 관리 권한을 잃지 않게 권한은 바꿀 수 없다(서버도 막음)
+  const isSelf = useAuthStore((s) => !!employee && s.user?.id === employee.id);
+  const roleLocked = isSystem || isSelf;
   const [form, setForm] = useState<EmployeeCreate>({
     email: employee?.email ?? "",
     name: employee?.name ?? "",
@@ -515,19 +520,21 @@ function EmployeeDialog({
           <Label>권한</Label>
           {isSystem ? (
             <p className="text-xs text-muted-foreground">관리 전용 계정의 권한(시스템 관리자)은 바꿀 수 없습니다.</p>
+          ) : isSelf ? (
+            <p className="text-xs text-muted-foreground">본인의 권한은 바꿀 수 없습니다. 다른 관리자에게 요청하세요.</p>
           ) : (
             <p className="text-xs text-muted-foreground">
               하나만 고릅니다. 위 권한은 아래 권한의 기능을 모두 씁니다(인사관리자 → 팀장 → 사원).
             </p>
           )}
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="권한">
-            {(isSystem ? [form.role] : ALL_ROLES).map((role) => (
+            {(roleLocked ? [form.role] : ALL_ROLES).map((role) => (
               <button
                 key={role}
                 type="button"
                 role="radio"
                 aria-checked={form.role === role}
-                disabled={isSystem}
+                disabled={roleLocked}
                 onClick={() => set("role", role)}
                 className={cn(
                   "rounded-full border px-3 py-1 text-sm transition-colors",
