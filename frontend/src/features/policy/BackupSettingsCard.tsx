@@ -182,6 +182,16 @@ export default function BackupSettingsCard() {
     setField(5, formatDays(next));
   };
   const lastDay = fields[3] === "L";
+  // 일 칸 아래 이름: 그 달 며칠에 실행하는지("15일에 실행", "말일에 실행", "매일 실행")
+  const dayPart = fields[3];
+  const dayCaption =
+    dayPart === "L"
+      ? "말일에 실행"
+      : /^[\d,-]+$/.test(dayPart)
+        ? `${dayPart.replace(/,/g, "·").replace(/-/g, "~")}일에 실행`
+        : dayPart === "" || dayPart === "*" || dayPart === "?"
+          ? days && days.size > 0 ? "고른 요일에 실행" : "매일 실행"
+          : `${numberPlaceholder(dayPart, NUMBER_FIELDS[1])} 실행`;
 
   const dirty = form.enabled !== data.enabled || form.keepMonths !== data.keepMonths || cron !== data.cron;
   // 미리보기가 지금 입력과 같은 값을 해석했을 때만 믿는다
@@ -245,7 +255,7 @@ export default function BackupSettingsCard() {
                       className="h-11 text-center text-lg font-semibold tabular-nums placeholder:text-sm placeholder:font-normal"
                       spellCheck={false}
                     />
-                    <span className="text-sm font-medium">{f.name}</span>
+                    <span className="text-sm font-medium">{f.index === 3 ? dayCaption : f.name}</span>
                   </label>
                   {f.index === 3 ? (
                     <button
