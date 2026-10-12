@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
-import { calendarApi, type DayLeaveDto } from "@/api/calendar";
+import { calendarApi, type DayEventDto, type DayLeaveDto } from "@/api/calendar";
 import { cn } from "@/lib/utils";
 import { HALF_DAY_LABEL } from "@/types";
 import { weekdayLabel } from "./useDateSelection";
@@ -10,6 +10,12 @@ function leaveLabel(l: DayLeaveDto): string {
   if (l.halfDayPart) return `${l.leaveTypeName} · ${HALF_DAY_LABEL[l.halfDayPart]} 반차`;
   return l.portion === "FULL" ? `${l.leaveTypeName} · 종일` : l.leaveTypeName;
 }
+
+const EVENT_SCOPE_LABEL: Record<DayEventDto["scope"], string> = {
+  COMPANY: "회사 일정",
+  DEPARTMENT: "부서 일정",
+  PERSONAL: "개인 일정",
+};
 
 interface SummaryItem {
   key: string;
@@ -32,6 +38,7 @@ export default function MobileDaySummary({
   periodNames,
   onApply,
   onOpenItem,
+  filter = null,
 }: {
   date: string;
   canApply: boolean;
@@ -43,6 +50,8 @@ export default function MobileDaySummary({
   onApply: (date: string) => void;
   /** 카드 탭: 회사 일정이면 eventId, 그 밖은 null(그날 상세) */
   onOpenItem: (eventId: string | null) => void;
+  /** 캘린더 보기 탭(일정·부서·개인)에 맞춰 보일 휴가와 일정. null 이면 모두(전체 탭) */
+  filter?: { leave: (l: DayLeaveDto) => boolean; eventIds: Set<string> } | null;
 }) {
   const { data, isLoading } = useQuery({
     queryKey: ["calendarDay", date],
@@ -63,6 +72,7 @@ export default function MobileDaySummary({
   );
   for (const l of data?.leaves ?? []) {
     if (q && !l.employeeName.includes(q)) continue;
+    if (filter && !filter.leave(l)) continue;
     const pending = l.status === "PENDING";
     items.push({
       key: `L${l.id}`,
@@ -74,7 +84,8 @@ export default function MobileDaySummary({
   }
   for (const e of data?.events ?? []) {
     if (q && !e.title.includes(q)) continue;
-    items.push({ key: e.id, dot: "bg-orange-500", title: e.title, sub: "회사 일정", eventId: e.id });
+    if (filter && !filter.eventIds.has(e.id)) continue;
+    items.push({ key: e.id, dot: "bg-orange-500", title: e.title, sub: EVENT_SCOPE_LABEL[e.scope], eventId: e.id });
   }
 
   return (

@@ -410,7 +410,8 @@ export default function CalendarPage() {
         map.set(d, [...(map.get(d) ?? []), mark]);
       }
     };
-    for (const e of events) {
+    // 보기 탭(부서·개인 등)에 맞춘 일정만 점으로 찍는다(공휴일은 모든 탭에 들어 있음)
+    for (const e of filtered) {
       const kind: DayMark["kind"] =
         e.source === "HOLIDAY" ? "HOLIDAY" : e.source === "LEAVE_REQUEST" ? "LEAVE" : "EVENT";
       if (kind !== "HOLIDAY" && q && !e.title.includes(q)) continue;
@@ -422,7 +423,19 @@ export default function CalendarPage() {
     const order: DayMark["kind"][] = ["HOLIDAY", "BLACKOUT", "PERIOD", "LEAVE", "EVENT"];
     for (const list of map.values()) list.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
     return map;
-  }, [isMobile, viewMonth, events, blackouts, periodMarks, q]);
+  }, [isMobile, viewMonth, filtered, blackouts, periodMarks, q]);
+
+  // 모바일 요약 카드도 보기 탭대로 거른다. 전체면 거르지 않음(null)
+  const summaryFilter = useMemo(() => {
+    if (view === "ALL") return null;
+    const eventIds = new Set(filtered.filter((e) => e.source === "ADMIN_EVENT").map((e) => e.id));
+    const leave = (l: { employeeId: number; departmentId: number | null }) => {
+      if (view === "DEPARTMENT") return l.departmentId != null && deptIds.has(l.departmentId);
+      if (view === "PERSONAL") return !!me && l.employeeId === me.id;
+      return false;
+    };
+    return { leave, eventIds };
+  }, [view, filtered, deptIds, me]);
 
   const focusedBlackouts = blackouts
     .filter((b) => b.startDate <= focused && b.endDate >= focused)
@@ -472,10 +485,52 @@ export default function CalendarPage() {
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
+  // 보기 탭(전체·일정·부서·개인)과 부서 탭의 볼 부서: 데스크톱·모바일 같이 쓴다(대시보드 "팀 캘린더 보기"는 ?view=department 로 연다)
+  const viewTabs = (
+    <div className="flex w-fit gap-1 rounded-lg bg-muted p-1" role="group" aria-label="보기">
+      {VIEW_TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          aria-pressed={view === t.key}
+          onClick={() => setView(t.key)}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            view === t.key ? "bg-background shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+  const deptPicker =
+    view === "DEPARTMENT" && deptChain.length > 0 && (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="group" aria-label="볼 부서">
+        <span className="text-muted-foreground">볼 부서</span>
+        {deptChain.map((d, i) => (
+          <label key={d.id} className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={deptIds.has(d.id)}
+              onChange={() => toggleDept(d.id)}
+            />
+            {d.name}
+            {i === 0 && <span className="text-xs text-muted-foreground">(내 부서)</span>}
+          </label>
+        ))}
+      </div>
+    );
+
   return (
     <div className={cn("space-y-6", isMobile && panelOpen && "pb-48")}>
       {isMobile ? (
         <>
+          <div className="space-y-2">
+            {viewTabs}
+            {deptPicker}
+          </div>
           <MobileMonthView
             month={viewMonth}
             focused={focused}
@@ -496,6 +551,7 @@ export default function CalendarPage() {
           />
           <MobileDaySummary
             date={focused}
+            filter={summaryFilter}
             canApply={canApply}
             query={query}
             blackoutNames={focusedBlackouts}
@@ -519,37 +575,8 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
-              {VIEW_TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setView(t.key)}
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                    view === t.key ? "bg-background shadow-sm" : "text-muted-foreground",
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            {view === "DEPARTMENT" && deptChain.length > 0 && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="group" aria-label="볼 부서">
-                <span className="text-muted-foreground">볼 부서</span>
-                {deptChain.map((d, i) => (
-                  <label key={d.id} className="flex cursor-pointer items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={deptIds.has(d.id)}
-                      onChange={() => toggleDept(d.id)}
-                    />
-                    {d.name}
-                    {i === 0 && <span className="text-xs text-muted-foreground">(내 부서)</span>}
-                  </label>
-                ))}
-              </div>
-            )}
+            {viewTabs}
+            {deptPicker}
             <div className="relative ml-auto w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
