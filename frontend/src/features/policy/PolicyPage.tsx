@@ -63,8 +63,8 @@ const DEDUCTION_MODES: AnnualDeductionMode[] = ["DEDUCT", "EXHAUST_FIRST", "NONE
 
 const DEDUCTION_MODE_DESC: Record<AnnualDeductionMode, string> = {
   DEDUCT: "쓴 일수만큼 연차에서 뺍니다. 예: 연차·반차·시간차",
-  EXHAUST_FIRST: "남은 연차를 다 쓴 뒤(1일 미만)에만 신청할 수 있고, 승인되면 남은 연차(1일 미만)는 소멸됩니다. 예: 병가·공가",
-  NONE: "연차와 상관없이 신청하고 연차에서 빼지 않습니다. 예: 경조사 휴가",
+  EXHAUST_FIRST: "남은 연차를 다 쓴 뒤(1일 미만)에만 신청할 수 있고, 승인되면 남은 연차(1일 미만)는 소멸됩니다. 예: 병가",
+  NONE: "연차와 상관없이 신청하고 연차에서 빼지 않습니다. 예: 경조사·공가",
 };
 
 const TABS = ["policy", "types", "rules", "blackout", "holidays", "promotion", "automation", "backup"];
@@ -671,11 +671,16 @@ function RulesTab() {
   const qc = useQueryClient();
   const { data: awards = [] } = useQuery({ queryKey: ["awardRules"], queryFn: policyRulesApi.awards });
   const { data: specials = [] } = useQuery({ queryKey: ["specialRules"], queryFn: policyRulesApi.specials });
+  const { data: types = [] } = useQuery({ queryKey: ["leaveTypes", "all"], queryFn: () => leaveTypeApi.list(true) });
+  // 규정을 붙일 수 있는 종류: 연차와 무관한 휴가(경조사·공가 등). 규정이 있으면 신청할 때 하나를 골라야 한다
+  const ruleTypes = types.filter((t) => t.annualDeductionMode === "NONE" && t.active);
+  const typeName = (code: string | null) => types.find((t) => t.code === code)?.name ?? code ?? "-";
 
   const [aYears, setAYears] = useState(5);
   const [aDays, setADays] = useState(3);
   const [aName, setAName] = useState("");
   const [sName, setSName] = useState("");
+  const [sType, setSType] = useState("CONDOLENCE");
   const [sDays, setSDays] = useState(1);
   /** 연간 사용 횟수: 비우면 제한 없음 */
   const [sLimit, setSLimit] = useState("");
@@ -699,7 +704,7 @@ function RulesTab() {
       policyRulesApi.createSpecial({
         name: sName,
         days: sDays,
-        leaveTypeCode: "CONDOLENCE",
+        leaveTypeCode: sType,
         sortOrder: 0,
         annualLimit: sLimitValue,
       }),
@@ -745,11 +750,26 @@ function RulesTab() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">경조사 규정</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base">경조사·공가 규정</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            규정이 있는 휴가 종류는 신청할 때 규정 하나를 골라야 하고, 규정 일수까지 쓸 수 있습니다(연차에서 빼지 않음).
+          </p>
+        </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1"><Label className="text-xs">휴가 종류</Label>
+              <Select value={sType} onValueChange={setSType}>
+                <SelectTrigger className="w-32" aria-label="규정을 붙일 휴가 종류"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(ruleTypes.length ? ruleTypes : [{ code: "CONDOLENCE", name: "경조사 휴가" }]).map((t) => (
+                    <SelectItem key={t.code} value={t.code}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select></div>
             <div className="space-y-1 flex-1"><Label className="text-xs">사유/관계</Label>
-              <Input value={sName} onChange={(e) => setSName(e.target.value)} placeholder="예: 본인 결혼" /></div>
+              <Input value={sName} onChange={(e) => setSName(e.target.value)}
+                placeholder={sType === "OFFICIAL" ? "예: 예비군" : "예: 본인 결혼"} /></div>
             <div className="space-y-1"><Label className="text-xs">일수</Label>
               <Input type="number" step="0.5" className="w-20" value={sDays} onChange={(e) => setSDays(Number(e.target.value))} /></div>
             <div className="space-y-1"><Label className="text-xs">연간 횟수</Label>
@@ -759,7 +779,7 @@ function RulesTab() {
               size="sm"
               onClick={async () => {
                 const ok = await confirm({
-                  title: `'${sName}' 경조사 규정을 추가할까요?`,
+                  title: `${typeName(sType)} '${sName}' 규정을 추가할까요?`,
                   description: `${sDays}일이 부여되는 규정으로 추가합니다.` +
                     (sLimitValue != null ? ` 1년(1~12월)에 ${sLimitValue}회까지 쓸 수 있습니다.` : ""),
                   confirmText: "추가",
@@ -773,13 +793,13 @@ function RulesTab() {
           <RuleTable
             rows={specials.map((s) => ({
               id: s.id,
-              cells: [s.name, `${s.days}일`, s.annualLimit != null ? `${s.annualLimit}회` : "제한 없음"],
-              values: [s.name, s.days, s.annualLimit ?? Number.MAX_SAFE_INTEGER],
+              cells: [typeName(s.leaveTypeCode), s.name, `${s.days}일`, s.annualLimit != null ? `${s.annualLimit}회` : "제한 없음"],
+              values: [typeName(s.leaveTypeCode), s.name, s.days, s.annualLimit ?? Number.MAX_SAFE_INTEGER],
             }))}
-            headers={["사유/관계", "일수", "연간 횟수"]}
+            headers={["종류", "사유/관계", "일수", "연간 횟수"]}
             onEdit={(id) => setEditingSpecial(specials.find((s) => s.id === id) ?? null)}
             onDelete={async (id) => {
-              const ok = await confirm({ title: "경조사 규정을 삭제할까요?", confirmText: "삭제", destructive: true });
+              const ok = await confirm({ title: "규정을 삭제할까요?", confirmText: "삭제", destructive: true });
               if (ok) delSpecial.mutate(id);
             }} />
         </CardContent>

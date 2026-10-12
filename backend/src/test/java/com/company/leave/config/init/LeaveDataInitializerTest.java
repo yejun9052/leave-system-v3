@@ -56,9 +56,9 @@ class LeaveDataInitializerTest {
         assertThat(types).filteredOn(LeaveType::isDeductFromAnnual).extracting(LeaveType::getCode)
                 .containsExactly("ANNUAL", "HALF_AM", "HALF_PM", "HOURLY");
         assertThat(types).filteredOn(LeaveType::isRequiresAnnualExhausted).extracting(LeaveType::getCode)
-                .containsExactly("SICK", "OFFICIAL");
+                .containsExactly("SICK");
         assertThat(types).filteredOn(t -> t.getAnnualDeductionMode() == AnnualDeductionMode.NONE)
-                .extracting(LeaveType::getCode).containsExactly("CONDOLENCE");
+                .extracting(LeaveType::getCode).containsExactly("CONDOLENCE", "OFFICIAL");
         assertThat(types).filteredOn(LeaveType::isAllowedDuringBlackout).extracting(LeaveType::getCode)
                 .containsExactly("CONDOLENCE", "OFFICIAL");
         assertThat(types).filteredOn(t -> t.getCode().equals("HOURLY")).extracting(LeaveType::getPortion)
@@ -67,7 +67,7 @@ class LeaveDataInitializerTest {
     }
 
     @Test
-    void 처음_설치하면_경조사_규정을_만들고_근속_포상_규칙은_만들지_않는다() {
+    void 처음_설치하면_경조사_규정과_공가_예비군_규정을_만들고_근속_포상_규칙은_만들지_않는다() {
         비어_있음();
 
         초기화(null);
@@ -75,8 +75,12 @@ class LeaveDataInitializerTest {
         // 포상 규칙은 관리자가 직접 등록한다(초기화는 포상 규칙 저장소를 쓰지 않는다)
         List<SpecialLeaveRule> rules = 저장된_목록(specialRuleRepository);
         assertThat(rules).extracting(SpecialLeaveRule::getName)
-                .containsExactly("본인 결혼", "배우자 출산", "자녀 결혼", "부모/배우자 사망", "조부모/형제자매 사망");
-        assertThat(rules).extracting(SpecialLeaveRule::getLeaveTypeCode).containsOnly("CONDOLENCE");
+                .containsExactly("본인 결혼", "배우자 출산", "자녀 결혼", "부모/배우자 사망", "조부모/형제자매 사망", "예비군");
+        assertThat(rules).filteredOn(r -> r.getName().equals("예비군"))
+                .extracting(SpecialLeaveRule::getLeaveTypeCode, r -> r.getDays().stripTrailingZeros().toPlainString())
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("OFFICIAL", "1"));
+        assertThat(rules).filteredOn(r -> !r.getName().equals("예비군"))
+                .extracting(SpecialLeaveRule::getLeaveTypeCode).containsOnly("CONDOLENCE");
     }
 
     @Test

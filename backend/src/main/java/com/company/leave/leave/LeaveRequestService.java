@@ -1027,7 +1027,7 @@ public class LeaveRequestService {
         if (rules.isEmpty()) {
             if (specialRuleId != null) {
                 throw new BusinessException(ErrorCode.LEAVE_SPECIAL_RULE_INVALID,
-                        type.getName() + "에는 선택할 경조사 규정이 없습니다.");
+                        type.getName() + "에는 선택할 규정이 없습니다.");
             }
             if (halfDayPart != null) {
                 throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,

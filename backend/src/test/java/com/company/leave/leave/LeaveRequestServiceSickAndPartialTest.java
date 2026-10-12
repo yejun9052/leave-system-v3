@@ -59,7 +59,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
- * 병가·공가 사용 조건(잔여 연차 1일 미만 + 대기 중 연차 신청 없음, 승인 시 남은 연차 소멸)과
+ * 병가 사용 조건(잔여 연차 1일 미만 + 대기 중 연차 신청 없음, 승인 시 남은 연차 소멸), 공가(연차와 무관, 규정 선택)와
  * 부분 휴가(반차·시간차, 같은 날 합계 1일, 정책 켜기/끄기).
  * 기준일 2027-05-04(화). 공휴일 없음. 일수 계산은 실제 WorkdayCalculator.
  */
@@ -111,10 +111,11 @@ class LeaveRequestServiceSickAndPartialTest {
     private final LeaveType 반차_기타 = 종류(8L, "HALF_ETC", "반차(기타)", "0.5", DayPortion.HALF, true, false);
     private final LeaveType 시간차 = 종류(4L, "HOURLY", "시간차", "0.125", DayPortion.HOURLY, true, false);
     // 연차 사용 금지 기간에도 신청 가능: 경조사·공가(기본 데이터와 같음). 병가는 불가
+    // 공가는 경조사처럼 연차와 무관(차감·소진 조건 없음)
     private final LeaveType 경조사 = 종류(5L, "CONDOLENCE", "경조사 휴가", "0.0", DayPortion.FULL, false, false)
             .allowDuringBlackout(true);
     private final LeaveType 병가 = 종류(6L, "SICK", "병가", "0.0", DayPortion.FULL, false, true);
-    private final LeaveType 공가 = 종류(7L, "OFFICIAL", "공가", "0.0", DayPortion.FULL, false, true)
+    private final LeaveType 공가 = 종류(7L, "OFFICIAL", "공가", "0.0", DayPortion.FULL, false, false)
             .allowDuringBlackout(true);
 
     @BeforeEach
@@ -172,12 +173,35 @@ class LeaveRequestServiceSickAndPartialTest {
         }
 
         @Test
-        void 공가도_같은_조건을_적용한다() {
-            잔여(1);
+        void 공가는_연차와_무관해_잔여_연차가_있어도_신청되고_차감하지_않는다() {
+            잔여(10);
+
+            LeaveRequest request = 신청(공가, null, null);
+
+            assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(request.getDeductedDays()).isEqualByComparingTo("0");
+            assertThat(balance.remaining()).isEqualByComparingTo("10");
+        }
+
+        @Test
+        void 공가에_규정이_있으면_예비군처럼_규정을_골라야_하고_연차는_그대로다() {
+            잔여(10);
+            SpecialLeaveRule 예비군 = new SpecialLeaveRule("예비군", BigDecimal.ONE, "OFFICIAL", 1, null);
+            ReflectionTestUtils.setField(예비군, "id", 31L);
+            when(leaveTypeService.specialRulesOf(공가)).thenReturn(List.of(예비군));
 
             assertThatThrownBy(() -> 신청(공가, null, null))
-                    .isInstanceOfSatisfying(BusinessException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_ANNUAL_NOT_EXHAUSTED));
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_SPECIAL_RULE_INVALID);
+                        assertThat(ex.getMessage()).contains("공가는 사유(규정)를 선택해야");
+                    });
+            LeaveRequestDtos.Response response = service.create(EMP,
+                    new LeaveRequestDtos.Create(공가.getId(), TUE, TUE, "예비군 훈련", null, null, 31L));
+            LeaveRequest request = saved.get(response.id());
+
+            assertThat(request.getSpecialRuleName()).isEqualTo("예비군");
+            assertThat(request.getDeductedDays()).isEqualByComparingTo("0");
+            assertThat(balance.remaining()).isEqualByComparingTo("10");
         }
 
         @Test

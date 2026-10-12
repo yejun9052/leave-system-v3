@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 
-/** 경조사 규정 수정: 사유·일수·연간 사용 횟수. 연결된 휴가 종류와 정렬 순서는 그대로 둔다. */
+/** 경조사·공가 규정 수정: 사유·일수·연간 사용 횟수. 연결된 휴가 종류와 정렬 순서는 그대로 둔다. */
 export default function SpecialRuleEditDialog({ rule, onClose }: { rule: SpecialRule; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -36,7 +36,7 @@ export default function SpecialRuleEditDialog({ rule, onClose }: { rule: Special
         annualLimit: limitValue,
       }),
     onSuccess: () => {
-      toast({ title: "경조사 규정을 고쳤습니다.", variant: "success" });
+      toast({ title: "규정을 고쳤습니다.", variant: "success" });
       qc.invalidateQueries({ queryKey: ["specialRules"] });
       qc.invalidateQueries({ queryKey: ["leaveTypes"] });
       onClose();
@@ -48,7 +48,7 @@ export default function SpecialRuleEditDialog({ rule, onClose }: { rule: Special
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>경조사 규정 수정</DialogTitle>
+          <DialogTitle>규정 수정</DialogTitle>
           <DialogDescription>이미 신청된 휴가에는 영향이 없고, 앞으로의 신청부터 적용됩니다.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

@@ -123,8 +123,8 @@ class RestoreIntegrationTest {
 
         assertThat(blackoutNames()).containsExactly("원래 데이터");
         assertThat(result.fromVersion()).isEqualTo("8");
-        assertThat(result.toVersion()).isEqualTo("11");
-        assertThat(result.migrationsApplied()).isEqualTo(3);
+        assertThat(result.toVersion()).isEqualTo(latestVersion());
+        assertThat(result.migrationsApplied()).isEqualTo(Integer.parseInt(latestVersion()) - 8);
         // 백업에 없던 V9 표(V10 에서 보관 기간 칸으로 바뀜)는 지워졌다가 마이그레이션으로 기본값과 함께 다시 생김
         assertThat(jdbc.queryForObject("SELECT enabled FROM backup_settings", Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT keep_months FROM backup_settings", Integer.class)).isEqualTo(6);
@@ -200,7 +200,7 @@ class RestoreIntegrationTest {
         RestoreService.Check check = restore.check("from-old-server.dump", Source.IMPORT);
 
         assertThat(check.dbVersion()).isEqualTo("8");
-        assertThat(check.currentVersion()).isEqualTo("11");
+        assertThat(check.currentVersion()).isEqualTo(latestVersion());
         assertThat(check.checksumVerified()).isFalse();
         assertThat(check.kind()).isEqualTo(Kind.IMPORTED);
     }
@@ -226,5 +226,13 @@ class RestoreIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM backup_settings", Integer.class)).isEqualTo(1);
         assertThat(maintenance.isActive()).isFalse();
         assertThat(count(Kind.PRE_RESTORE)).isEqualTo(1);
+    }
+
+    /** 코드에 들어 있는 마지막 마이그레이션 버전(새 마이그레이션을 더해도 테스트를 고치지 않게). */
+    private String latestVersion() {
+        return java.util.Arrays.stream(flyway.info().all())
+                .map(info -> info.getVersion().getVersion())
+                .max(java.util.Comparator.comparingInt(Integer::parseInt))
+                .orElseThrow();
     }
 }
