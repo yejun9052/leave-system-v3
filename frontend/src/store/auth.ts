@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { roleIncludes, type Me, type Role } from "@/types";
 import { authApi } from "@/api/auth";
+import { queryClient } from "@/lib/queryClient";
 
 interface AuthState {
   user: Me | null;
@@ -70,3 +71,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return roleIncludes(user.role, "HR_ADMIN");
   },
 }));
+
+// 로그인한 사람이 바뀌면(로그아웃, 다른 계정 로그인, 세션이 끊겨 로그인 화면으로) 앞사람의 화면 데이터를 지운다.
+// 그대로 두면 공용 PC에서 다음 사람에게 30초 동안 앞사람의 잔여 연차·결재 대기·알림이 보인다.
+useAuthStore.subscribe((state, prev) => {
+  if (state.user?.id !== prev.user?.id) queryClient.clear();
+});
