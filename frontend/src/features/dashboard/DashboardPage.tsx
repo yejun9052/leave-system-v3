@@ -523,7 +523,8 @@ function AdminSection() {
       {heading}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi icon={Users} label="재직 인원" value={`${data?.totalEmployees ?? 0}명`} sub="재직 중인 직원" />
-        <Kpi icon={UserMinus} label="오늘 부재" value={`${data?.onLeaveToday ?? 0}명`} sub="오늘 승인된 휴가" />
+        {/* 서버 값은 오늘에 걸린 승인 휴가 신청 건수(사람 수 아님: 한 사람이 오전·오후 반차를 따로 내면 2건) */}
+        <Kpi icon={UserMinus} label="오늘 휴가(승인)" value={`${data?.onLeaveToday ?? 0}건`} sub="오늘 승인된 휴가 신청" />
         <Kpi icon={Inbox} label="결재 대기 (전체)" value={`${data?.pendingApprovals ?? 0}건`} sub="신청·취소 요청" />
         <Kpi icon={TrendingUp} label="연차 사용률" value={`${data?.usageRate ?? 0}%`} accent
           sub={`사용 ${formatDays(data?.totalUsed)}일 / 부여 ${formatDays(data?.totalGranted)}일`} />
