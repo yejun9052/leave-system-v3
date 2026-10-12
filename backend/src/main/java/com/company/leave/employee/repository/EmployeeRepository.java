@@ -34,9 +34,10 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
     @Query("select count(e) from Employee e")
     long countAll();
 
-    /** 부서별 소속 인원 수(관리 전용 계정 포함): [departmentId, count] */
+    /** 부서별 재직 인원 수(퇴사자·관리 전용 계정 제외): [departmentId, count] */
     @Query("select e.department.id, count(e) from Employee e "
-            + "where e.department.id is not null group by e.department.id")
+            + "where e.department.id is not null and e.status = com.company.leave.employee.domain.EmployeeStatus.ACTIVE "
+            + "and e.systemAccount = false group by e.department.id")
     List<Object[]> countGroupByDepartment();
 
     @Query("select e.id from Employee e")
