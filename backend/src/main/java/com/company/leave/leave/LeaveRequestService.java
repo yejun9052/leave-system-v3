@@ -593,10 +593,11 @@ public class LeaveRequestService {
      * 취소 처리.
      * <ul>
      *   <li>대기(PENDING): 본인·인사관리자 → 즉시 취소. 본인이 철회하면 결재자에게, 인사관리자가 취소하면 신청자에게 안내</li>
-     *   <li>승인(APPROVED), 본인: 시작일 전까지만 취소 요청(결재자 결재 대기)</li>
-     *   <li>승인(APPROVED), 인사관리자: 시작 전후 상관없이 즉시 취소. 다른 직원의 휴가이거나 이미 시작된 휴가면
-     *       강제 취소로 보고 사유가 필수이며, 신청자·담당 팀장에게 알리고 감사 로그를 남긴다</li>
-     *   <li>취소 요청(CANCEL_REQUESTED): 인사관리자 → 즉시 확정</li>
+     *   <li>승인(APPROVED), 본인: 시작일 전까지만 취소 요청(결재자 결재 대기). 인사관리자 본인도 같다.
+     *       인사관리자의 취소 요청은 신청처럼 결재함에서 본인(또는 다른 결재자)이 결재한다</li>
+     *   <li>승인(APPROVED), 인사관리자가 다른 직원의 휴가: 시작 전후 상관없이 강제 취소. 사유가 필수이며,
+     *       신청자·담당 팀장에게 알리고 감사 로그를 남긴다</li>
+     *   <li>취소 요청(CANCEL_REQUESTED): 인사관리자가 다른 직원의 휴가 → 즉시 확정</li>
      * </ul>
      * 팀장은 이 경로로 다른 직원의 휴가를 직접 취소할 수 없다(취소 요청 결재는 {@link #approveCancellation}).
      */
@@ -620,12 +621,10 @@ public class LeaveRequestService {
                 }
             }
             case APPROVED -> {
-                boolean started = !request.getStartDate().isAfter(LocalDate.now());
-                if (admin && (!owner || started)) {
+                // 본인 휴가는 인사관리자라도 사원과 같다: 시작 전 취소 요청(결재함에서 결재), 시작 후 불가
+                if (!owner) {
                     forceCancel(request, requester, reason);
-                } else if (admin) {
-                    finalizeCancel(request, requester);
-                } else if (started) {
+                } else if (!request.getStartDate().isAfter(LocalDate.now())) {
                     throw new BusinessException(ErrorCode.LEAVE_ALREADY_STARTED);
                 } else {
                     request.requestCancel(reason);
@@ -633,7 +632,7 @@ public class LeaveRequestService {
                 }
             }
             case CANCEL_REQUESTED -> {
-                if (admin) {
+                if (!owner) {
                     finalizeCancel(request, requester);
                 } else {
                     throw new BusinessException(ErrorCode.CONFLICT, "이미 취소 요청 상태입니다.");

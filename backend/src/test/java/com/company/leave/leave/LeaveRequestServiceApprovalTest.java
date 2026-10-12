@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -462,13 +463,43 @@ class LeaveRequestServiceApprovalTest {
     }
 
     @Test
-    void 인사관리자_본인의_시작된_휴가_취소도_강제_취소로_사유가_필요하다() {
+    void 인사관리자도_본인의_시작된_휴가는_사원처럼_취소할_수_없다() {
         LeaveRequest request = 승인된_휴가(인사관리자, LocalDate.now().minusDays(1));
 
-        assertThatThrownBy(() -> service.cancel(request.getId(), 인사관리자.getId(), null))
-                .isInstanceOf(BusinessException.class);
-        service.cancel(request.getId(), 인사관리자.getId(), "출근함");
+        assertThatThrownBy(() -> service.cancel(request.getId(), 인사관리자.getId(), "출근함"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_ALREADY_STARTED));
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.APPROVED);
+        verify(auditService, never()).record(eq("force_cancel"), anyString(), anyString(), anyString(), anyBoolean());
+    }
+
+    @Test
+    void 인사관리자_본인의_승인_휴가는_바로_취소되지_않고_취소_요청이_되어_결재함에서_결재한다() {
+        LeaveRequest request = 승인된_휴가(인사관리자, LocalDate.now().plusDays(30));
+
+        service.cancel(request.getId(), 인사관리자.getId(), "일정 변경");
+
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCEL_REQUESTED);
+        verify(notificationService, never())
+                .notify(anyLong(), eq("LEAVE_FORCE_CANCELLED"), anyString(), anyString(), anyString());
+        verify(auditService, never()).record(eq("force_cancel"), anyString(), anyString(), anyString(), anyBoolean());
+
+        when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(request));
+        assertThat(service.pendingForApprover(인사관리자.getId()))
+                .extracting(LeaveRequestDtos.Response::id).containsExactly(request.getId());
+
+        service.approveCancellation(request.getId(), 인사관리자.getId());
         assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCELLED);
+    }
+
+    @Test
+    void 인사관리자_본인의_취소_요청을_다시_취소하면_이미_요청_상태라고_알린다() {
+        LeaveRequest request = 대기_취소요청(인사관리자);
+
+        assertThatThrownBy(() -> service.cancel(request.getId(), 인사관리자.getId(), null))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.CONFLICT));
+        assertThat(request.getStatus()).isEqualTo(LeaveRequestStatus.CANCEL_REQUESTED);
     }
 
     @Test

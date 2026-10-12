@@ -70,6 +70,8 @@ export default function DayDetailDialog({
   const dayBlackouts = blackouts.filter((b) => b.startDate <= date && b.endDate >= date);
   // 인사관리자·시스템 관리자는 승인된 휴가를 강제 취소할 수 있다(사유 필수)
   const canForceCancel = useAuthStore((s) => s.hasAnyRole("HR_ADMIN", "SYSTEM_ADMIN"));
+  // 본인 휴가는 강제 취소하지 않고 내 휴가에서 취소 요청한다(사원과 같음)
+  const myId = useAuthStore((s) => s.user?.id);
   const [forceCancelling, setForceCancelling] = useState<DayLeaveDto | null>(null);
 
   const leaves = data?.leaves ?? [];
@@ -140,7 +142,7 @@ export default function DayDetailDialog({
                             </p>
                           </div>
                           <StatusBadge status={l.status} />
-                          {canForceCancel && l.status === "APPROVED" && (
+                          {canForceCancel && l.status === "APPROVED" && l.employeeId !== myId && (
                             <Button
                               size="sm"
                               variant="ghost"

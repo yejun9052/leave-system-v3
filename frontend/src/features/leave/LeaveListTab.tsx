@@ -55,6 +55,8 @@ function period(r: LeaveRequest): string {
  */
 export default function LeaveListTab() {
   const canForceCancel = useAuthStore((s) => s.hasAnyRole("HR_ADMIN", "SYSTEM_ADMIN"));
+  // 본인 휴가는 강제 취소하지 않고 내 휴가에서 취소 요청한다(사원과 같음)
+  const myId = useAuthStore((s) => s.user?.id);
   const year = new Date().getFullYear();
   const [statusFilter, setStatusFilter] = useState("registered");
   const [from, setFrom] = useState(`${year}-01-01`);
@@ -226,7 +228,7 @@ export default function LeaveListTab() {
                     <TableCell>{r.approverName ?? "-"}</TableCell>
                     {canForceCancel && (
                       <TableCell className="text-right">
-                        {r.status === "APPROVED" && (
+                        {r.status === "APPROVED" && r.employeeId !== myId && (
                           <Button
                             size="sm"
                             variant="ghost"
