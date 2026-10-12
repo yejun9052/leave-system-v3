@@ -249,8 +249,8 @@ Check "staff cannot read audit (403)" ($forbidden2.status -eq 403) "(status=$($f
 "===== 10. Policy / rules / promotion / report ====="
 $pol = (Req GET "$base/policy" $admin).data.data
 Check "policy seniority fields" ($pol.baseAnnualDays -eq 15 -and $pol.maxAnnualDays -eq 25)
-$awards = (Req GET "$base/policy/award-rules" $admin).data.data
-Check "award rules >=3" ($awards.Count -ge 3)
+$awardsRes = Req GET "$base/policy/award-rules" $admin
+Check "award rules list (no default rules)" ($awardsRes.status -eq 200 -and $awardsRes.data.success)
 $specials = (Req GET "$base/policy/special-rules" $admin).data.data
 Check "special rules >=5" ($specials.Count -ge 5)
 $targets = (Req GET "$base/leave/promotion/targets" $admin).data.data
