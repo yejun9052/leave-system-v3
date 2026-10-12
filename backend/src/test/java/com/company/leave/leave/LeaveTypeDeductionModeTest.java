@@ -1,19 +1,26 @@
 package com.company.leave.leave;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
+import com.company.leave.common.exception.BusinessException;
+import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.leave.domain.AnnualDeductionMode;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.LeaveType;
 import com.company.leave.leave.dto.LeaveTypeDtos;
+import com.company.leave.leave.repository.LeaveRequestRepository;
 import com.company.leave.leave.repository.LeaveTypeRepository;
 import com.company.leave.policy.PolicyService;
 import com.company.leave.policy.domain.LeavePolicy;
 import com.company.leave.policy.repository.SpecialLeaveRuleRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -143,6 +150,53 @@ class LeaveTypeDeductionModeTest {
             assertThat(response.annualDeductionMode()).isEqualTo(AnnualDeductionMode.DEDUCT);
             assertThat(response.deductFromAnnual()).isTrue();
             assertThat(response.requiresAnnualExhausted()).isFalse();
+            assertThat(병가.isDeductFromAnnual()).isTrue();
+        }
+
+        @Test
+        void 진행_중이거나_앞으로_쓸_휴가가_있으면_차감_방식과_단위를_바꿀_수_없다() {
+            LeaveRequestRepository requests = org.mockito.Mockito.mock(LeaveRequestRepository.class);
+            LeaveType 연차 = new LeaveType("ANNUAL", "연차", BigDecimal.ONE, true, DayPortion.FULL,
+                    AnnualDeductionMode.DEDUCT, "#4f46e5", 1);
+            ReflectionTestUtils.setField(연차, "id", 1L);
+            when(repository.findById(1L)).thenReturn(Optional.of(연차));
+            when(requests.countByLeaveTypeIdAndStatusInAndEndDateGreaterThanEqual(eq(1L), any(), eq(LocalDate.now())))
+                    .thenReturn(2L);
+            lenient().when(policyService.getActivePolicy()).thenReturn(policy);
+            LeaveTypeService service = new LeaveTypeService(repository, policyService, specialRules, requests);
+
+            assertThatThrownBy(() -> service.update(1L, new LeaveTypeDtos.Update("연차", BigDecimal.ONE, true,
+                    DayPortion.FULL, AnnualDeductionMode.NONE, null, "#4f46e5", 1, true)))
+                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.CONFLICT);
+                        assertThat(ex.getMessage()).contains("2건").contains("차감 방식");
+                    });
+            assertThatThrownBy(() -> service.update(1L, new LeaveTypeDtos.Update("연차", BigDecimal.ONE, true,
+                    DayPortion.HALF, AnnualDeductionMode.DEDUCT, null, "#4f46e5", 1, true)))
+                    .hasMessageContaining("단위");
+            assertThat(연차.getAnnualDeductionMode()).isEqualTo(AnnualDeductionMode.DEDUCT);
+
+            // 이름·색만 바꾸는 것은 된다
+            service.update(1L, new LeaveTypeDtos.Update("연차휴가", BigDecimal.ONE, true, DayPortion.FULL,
+                    AnnualDeductionMode.DEDUCT, null, "#000000", 1, true));
+            assertThat(연차.getName()).isEqualTo("연차휴가");
+        }
+
+        @Test
+        void 진행_중인_휴가가_없으면_차감_방식을_바꿀_수_있다() {
+            LeaveRequestRepository requests = org.mockito.Mockito.mock(LeaveRequestRepository.class);
+            LeaveType 병가 = new LeaveType("SICK", "병가", BigDecimal.ZERO, false, DayPortion.FULL,
+                    AnnualDeductionMode.EXHAUST_FIRST, "#ef4444", 5);
+            ReflectionTestUtils.setField(병가, "id", 6L);
+            when(repository.findById(6L)).thenReturn(Optional.of(병가));
+            when(requests.countByLeaveTypeIdAndStatusInAndEndDateGreaterThanEqual(anyLong(), any(), any())).thenReturn(0L);
+            lenient().when(policyService.getActivePolicy()).thenReturn(policy);
+            lenient().when(specialRules.findByLeaveTypeCodeOrderBySortOrderAscIdAsc(any())).thenReturn(List.of());
+
+            new LeaveTypeService(repository, policyService, specialRules, requests).update(6L,
+                    new LeaveTypeDtos.Update("병가", BigDecimal.ONE, false, DayPortion.FULL, AnnualDeductionMode.DEDUCT,
+                            null, "#ef4444", 5, true));
+
             assertThat(병가.isDeductFromAnnual()).isTrue();
         }
 
