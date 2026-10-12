@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarClock, CircleAlert, Save } from "lucide-react";
 import { backupApi, type BackupSettings, type BackupSettingsForm } from "@/api/backups";
 import { extractErrorMessage } from "@/api/client";
+import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 import { useServerForm } from "@/lib/useServerForm";
@@ -155,7 +156,7 @@ function useDebounced<T>(value: T, ms: number): T {
 export default function BackupSettingsCard() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["backupSettings"], queryFn: backupApi.settings });
+  const { data, error, refetch } = useQuery({ queryKey: ["backupSettings"], queryFn: backupApi.settings });
   const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? toForm(data) : undefined);
   const [recent, setRecent] = useState<RecentSchedule[]>(readRecent);
 
@@ -184,7 +185,10 @@ export default function BackupSettingsCard() {
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
-  if (!data || !form) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  if (!data || !form) {
+    if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+    return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  }
 
   const set = <K extends keyof BackupSettingsForm>(key: K, value: BackupSettingsForm[K]) =>
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -223,7 +227,12 @@ export default function BackupSettingsCard() {
   // 미리보기가 지금 입력과 같은 값을 해석했을 때만 믿는다
   const current = preview.data && preview.data.cron === cron ? preview.data : null;
   const cronError = cron === "" ? "실행 시각을 입력해 주세요." : current?.error ?? null;
-  const checking = cron !== "" && !current;
+  // 미리보기 요청 자체가 실패(서버 오류·네트워크)하면 "확인하는 중…"에 머물지 않고 알린다. 저장할 때 서버가 다시 확인한다
+  const previewFailed = cron !== "" && !current && debouncedCron === cron && preview.isError;
+  const checking = cron !== "" && !current && !previewFailed;
+  // 실행 시각을 바꾸지 않았으면 미리보기와 상관없이 켜기·끄기·보관 기간만 저장할 수 있다
+  const cronChanged = cron !== data.cron;
+  const blockedByCron = cronChanged && (!!cronError || checking);
 
   return (
     <Card>
@@ -356,6 +365,13 @@ export default function BackupSettingsCard() {
                   ))}
                 </div>
               </>
+            ) : previewFailed ? (
+              <p className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                <CircleAlert className="h-4 w-4 shrink-0" /> 실행 시각을 미리 확인하지 못했습니다. 저장할 때 다시 확인합니다.
+                <Button type="button" variant="outline" size="sm" className="h-7" onClick={() => void preview.refetch()}>
+                  다시 확인
+                </Button>
+              </p>
             ) : (
               <p className="text-muted-foreground">확인하는 중…</p>
             )}
@@ -411,7 +427,7 @@ export default function BackupSettingsCard() {
         </div>
 
         <div className="flex justify-end">
-          <Button onClick={() => save.mutate(form)} disabled={!dirty || !!cronError || checking || save.isPending}>
+          <Button onClick={() => save.mutate(form)} disabled={!dirty || blockedByCron || save.isPending}>
             <Save className="h-4 w-4" /> 저장
           </Button>
         </div>

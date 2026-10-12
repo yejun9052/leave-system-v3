@@ -50,6 +50,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
+import QueryError from "@/components/QueryError";
 import { cn } from "@/lib/utils";
 import HolidayTab from "./HolidayTab";
 import PromotionTab from "./PromotionTab";
@@ -143,7 +144,7 @@ function PolicyTab() {
   const { toast } = useToast();
   const confirm = useConfirm();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
+  const { data, error, refetch } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
   const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? policyForm(data) : undefined);
 
   const set = <K extends keyof PolicyInput>(k: K, v: PolicyInput[K]) =>
@@ -170,7 +171,10 @@ function PolicyTab() {
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
-  if (!form) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  if (!form) {
+    if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+    return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">

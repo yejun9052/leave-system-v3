@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Save } from "lucide-react";
 import { automationApi, type AutomationJob, type AutomationJobState } from "@/api/policy";
 import { extractErrorMessage } from "@/api/client";
+import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 import { useServerForm } from "@/lib/useServerForm";
@@ -40,8 +41,9 @@ const EVENT_MAILS: { when: string; to: string }[] = [
  * 일이 생길 때 자동으로 가는 메일 안내.
  */
 export default function AutomationTab() {
-  const { data, isLoading } = useQuery({ queryKey: ["automation"], queryFn: automationApi.get });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["automation"], queryFn: automationApi.get });
 
+  if (error && !data) return <QueryError error={error} onRetry={() => void refetch()} />;
   if (isLoading || !data) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
 
   return (

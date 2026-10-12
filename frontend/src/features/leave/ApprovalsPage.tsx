@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
+import QueryError from "@/components/QueryError";
 import axios from "axios";
 import { CalendarPlus, Check, X, Inbox } from "lucide-react";
 import { leaveApi } from "@/api/leave";
@@ -77,7 +78,7 @@ export default function ApprovalsPage() {
   };
   const [rejecting, setRejecting] = useState<RejectTarget | null>(null);
 
-  const { data: pending = [], isLoading } = useQuery({
+  const { data: pending = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ["pendingApprovals"],
     queryFn: leaveApi.pending,
   });
@@ -137,7 +138,9 @@ export default function ApprovalsPage() {
           <TabsTrigger value="pending">결재 대기{pending.length > 0 && ` (${pending.length})`}</TabsTrigger>
           <TabsTrigger value="list">휴가 목록</TabsTrigger>
         </TabsList>
-        <TabsContent value="pending">
+        <TabsContent value="pending" className="space-y-3">
+          {/* 실패를 "대기 중인 결재가 없습니다"로 보이면 결재할 건이 없다고 오해한다 */}
+          {isError && <QueryError error={error} onRetry={() => void refetch()} />}
           <Card>
             <CardContent className="p-0">
               <Table>
@@ -256,8 +259,14 @@ export default function ApprovalsPage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                        <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                        대기 중인 결재가 없습니다.
+                        {isError ? (
+                          "결재 목록을 불러오지 못했습니다."
+                        ) : (
+                          <>
+                            <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                            대기 중인 결재가 없습니다.
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   )}

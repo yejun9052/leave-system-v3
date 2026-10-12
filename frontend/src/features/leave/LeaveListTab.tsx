@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
 import DepartmentFilter from "@/components/DepartmentFilter";
+import QueryError from "@/components/QueryError";
 import { useTableSort } from "@/lib/useTableSort";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { useAuthStore } from "@/store/auth";
@@ -69,7 +70,7 @@ export default function LeaveListTab() {
   const [forceCancelling, setForceCancelling] = useState<LeaveRequest | null>(null);
 
   const statuses = STATUS_FILTERS.find((f) => f.value === statusFilter)?.statuses ?? [];
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["leaveList", { search, statusFilter, from, to, page, departments: [...departmentIds] }],
     queryFn: () =>
       leaveApi.search({
@@ -177,6 +178,7 @@ export default function LeaveListTab() {
         </form>
       </div>
 
+      {isError && <QueryError error={error} onRetry={() => void refetch()} />}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -250,7 +252,7 @@ export default function LeaveListTab() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
-                    조건에 맞는 휴가가 없습니다.
+                    {isError ? "휴가 목록을 불러오지 못했습니다." : "조건에 맞는 휴가가 없습니다."}
                   </TableCell>
                 </TableRow>
               )}

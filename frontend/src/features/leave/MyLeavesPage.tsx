@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
+import QueryError from "@/components/QueryError";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { LEAVE_STATUS_LABEL, type LeaveRequestStatus } from "@/types";
@@ -53,8 +54,11 @@ export default function MyLeavesPage() {
   const [requestWarning, setRequestWarning] = useState<string | null>(null);
   const canCancelOwn = !!user;
 
-  const { data: balance } = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
-  const { data: requests } = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
+  const balanceQuery = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
+  const requestsQuery = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
+  const balance = balanceQuery.data;
+  const requests = requestsQuery.data;
+  const loadError = balanceQuery.error ?? requestsQuery.error;
   const { sorted, sort, toggle } = useTableSort(requests?.content ?? [], {
     type: (r) => r.leaveTypeName,
     period: (r) => `${r.startDate} ${r.endDate}`,
@@ -94,6 +98,16 @@ export default function MyLeavesPage() {
         </Button>
       </div>
 
+      {/* 실패를 잔여 0일·"신청 내역이 없습니다"로 보이지 않게 */}
+      {loadError && (
+        <QueryError
+          error={loadError}
+          onRetry={() => {
+            void balanceQuery.refetch();
+            void requestsQuery.refetch();
+          }}
+        />
+      )}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="잔여 연차" value={balance?.remaining ?? 0} accent />
         <StatCard label="부여" value={balance?.granted ?? 0} />
@@ -203,8 +217,14 @@ export default function MyLeavesPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <CalendarDays className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                    신청 내역이 없습니다.
+                    {requestsQuery.isError ? (
+                      "신청 내역을 불러오지 못했습니다."
+                    ) : (
+                      <>
+                        <CalendarDays className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                        {requestsQuery.isLoading ? "불러오는 중…" : "신청 내역이 없습니다."}
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
