@@ -30,15 +30,36 @@ const NUMBER_FIELDS = [
 const DAY_CODES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 
-/** 자주 쓰는 실행 시각 */
-const PRESETS = [
-  { label: "매일 02:00", cron: "0 0 2 * * *" },
-  { label: "평일 22:00", cron: "0 0 22 * * MON-FRI" },
-  { label: "매주 월요일 03:00", cron: "0 0 3 * * MON" },
-  { label: "매월 1일 04:00", cron: "0 0 4 1 * *" },
-  { label: "매월 말일 04:00", cron: "0 0 4 L * *" },
-  { label: "6시간마다", cron: "0 0 0/6 * * *" },
-];
+/** 최근 쓴 실행 시각(저장한 것, 최신이 앞). 이 브라우저에만 남는다 */
+const RECENT_KEY = "annualLeave.recentBackupSchedules";
+const RECENT_MAX = 5;
+interface RecentSchedule {
+  cron: string;
+  /** 저장할 때 서버가 돌려준 설명(예: "매월 1일 04:00") */
+  label: string;
+}
+
+function readRecent(): RecentSchedule[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(list)
+      ? list.filter((r) => typeof r?.cron === "string" && typeof r?.label === "string").slice(0, RECENT_MAX)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 저장한 설정을 맨 앞에 넣는다(이미 있으면 앞으로 옮김, 5개 넘으면 오래된 것부터 뺌) */
+function pushRecent(list: RecentSchedule[], item: RecentSchedule): RecentSchedule[] {
+  const next = [item, ...list.filter((r) => r.cron !== item.cron)].slice(0, RECENT_MAX);
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch {
+    // 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)이면 이번 화면에서만 기억한다
+  }
+  return next;
+}
 
 const normalize = (cron: string) => cron.trim().split(/\s+/).join(" ");
 
@@ -136,6 +157,7 @@ export default function BackupSettingsCard() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["backupSettings"], queryFn: backupApi.settings });
   const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? toForm(data) : undefined);
+  const [recent, setRecent] = useState<RecentSchedule[]>(readRecent);
 
   const cron = normalize(form?.cron ?? "");
   const debouncedCron = useDebounced(cron, 300);
@@ -150,6 +172,7 @@ export default function BackupSettingsCard() {
     mutationFn: (f: BackupSettingsForm) => backupApi.updateSettings({ ...f, cron: normalize(f.cron) }),
     onSuccess: (saved) => {
       reset(toForm(saved));
+      setRecent((list) => pushRecent(list, { cron: saved.cron, label: saved.scheduleLabel }));
       qc.setQueryData(["backupSettings"], saved);
       qc.invalidateQueries({ queryKey: ["automation"] });
       toast({
@@ -193,6 +216,9 @@ export default function BackupSettingsCard() {
           ? days && days.size > 0 ? "고른 요일에 실행" : "매일 실행"
           : `${numberPlaceholder(dayPart, NUMBER_FIELDS[1])} 실행`;
 
+  // 아직 저장한 적이 없으면 지금 저장된 설정 하나라도 보여 준다
+  const recentShown = recent.length > 0 ? recent : [{ cron: data.cron, label: data.scheduleLabel }];
+
   const dirty = form.enabled !== data.enabled || form.keepMonths !== data.keepMonths || cron !== data.cron;
   // 미리보기가 지금 입력과 같은 값을 해석했을 때만 믿는다
   const current = preview.data && preview.data.cron === cron ? preview.data : null;
@@ -220,12 +246,14 @@ export default function BackupSettingsCard() {
             <span className="text-xs text-muted-foreground">서버 시간(한국)</span>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {PRESETS.map((p) => (
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="최근 쓴 설정">
+            <span className="mr-1 text-xs text-muted-foreground">최근 쓴 설정</span>
+            {recentShown.map((p) => (
               <button
                 key={p.cron}
                 type="button"
                 onClick={() => set("cron", p.cron)}
+                title={p.cron}
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs transition-colors",
                   cron === p.cron ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent",
