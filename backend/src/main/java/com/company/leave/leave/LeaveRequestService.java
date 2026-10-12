@@ -153,7 +153,7 @@ public class LeaveRequestService {
      * 인사관리자(·시스템 관리자) 강제 등록: 다른 직원의 휴가를 바로 승인 상태로 등록한다.
      * <ul>
      *   <li>지난 날짜도 가능. 시작일은 근무일이어야 한다(주말·공휴일 불가)</li>
-     *   <li>사용 통제(블랙아웃·사전 신청·연속 일수·팀 동시 부재)는 적용하지 않는다</li>
+     *   <li>사용 통제(블랙아웃·사전 신청·연속 일수)는 적용하지 않는다</li>
      *   <li>겹침·잔액(마이너스 연차 정책)·경조사 규정·병가·공가 조건은 신청과 같다. 병가·공가는 남은 연차를 소멸시킨다.
      *       경조사 규정의 연간 사용 횟수를 넘으면 막지 않고, 화면에서 경고를 확인(limitAcknowledged)한 뒤에만 등록한다</li>
      * </ul>
@@ -225,7 +225,7 @@ public class LeaveRequestService {
      * 신청 기간·종류에 대한 검증과 일수·차감 계산(저장하지 않음). 규칙 위반은 BusinessException.
      *
      * @param preview 미리보기면 true: 경조사 규정을 아직 고르지 않았으면 규정 검사를 건너뛴다
-     * @param forced  인사관리자 강제 등록이면 true: 사용 통제(블랙아웃·사전 신청·연속 일수·팀 동시 부재)를 건너뛴다
+     * @param forced  인사관리자 강제 등록이면 true: 사용 통제(블랙아웃·사전 신청·연속 일수)를 건너뛴다
      * @param halfDayPart 종일 종류를 오전·오후 반차로 신청(0.5일 경조사 규정에서만). 그 외 null
      */
     private Plan plan(Employee employee, LeaveType type, LeavePolicy policy, LocalDate start, LocalDate end,
@@ -927,7 +927,7 @@ public class LeaveRequestService {
 
     // --- helpers ---
 
-    /** 정책 기반 사용 통제 검증 (블랙아웃/사전신청/연속일/팀 동시부재). */
+    /** 정책 기반 사용 통제 검증 (블랙아웃/사전신청/연속일). 팀 동시 부재는 막지 않고 결재할 때 경고한다(teamLimitWarning). */
     private void validateUsagePolicy(Employee employee, LeaveType type, LocalDate start, LocalDate end,
                                      BigDecimal days, LeavePolicy policy) {
         // 연차 사용 금지 기간은 휴가 종류마다 정한다(경조사·공가는 허용, 병가·연차는 불가).
@@ -935,7 +935,6 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_BLACKOUT);
         }
         // 나머지 사용 통제는 연차처럼 차감하는 종류에만. 경조사·병가·공가는 갑자기 생기거나 회사가 막을 수 없는 휴가다.
-        // 팀 동시 부재 한도 초과는 막지 않고 결재함에 경고로 보여 팀장이 재량으로 판단한다(teamLimitWarning).
         if (type.getAnnualDeductionMode() != AnnualDeductionMode.DEDUCT) {
             return;
         }
@@ -951,40 +950,58 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_MAX_CONSECUTIVE,
                     "최대 연속 " + policy.getMaxConsecutiveDays() + "일까지 사용할 수 있습니다.");
         }
-        if (exceedsTeamLimit(employee, start, end, policy)) {
-            throw new BusinessException(ErrorCode.LEAVE_TEAM_LIMIT,
-                    "같은 기간 팀 내 최대 " + policy.getMaxConcurrentAbsence() + "명까지 휴가가 가능합니다.");
-        }
     }
 
-    /** 같은 기간 같은 부서의 승인된 휴가자(본인 제외) 수. */
-    private long teamOnLeave(Employee employee, LocalDate start, LocalDate end) {
-        return requestRepository.findApprovedBetween(start, end).stream()
-                .filter(r -> employee.getDepartmentId().equals(r.getEmployee().getDepartmentId()))
-                .filter(r -> !r.getEmployee().getId().equals(employee.getId()))
-                .map(r -> r.getEmployee().getId())
-                .distinct()
-                .count();
-    }
-
-    private boolean exceedsTeamLimit(Employee employee, LocalDate start, LocalDate end, LeavePolicy policy) {
-        return policy.getMaxConcurrentAbsence() > 0 && employee.getDepartmentId() != null
-                && teamOnLeave(employee, start, end) + 1 > policy.getMaxConcurrentAbsence();
-    }
+    /** 팀 동시 부재에 세는 다른 사람의 휴가: 결재 대기·승인·취소 요청 중(취소 요청은 반려되면 승인으로 돌아간다). */
+    private static final Set<LeaveRequestStatus> TEAM_ABSENCE_STATUSES = EnumSet.of(
+            LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED);
 
     /**
-     * 결재자에게 보여 줄 경고. 사용 통제를 적용하지 않는 휴가(연차처럼 차감하지 않는 경조사·병가·공가)가 팀 동시 부재 한도를
-     * 넘으면 알려 주고, 승인 여부는 결재자가 판단한다. 해당 없으면 null.
+     * 결재자에게 보여 줄 팀 동시 부재 경고(결재 대기 신청만). 휴가 종류와 상관없이, 같은 부서에서 이 신청과 같은 날 쉬는
+     * 다른 사람(결재 대기·승인)을 평일마다 세어 이 신청을 더한 인원이 한도를 넘는 날이 있으면 가장 많은 날을 알려 준다.
+     * 신청은 막지 않고 승인 여부는 결재자가 판단한다. 해당 없으면 null.
      */
     private String teamLimitWarning(LeaveRequest request, LeavePolicy policy) {
-        if (!request.isAwaitingApproval()
-                || request.getLeaveType().getAnnualDeductionMode() == AnnualDeductionMode.DEDUCT
-                || !exceedsTeamLimit(request.getEmployee(), request.getStartDate(), request.getEndDate(), policy)) {
+        int limit = policy.getMaxConcurrentAbsence();
+        Employee applicant = request.getEmployee();
+        Long departmentId = applicant.getDepartmentId();
+        if (request.getStatus() != LeaveRequestStatus.PENDING || limit <= 0 || departmentId == null) {
             return null;
         }
-        long others = teamOnLeave(request.getEmployee(), request.getStartDate(), request.getEndDate());
-        return "같은 기간 팀 부재 " + (others + 1) + "명으로 한도(" + policy.getMaxConcurrentAbsence()
-                + "명)를 넘습니다. 승인 여부를 판단해 주세요.";
+        List<LeaveRequest> others = requestRepository.findByStatusInOverlapping(TEAM_ABSENCE_STATUSES,
+                        request.getStartDate(), request.getEndDate()).stream()
+                .filter(r -> departmentId.equals(r.getEmployee().getDepartmentId()))
+                .filter(r -> !r.getEmployee().getId().equals(applicant.getId()))
+                .toList();
+        LocalDate worstDay = null;
+        Set<Long> worstApproved = Set.of();
+        Set<Long> worstPending = Set.of();
+        for (LocalDate day = request.getStartDate(); !day.isAfter(request.getEndDate()); day = day.plusDays(1)) {
+            if (day.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || day.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+                continue;
+            }
+            LocalDate d = day;
+            List<LeaveRequest> onDay = others.stream()
+                    .filter(r -> !r.getStartDate().isAfter(d) && !r.getEndDate().isBefore(d)).toList();
+            Set<Long> approved = onDay.stream().filter(r -> r.getStatus() != LeaveRequestStatus.PENDING)
+                    .map(r -> r.getEmployee().getId()).collect(Collectors.toSet());
+            Set<Long> pending = onDay.stream().filter(r -> r.getStatus() == LeaveRequestStatus.PENDING)
+                    .map(r -> r.getEmployee().getId()).filter(id -> !approved.contains(id))
+                    .collect(Collectors.toSet());
+            int total = approved.size() + pending.size();
+            if (total + 1 > limit && total > worstApproved.size() + worstPending.size()) {
+                worstDay = day;
+                worstApproved = approved;
+                worstPending = pending;
+            }
+        }
+        if (worstDay == null) {
+            return null;
+        }
+        int absent = worstApproved.size() + worstPending.size() + 1;
+        return worstDay.getMonthValue() + "/" + worstDay.getDayOfMonth() + " 같은 부서 부재 " + absent
+                + "명(승인 " + worstApproved.size() + "명 · 결재 대기 " + worstPending.size() + "명 · 이 신청)으로 한도("
+                + limit + "명)를 넘습니다. 승인 여부를 판단해 주세요.";
     }
 
 

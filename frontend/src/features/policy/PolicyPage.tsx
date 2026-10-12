@@ -297,7 +297,7 @@ function PolicyTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>팀 동시 부재 최대 인원 (0 = 무제한)</Label>
+            <Label>팀 동시 부재 최대 인원 (0 = 무제한, 넘어도 신청은 되고 결재할 때 경고)</Label>
             <Input type="number" min={0} value={form.maxConcurrentAbsence}
               onChange={(e) => set("maxConcurrentAbsence", Number(e.target.value))} />
           </div>

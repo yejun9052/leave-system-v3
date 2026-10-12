@@ -925,42 +925,84 @@ class LeaveRequestServiceSickAndPartialTest {
         }
 
         @Test
-        void 팀_동시_부재_한도를_넘어도_경조사는_신청되고_결재함에_경고가_뜬다() {
-            팀원_한_명이_같은_기간_휴가_중(1);
+        void 팀_동시_부재_한도를_넘어도_연차와_경조사_모두_신청은_막지_않는다() {
+            같은_부서_동료_휴가(1, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED));
 
-            LeaveRequest request = 신청(경조사, null, null);
-            assertThatThrownBy(() -> 신청(연차, null, null))
-                    .isInstanceOfSatisfying(BusinessException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_TEAM_LIMIT));
+            assertThat(신청(연차, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(신청(경조사, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+        }
 
-            when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(request));
-            List<LeaveRequestDtos.Response> inbox = service.pendingForApprover(ADMIN);
+        @Test
+        void 결재함_경고는_같은_부서의_결재_대기와_승인_휴가를_함께_센다() {
+            같은_부서_동료_휴가(2, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED),
+                    동료_휴가(12L, TUE, TUE, LeaveRequestStatus.PENDING));
+            LeaveRequest request = 신청(연차, null, null);
 
-            assertThat(inbox).singleElement().extracting(LeaveRequestDtos.Response::approvalWarning).asString()
-                    .contains("팀 부재 2명").contains("한도(1명)");
+            assertThat(결재함_경고(request)).contains("부재 3명(승인 1명 · 결재 대기 1명 · 이 신청)").contains("한도(2명)")
+                    .contains(TUE.getMonthValue() + "/" + TUE.getDayOfMonth());
         }
 
         @Test
         void 팀_한도_안이면_결재함_경고가_없다() {
-            팀원_한_명이_같은_기간_휴가_중(2);
-            LeaveRequest request = 신청(경조사, null, null);
-            when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(request));
+            같은_부서_동료_휴가(2, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.PENDING));
 
-            assertThat(service.pendingForApprover(ADMIN)).singleElement()
-                    .extracting(LeaveRequestDtos.Response::approvalWarning).isNull();
+            assertThat(결재함_경고(신청(경조사, null, null))).isNull();
         }
 
-        private void 팀원_한_명이_같은_기간_휴가_중(int limit) {
+        @Test
+        void 다른_날_쉬는_동료는_같은_날로_세지_않는다() {
+            // 화·수 신청, 동료 한 명은 화요일만, 다른 한 명은 수요일만 → 날마다 2명(이 신청 포함)이라 한도 2 안
+            같은_부서_동료_휴가(2, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED),
+                    동료_휴가(12L, TUE.plusDays(1), TUE.plusDays(1), LeaveRequestStatus.PENDING));
+            LeaveRequestDtos.Response r = service.create(EMP,
+                    new LeaveRequestDtos.Create(연차.getId(), TUE, TUE.plusDays(1), "사유"));
+
+            assertThat(결재함_경고(saved.get(r.id()))).isNull();
+        }
+
+        @Test
+        void 다른_부서와_반려_취소된_휴가는_세지_않는다() {
+            Employee 다른_부서 = Employee.builder().email("other@company.com").passwordHash("h").name("타부서")
+                    .department(new com.company.leave.department.domain.Department("영업팀", null, 0)).build();
+            ReflectionTestUtils.setField(다른_부서.getDepartment(), "id", 9L);
+            ReflectionTestUtils.setField(다른_부서, "id", 21L);
+            LeaveRequest 타부서_휴가 = new LeaveRequest(다른_부서, 연차, TUE, TUE, BigDecimal.ONE, BigDecimal.ONE, 2027, "휴가");
+            같은_부서_동료_휴가(1, 타부서_휴가);
+
+            assertThat(결재함_경고(신청(연차, null, null))).isNull();
+        }
+
+        private final com.company.leave.department.domain.Department 개발팀 = 부서();
+
+        private com.company.leave.department.domain.Department 부서() {
             com.company.leave.department.domain.Department team =
                     new com.company.leave.department.domain.Department("개발팀", null, 0);
             ReflectionTestUtils.setField(team, "id", 3L);
-            ReflectionTestUtils.setField(employee, "department", team);
-            Employee mate = Employee.builder().email("mate@company.com").passwordHash("h").name("동료")
-                    .department(team).build();
-            ReflectionTestUtils.setField(mate, "id", 11L);
-            LeaveRequest mateLeave = new LeaveRequest(mate, 연차, TUE, TUE, BigDecimal.ONE, BigDecimal.ONE, 2027, "휴가");
-            lenient().when(requestRepository.findApprovedBetween(any(), any())).thenReturn(List.of(mateLeave));
+            return team;
+        }
+
+        /** 신청자를 개발팀에 넣고, 팀 동시 부재 한도와 겹치는 다른 사람의 휴가(대기·승인·취소 요청 중 조회 결과)를 정한다. */
+        private void 같은_부서_동료_휴가(int limit, LeaveRequest... leaves) {
+            ReflectionTestUtils.setField(employee, "department", 개발팀);
+            lenient().when(requestRepository.findByStatusInOverlapping(any(), any(), any())).thenReturn(List.of(leaves));
             lenient().when(policy.getMaxConcurrentAbsence()).thenReturn(limit);
+        }
+
+        private LeaveRequest 동료_휴가(long id, java.time.LocalDate start, java.time.LocalDate end,
+                                   LeaveRequestStatus status) {
+            Employee mate = Employee.builder().email("mate" + id + "@company.com").passwordHash("h").name("동료" + id)
+                    .department(개발팀).build();
+            ReflectionTestUtils.setField(mate, "id", id);
+            LeaveRequest leave = new LeaveRequest(mate, 연차, start, end, BigDecimal.ONE, BigDecimal.ONE, 2027, "휴가");
+            if (status == LeaveRequestStatus.APPROVED) {
+                leave.approve(mate, java.time.Instant.now());
+            }
+            return leave;
+        }
+
+        private String 결재함_경고(LeaveRequest request) {
+            when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(request));
+            return service.pendingForApprover(ADMIN).getFirst().approvalWarning();
         }
     }
 
