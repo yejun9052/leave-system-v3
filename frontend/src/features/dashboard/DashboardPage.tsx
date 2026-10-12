@@ -461,7 +461,7 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
           </>
         )}
         <div className="flex justify-end">
-          <Link to="/calendar" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+          <Link to="/calendar?view=department" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
             팀 캘린더 보기 <ArrowRight className="h-4 w-4" />
           </Link>
         </div>

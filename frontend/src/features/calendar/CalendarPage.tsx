@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -109,7 +110,12 @@ export default function CalendarPage() {
     const end = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().slice(0, 10);
     return { start, end };
   });
-  const [view, setView] = useState<ViewScope>("ALL");
+  // 보기 탭은 주소(?view=department 등)와 맞춘다: 대시보드 "팀 캘린더 보기"가 부서 탭으로 바로 연다
+  const [params, setParams] = useSearchParams();
+  const view: ViewScope =
+    VIEW_TABS.find((t) => t.key === params.get("view")?.toUpperCase())?.key ?? "ALL";
+  const setView = (v: ViewScope) =>
+    setParams(v === "ALL" ? {} : { view: v.toLowerCase() }, { replace: true });
   const [editing, setEditing] = useState<CalendarEventDto | null>(null);
   const [creating, setCreating] = useState(false);
 
