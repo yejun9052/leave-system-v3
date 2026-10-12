@@ -78,7 +78,17 @@ function PromotionAutomation({
   }, [savedEnabled, savedMonths]);
 
   const sortedMonths = [...months].sort((a, b) => b - a);
-  const dirty = enabled !== savedEnabled || sortedMonths.join(",") !== savedMonths.join(",");
+  const monthsChanged = sortedMonths.join(",") !== savedMonths.join(",");
+  const dirty = enabled !== savedEnabled || monthsChanged;
+
+  // 발송 시기를 바꾸는 중이면 저장 전에 바꾼 시기 기준 대상을 미리 본다
+  const draftPreview = useQuery({
+    queryKey: ["automationPreview", sortedMonths.join(",")],
+    queryFn: () => automationApi.previewPromotion(sortedMonths),
+    enabled: monthsChanged && sortedMonths.length > 0,
+    placeholderData: (prev) => prev,
+  });
+  const shownPreview = !monthsChanged ? preview : sortedMonths.length === 0 ? [] : (draftPreview.data ?? preview);
 
   const toggleMonth = (m: number) =>
     setMonths((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
@@ -172,14 +182,15 @@ function PromotionAutomation({
 
         <div className="space-y-2">
           <p className="text-sm font-medium">
-            지금 실행하면 보낼 대상 {preview.length}명
+            지금 실행하면 보낼 대상 {shownPreview.length}명
             <span className="ml-2 text-xs font-normal text-muted-foreground">
-              (저장된 발송 시기 기준{savedEnabled ? "" : " · 자동 발송이 꺼져 있어 실제로는 보내지 않습니다"})
+              ({monthsChanged ? "바꾼 발송 시기 기준 · 아직 저장 전" : "저장된 발송 시기 기준"}
+              {enabled ? "" : " · 자동 발송이 꺼져 있어 실제로는 보내지 않습니다"})
             </span>
           </p>
-          {preview.length > 0 ? (
-            <ul className="flex flex-wrap gap-2">
-              {preview.map((p) => (
+          {shownPreview.length > 0 ? (
+            <ul className={cn("flex flex-wrap gap-2", draftPreview.isFetching && "opacity-60")}>
+              {shownPreview.map((p) => (
                 <li key={p.employeeId} className="rounded-md border px-2.5 py-1 text-xs">
                   <span className="font-medium">{p.name}</span>
                   {p.department && <span className="text-muted-foreground"> · {p.department}</span>}

@@ -76,6 +76,11 @@ public class AutomationService {
                 promotionService.autoPreview(), jobs);
     }
 
+    /** 저장 전 발송 시기로 보낼 대상 미리보기. */
+    public List<LeavePromotionService.AutoTarget> previewPromotion(List<Integer> months) {
+        return promotionService.autoPreview(months);
+    }
+
     /** 연차 촉진 자동 발송 ON/OFF·발송 시기 저장. */
     @Transactional
     public Overview updatePromotion(boolean enabled, List<Integer> months) {

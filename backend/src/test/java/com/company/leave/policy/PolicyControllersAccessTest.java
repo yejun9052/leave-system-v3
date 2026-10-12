@@ -130,6 +130,8 @@ class PolicyControllersAccessTest {
         for (Role role : List.of(Role.EMPLOYEE, Role.TEAM_LEAD)) {
             authenticate(Set.of(role));
             mvc.perform(get("/api/policy/automation")).andExpect(status().isForbidden());
+            mvc.perform(get("/api/policy/automation/promotion/preview").param("months", "6"))
+                    .andExpect(status().isForbidden());
             mvc.perform(put("/api/policy/automation/promotion").contentType(MediaType.APPLICATION_JSON)
                     .content(AUTOMATION)).andExpect(status().isForbidden());
         }
@@ -181,7 +183,10 @@ class PolicyControllersAccessTest {
         mvc.perform(get("/api/policy/automation")).andExpect(status().isOk());
         mvc.perform(put("/api/policy/automation/promotion").contentType(MediaType.APPLICATION_JSON)
                 .content(AUTOMATION)).andExpect(status().isOk());
+        mvc.perform(get("/api/policy/automation/promotion/preview").param("months", "6", "2"))
+                .andExpect(status().isOk());
         verify(automation).overview();
+        verify(automation).previewPromotion(List.of(6, 2));
         verify(automation).updatePromotion(true, List.of(6, 2));
     }
 

@@ -309,6 +309,19 @@ class LeavePromotionServiceTest {
         verify(notificationService, never()).notify(any(), any(), any(), any(), any());
     }
 
+    @Test
+    void 저장하기_전_발송_시기로_미리_보면_그_시기_기준_대상이_나온다() {
+        자동_발송_켬(2); // 저장된 시기는 2개월 전뿐
+        기간(직원(1L, "다섯달", "a@company.com"), TODAY.plusMonths(5), "15", "5");
+
+        assertThat(service.autoPreview()).isEmpty(); // 저장된 시기 기준: 아직 아님
+        assertThat(service.autoPreview(List.of(2, 6, 6, 9, 0)))  // 바꾸는 중: 6개월 전 추가(범위 밖·중복은 무시)
+                .extracting(LeavePromotionService.AutoTarget::name, LeavePromotionService.AutoTarget::stageMonths)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("다섯달", 6));
+        assertThat(service.autoPreview(List.of())).isEmpty();
+        verify(noticeRepository, never()).save(any());
+    }
+
     // --- helpers ---
 
     private static Department 부서(Long id, String name, Department parent) {

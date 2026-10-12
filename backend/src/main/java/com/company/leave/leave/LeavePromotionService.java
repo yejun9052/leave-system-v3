@@ -247,7 +247,7 @@ public class LeavePromotionService {
     @Transactional
     public AutoResult autoSend() {
         LeavePolicy policy = policyService.getActivePolicy();
-        AutoPlan plan = autoPlan(policy, LocalDate.now());
+        AutoPlan plan = autoPlan(policy.getPromotionMonths(), LocalDate.now());
         int mailed = 0;
         int sent = 0;
         for (AutoTarget a : plan.targets()) {
@@ -267,11 +267,23 @@ public class LeavePromotionService {
     /** 지금 자동 발송을 돌리면 보낼 직원(보내지 않음). 자동화 탭 미리보기용. */
     @Transactional(readOnly = true)
     public List<AutoTarget> autoPreview() {
-        return autoPlan(policyService.getActivePolicy(), LocalDate.now()).targets();
+        return autoPlan(policyService.getActivePolicy().getPromotionMonths(), LocalDate.now()).targets();
     }
 
-    private AutoPlan autoPlan(LeavePolicy policy, LocalDate today) {
-        List<Integer> months = policy.getPromotionMonths(); // 큰 값부터
+    /**
+     * 저장하기 전 발송 시기로 "지금 실행하면 보낼 대상"을 미리 본다(자동화 탭에서 시기를 바꾸는 중).
+     * 시기는 사용 기한 1~6개월 전. 범위 밖 값은 무시하고, 비어 있으면 대상도 없다.
+     */
+    @Transactional(readOnly = true)
+    public List<AutoTarget> autoPreview(Collection<Integer> months) {
+        List<Integer> sorted = (months == null ? List.<Integer>of() : months).stream()
+                .filter(m -> m != null && m >= 1 && m <= 6)
+                .distinct().sorted(Comparator.reverseOrder()).toList();
+        return autoPlan(sorted, LocalDate.now()).targets();
+    }
+
+    /** @param months 발송 시기(사용 기한 N개월 전), 큰 값부터 */
+    private AutoPlan autoPlan(List<Integer> months, LocalDate today) {
         if (months.isEmpty()) {
             return new AutoPlan(List.of(), Map.of(), 0);
         }

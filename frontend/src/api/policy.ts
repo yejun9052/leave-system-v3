@@ -198,6 +198,11 @@ export const automationApi = {
   get: () => unwrap<AutomationOverview>(api.get("/policy/automation")),
   updatePromotion: (promotionEnabled: boolean, promotionMonths: number[]) =>
     unwrap<AutomationOverview>(api.put("/policy/automation/promotion", { promotionEnabled, promotionMonths })),
+  /** 저장 전 발송 시기로 보낼 대상 미리보기 */
+  previewPromotion: (months: number[]) =>
+    unwrap<AutoPromotionTarget[]>(
+      api.get("/policy/automation/promotion/preview", { params: { months: months.join(",") } }),
+    ),
 };
 
 export interface LeaveTypeInput {
