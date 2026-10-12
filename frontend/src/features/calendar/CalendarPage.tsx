@@ -82,19 +82,40 @@ const VIEW_TABS: { key: ViewScope; label: string }[] = [
  * 보기 탭에 들어갈 일정인지. 공휴일은 모든 탭에 보이고, 블랙아웃 기간은 탭과 관계없이 따로 그린다.
  * <ul>
  *   <li>일정: 공통 일정만(회사 일정·팀 일정). 휴가는 빼고</li>
- *   <li>부서: 내 부서 직원의 휴가 + 내 부서 일정</li>
+ *   <li>부서: 고른 부서(내 부서와 상위 부서 중 체크한 것) 직원의 휴가 + 그 부서 일정</li>
  *   <li>개인: 내 휴가</li>
  * </ul>
  */
-function inView(e: CalendarEventDto, view: ViewScope, me: { id: number; departmentId: number | null } | null): boolean {
+function inView(e: CalendarEventDto, view: ViewScope, me: { id: number } | null, deptIds: Set<number>): boolean {
   if (view === "ALL" || e.source === "HOLIDAY") return true;
   switch (view) {
     case "SCHEDULE":
       return e.source === "ADMIN_EVENT" && e.scope !== "PERSONAL";
     case "DEPARTMENT":
-      return !!me && me.departmentId != null && e.departmentId === me.departmentId && e.scope !== "PERSONAL";
+      return e.departmentId != null && deptIds.has(e.departmentId) && e.scope !== "PERSONAL";
     case "PERSONAL":
       return !!me && e.employeeId === me.id;
+  }
+}
+
+/** 부서 탭에서 체크한 부서(id 만 저장). 내 부서·상위 부서 중에서만 고른다 */
+const DEPT_CHAIN_KEY = "annualLeave.calendarDeptIds";
+
+function readDeptIds(): number[] | null {
+  try {
+    const raw = localStorage.getItem(DEPT_CHAIN_KEY);
+    const ids = raw ? JSON.parse(raw) : null;
+    return Array.isArray(ids) ? ids.filter((v) => typeof v === "number") : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDeptIds(ids: number[]) {
+  try {
+    localStorage.setItem(DEPT_CHAIN_KEY, JSON.stringify(ids));
+  } catch {
+    // 저장소를 쓸 수 없는 환경(사생활 보호 모드 등)이면 기억하지 않는다
   }
 }
 
@@ -127,9 +148,35 @@ export default function CalendarPage() {
   const { data: blackouts = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
 
   const me = useAuthStore((s) => s.user);
+
+  // 부서 탭: 내 부서 → 상위 부서 순서. 처음엔 내 부서만 체크, 고른 것은 이 브라우저에 기억
+  const { data: flatDepartments = [] } = useQuery({ queryKey: ["departments", "flat"], queryFn: departmentApi.flat });
+  const deptChain = useMemo(() => {
+    const byId = new Map(flatDepartments.map((d) => [d.id, d]));
+    const chain: { id: number; name: string }[] = [];
+    let d = me?.departmentId != null ? byId.get(me.departmentId) : undefined;
+    while (d && !chain.some((c) => c.id === d?.id)) {
+      chain.push({ id: d.id, name: d.name });
+      d = d.parentId != null ? byId.get(d.parentId) : undefined;
+    }
+    return chain;
+  }, [flatDepartments, me?.departmentId]);
+  const [pickedDeptIds, setPickedDeptIds] = useState<number[] | null>(readDeptIds);
+  const deptIds = useMemo(() => {
+    const inChain = new Set(deptChain.map((c) => c.id));
+    const picked = (pickedDeptIds ?? (me?.departmentId != null ? [me.departmentId] : [])).filter((id) => inChain.has(id));
+    // 부서 목록을 아직 못 받았으면 내 부서만
+    return new Set(deptChain.length ? picked : me?.departmentId != null ? [me.departmentId] : []);
+  }, [deptChain, pickedDeptIds, me?.departmentId]);
+  const toggleDept = (id: number) => {
+    const next = deptIds.has(id) ? [...deptIds].filter((v) => v !== id) : [...deptIds, id];
+    setPickedDeptIds(next);
+    writeDeptIds(next);
+  };
+
   const filtered = useMemo(
-    () => events.filter((e) => inView(e, view, me ? { id: me.id, departmentId: me.departmentId } : null)),
-    [events, view, me],
+    () => events.filter((e) => inView(e, view, me ? { id: me.id } : null, deptIds)),
+    [events, view, me, deptIds],
   );
 
   // 내 연차 기간의 시작일과 사용 기한(마지막 날). 본인 것만, "전체"·"개인" 탭에서 보인다
@@ -471,7 +518,24 @@ export default function CalendarPage() {
                 </button>
               ))}
             </div>
-            <div className="relative w-64">
+            {view === "DEPARTMENT" && deptChain.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="group" aria-label="볼 부서">
+                <span className="text-muted-foreground">볼 부서</span>
+                {deptChain.map((d, i) => (
+                  <label key={d.id} className="flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={deptIds.has(d.id)}
+                      onChange={() => toggleDept(d.id)}
+                    />
+                    {d.name}
+                    {i === 0 && <span className="text-xs text-muted-foreground">(내 부서)</span>}
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="relative ml-auto w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}

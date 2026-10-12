@@ -2,6 +2,7 @@ package com.company.leave.calendar;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.company.leave.calendar.domain.CalendarEvent;
@@ -44,6 +45,9 @@ class CalendarServiceVisibilityTest {
     private static final Long COLLEAGUE = 31L;
     private static final Long MY_DEPT = 3L;
     private static final Long OTHER_DEPT = 5L;
+    /** 내 부서(3)의 상위 부서. 다른 부서(5)는 이 상위 아래의 형제 부서 */
+    private static final Long PARENT_DEPT = 1L;
+    private static final Long CHILD_DEPT = 7L;
 
     @Mock private CalendarEventRepository events;
     @Mock private HolidayRepository holidays;
@@ -59,10 +63,16 @@ class CalendarServiceVisibilityTest {
     private final CalendarEvent 다른부서 = event(3L, CalendarEventScope.DEPARTMENT, OTHER_DEPT, null, COLLEAGUE);
     private final CalendarEvent 내개인 = event(4L, CalendarEventScope.PERSONAL, null, ME, ME);
     private final CalendarEvent 동료개인 = event(5L, CalendarEventScope.PERSONAL, null, COLLEAGUE, COLLEAGUE);
+    private final CalendarEvent 상위부서 = event(6L, CalendarEventScope.DEPARTMENT, PARENT_DEPT, null, COLLEAGUE);
+    private final CalendarEvent 하위부서 = event(7L, CalendarEventScope.DEPARTMENT, CHILD_DEPT, null, COLLEAGUE);
 
     @BeforeEach
     void setUp() {
         service = new CalendarService(events, holidays, departments, leaveRequests, announcements);
+        // 회사(1) 아래 내 부서(3)·다른 부서(5), 내 부서 아래 하위 부서(7)
+        Department 회사 = dept(PARENT_DEPT, null);
+        Department 내 = dept(MY_DEPT, 회사);
+        lenient().when(departments.findById(MY_DEPT)).thenReturn(java.util.Optional.of(내));
     }
 
     @Nested
@@ -80,6 +90,15 @@ class CalendarServiceVisibilityTest {
             List<CalendarDtos.EventResponse> visible = service.getEvents(DAY, DAY, employee(ME, MY_DEPT, Role.EMPLOYEE));
 
             assertThat(visible).extracting(CalendarDtos.EventResponse::id).containsExactly("E1", "E2", "E4");
+        }
+
+        @Test
+        void 상위_부서_일정은_보이고_형제_부서와_하위_부서_일정은_보이지_않는다() {
+            when(events.findBetween(DAY, DAY)).thenReturn(List.of(내부서, 다른부서, 상위부서, 하위부서));
+
+            List<CalendarDtos.EventResponse> visible = service.getEvents(DAY, DAY, employee(ME, MY_DEPT, Role.EMPLOYEE));
+
+            assertThat(visible).extracting(CalendarDtos.EventResponse::id).containsExactly("E2", "E6");
         }
 
         @Test
@@ -198,6 +217,12 @@ class CalendarServiceVisibilityTest {
                 .createdBy(createdBy).build();
         ReflectionTestUtils.setField(e, "id", id);
         return e;
+    }
+
+    private static Department dept(Long id, Department parent) {
+        Department d = new Department("부서" + id, parent, 0);
+        ReflectionTestUtils.setField(d, "id", id);
+        return d;
     }
 
     private static Holiday holiday(Long id, LocalDate date, String name) {

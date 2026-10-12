@@ -53,10 +53,11 @@ public class CalendarService {
     @Transactional(readOnly = true)
     public List<CalendarDtos.EventResponse> getEvents(LocalDate start, LocalDate end, UserPrincipal user) {
         boolean admin = isAdmin(user);
+        Set<Long> myDepts = selfAndAncestorDeptIds(user);
         List<CalendarDtos.EventResponse> result = new ArrayList<>();
 
         for (CalendarEvent e : eventRepository.findBetween(start, end)) {
-            if (!isVisible(e, user, admin)) {
+            if (!isVisible(e, user, admin, myDepts)) {
                 continue;
             }
             boolean editable = e.getSource() == CalendarEventSource.ADMIN_EVENT
@@ -76,8 +77,9 @@ public class CalendarService {
     @Transactional(readOnly = true)
     public CalendarDtos.DayDetail getDay(LocalDate date, UserPrincipal user) {
         boolean admin = isAdmin(user);
+        Set<Long> myDepts = selfAndAncestorDeptIds(user);
         List<CalendarDtos.DayEvent> events = eventRepository.findBetween(date, date).stream()
-                .filter(e -> e.getSource() == CalendarEventSource.ADMIN_EVENT && isVisible(e, user, admin))
+                .filter(e -> e.getSource() == CalendarEventSource.ADMIN_EVENT && isVisible(e, user, admin, myDepts))
                 .map(CalendarDtos.DayEvent::from)
                 .toList();
         List<String> holidayNames = holidayRepository.findByDateBetweenOrderByDateAsc(date, date).stream()
@@ -209,11 +211,11 @@ public class CalendarService {
         return new EventView(e.getTitle(), e.getStartDate(), e.getEndDate(), e.getScope(), e.getDepartmentId());
     }
 
-    private boolean isVisible(CalendarEvent e, UserPrincipal user, boolean admin) {
+    /** 부서 일정은 내 부서와 그 위 상위 부서들의 것까지 보인다(예: 1팀 → 1팀·경영지원팀·회사). */
+    private boolean isVisible(CalendarEvent e, UserPrincipal user, boolean admin, Set<Long> myDepts) {
         return switch (e.getScope()) {
             case COMPANY -> true;
-            case DEPARTMENT -> admin
-                    || (user.getDepartmentId() != null && user.getDepartmentId().equals(e.getDepartmentId()));
+            case DEPARTMENT -> admin || myDepts.contains(e.getDepartmentId());
             case PERSONAL -> admin
                     || (e.getEmployeeId() != null && e.getEmployeeId().equals(user.getId()));
         };
@@ -248,6 +250,19 @@ public class CalendarService {
     }
 
     /** 해당 사용자가 리드하는 부서 + 그 하위 부서 id 집합. */
+    /** 내 부서와 상위 부서 id(순환이 있어도 멈춘다). 부서가 없으면 빈 집합. */
+    private Set<Long> selfAndAncestorDeptIds(UserPrincipal user) {
+        Set<Long> ids = new HashSet<>();
+        if (user.getDepartmentId() == null) {
+            return ids;
+        }
+        Department d = departmentRepository.findById(user.getDepartmentId()).orElse(null);
+        while (d != null && ids.add(d.getId())) {
+            d = d.getParent();
+        }
+        return ids;
+    }
+
     private Set<Long> ledDeptIds(Long leadId) {
         Set<Long> ids = new HashSet<>();
         for (Department led : departmentRepository.findByLeadId(leadId)) {
