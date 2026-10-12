@@ -14,6 +14,7 @@ import {
   type SpecialRule,
   type Blackout,
   type BlackoutConflictMode,
+  type PolicyInput,
   BLACKOUT_CONFLICT_LABEL,
 } from "@/api/policy";
 import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
@@ -124,10 +125,16 @@ export default function PolicyPage() {
   );
 }
 
-/** 정책 화면 입력: 서버 값에서 id 를 뺀 것 */
-function policyForm(p: Policy): Omit<Policy, "id"> {
-  const { id: _id, ...rest } = p;
+/**
+ * 정책 화면 입력: 서버 값에서 id 와 촉진 자동 발송 설정을 뺀 것.
+ * 촉진 설정은 자동화 탭에서 따로 저장하므로, 넣어 두면 다른 관리자가 자동화 탭만 바꿔도
+ * 이 화면에 "다른 사람이 바꿨습니다"가 잘못 뜬다.
+ */
+function policyForm(p: Policy): PolicyInput {
+  const { id: _id, promotionEnabled: _enabled, promotionMonths: _months, ...rest } = p;
   void _id;
+  void _enabled;
+  void _months;
   return rest;
 }
 
@@ -138,7 +145,7 @@ function PolicyTab() {
   const { data } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
   const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? policyForm(data) : undefined);
 
-  const set = <K extends keyof Omit<Policy, "id">>(k: K, v: Omit<Policy, "id">[K]) =>
+  const set = <K extends keyof PolicyInput>(k: K, v: PolicyInput[K]) =>
     setForm((f) => (f ? { ...f, [k]: v } : f));
 
   const save = useMutation({
