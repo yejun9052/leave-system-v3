@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { departmentApi } from "@/api/departments";
 import { flattenDepartments } from "@/lib/departmentTree";
+import { invalidateOrgData } from "@/lib/invalidate";
 import type { Department } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -48,6 +50,9 @@ type DialogMode =
 
 /** 끌어 놓을 곳: 부서 id(그 부서의 하위로) 또는 "root"(최상위로) */
 type DropTarget = number | "root";
+
+/** 부서 행 끝의 추가·수정·이동·삭제 버튼: 좁은 화면에서는 조금 작게 */
+const ROW_BUTTON = "h-8 w-8 sm:h-10 sm:w-10";
 type DragState = { dept: Department; x: number; y: number; target: DropTarget | null };
 
 /** 부서와 그 하위 부서 id 전부(자기 아래로는 옮길 수 없다) */
@@ -75,7 +80,7 @@ export default function DepartmentPage() {
     queryFn: departmentApi.tree,
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["departments"] });
+  const invalidate = () => invalidateOrgData(qc);
 
   const nameById = useMemo(() => new Map(flattenDepartments(tree).map((d) => [d.id, d.name])), [tree]);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -99,15 +104,18 @@ export default function DepartmentPage() {
     if (ok) moveMutation.mutate({ id: dept.id, parentId: target === "root" ? null : target });
   };
 
-  /** 부서를 누르면 그 부서 이름으로 검색한 사용자 관리 화면으로 넘어간다(확인 후) */
+  /**
+   * 부서를 누르면 그 부서(하위 부서 포함, 인원 배지와 같은 범위) 소속으로 거른 사용자 관리 화면으로 넘어간다(확인 후).
+   * 이름 검색으로 넘기면 이메일·전화번호에 그 글자가 든 사람까지 섞였다
+   */
   const onOpenMembers = async (dept: Department) => {
     if (Date.now() - dragEndedAt.current < 300) return;
     const ok = await confirm({
       title: `'${dept.name}' 부서 명단을 확인하시겠습니까?`,
-      description: `사용자 관리로 이동해 '${dept.name}' 검색 결과를 보여 줍니다.`,
+      description: `사용자 관리로 이동해 '${dept.name}'(하위 부서 포함) 소속 사용자를 보여 줍니다.`,
       confirmText: "확인",
     });
-    if (ok) navigate(`/admin/employees?${new URLSearchParams({ keyword: dept.name })}`);
+    if (ok) navigate(`/admin/employees?${new URLSearchParams({ departmentIds: [...subtreeIds(dept)].join(",") })}`);
   };
 
   /**
@@ -310,9 +318,12 @@ function DeptNode({
           <GripVertical className="h-4 w-4" />
         </span>
         <button
+          type="button"
           className="text-muted-foreground disabled:opacity-0"
           onClick={() => setOpen((o) => !o)}
           disabled={!hasChildren}
+          aria-label={open ? `${dept.name} 하위 부서 접기` : `${dept.name} 하위 부서 펼치기`}
+          aria-expanded={hasChildren ? open : undefined}
         >
           {hasChildren ? (
             open ? (
@@ -335,7 +346,7 @@ function DeptNode({
           onClick={() => onOpen(dept)}
         >
           <Building2 className="h-4 w-4 text-primary" />
-          <span className="font-medium">{dept.name}</span>
+          <span className="min-w-0 truncate font-medium">{dept.name}</span>
           {dept.leadName && (
             <Badge variant="secondary" className="gap-1">
               팀장 {dept.leadName}
@@ -350,17 +361,23 @@ function DeptNode({
           </Badge>
         </button>
 
-        <div className={cn("ml-auto flex items-center gap-1 opacity-0 transition-opacity", !drag && "group-hover:opacity-100")}>
-          <Button size="icon" variant="ghost" title="하위 부서 추가" onClick={() => onAddChild(dept.id)}>
+        {/* 마우스가 있는 화면에서만 올렸을 때 보인다. 터치 화면은 늘 보이고, 키보드로 버튼에 오면(focus-within) 보인다 */}
+        <div
+          className={cn(
+            "ml-auto flex shrink-0 items-center transition-opacity focus-within:opacity-100 sm:gap-1 [@media(hover:hover)]:opacity-0",
+            !drag && "group-hover:opacity-100",
+          )}
+        >
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="하위 부서 추가" aria-label={`${dept.name} 하위 부서 추가`} onClick={() => onAddChild(dept.id)}>
             <Plus className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" title="수정" onClick={() => onEdit(dept)}>
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="수정" aria-label={`${dept.name} 수정`} onClick={() => onEdit(dept)}>
             <Pencil className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" title="이동" onClick={() => onMove(dept)}>
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="이동" aria-label={`${dept.name} 이동`} onClick={() => onMove(dept)}>
             <MoveRight className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" title="삭제" onClick={() => onDelete(dept)}>
+          <Button size="icon" variant="ghost" className={ROW_BUTTON} title="삭제" aria-label={`${dept.name} 삭제`} onClick={() => onDelete(dept)}>
             <Trash2 className="h-4 w-4 text-destructive" />
           </Button>
         </div>
@@ -414,11 +431,9 @@ function DepartmentDialog({
         return departmentApi.create({ name, parentId: mode.parentId });
       }
       if (mode.type === "edit") {
-        return departmentApi.update(mode.dept.id, {
-          name,
-          leadId: mode.dept.leadId, // 팀장은 사용자 관리에서 지정 (여기서는 보존)
-          sortOrder: mode.dept.sortOrder,
-        });
+        // 부서장은 사용자 관리에서 정한다. leadId 를 보내지 않으면 서버가 지금 부서장을 그대로 둔다
+        // (창을 연 때의 값을 보내면 그사이 사용자 관리에서 바뀐 부서장을 되돌려 버린다)
+        return departmentApi.update(mode.dept.id, { name, sortOrder: mode.dept.sortOrder });
       }
       return departmentApi.move(mode.dept.id, newParentId === "root" ? null : Number(newParentId));
     },
@@ -437,20 +452,23 @@ function DepartmentDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {mode.type === "move" ? "새 상위 부서를 골라 부서를 옮깁니다." : "부서 이름을 입력해 저장합니다."}
+          </DialogDescription>
         </DialogHeader>
 
         {mode.type !== "move" && (
           <div className="space-y-2">
-            <Label>부서명</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 개발팀" />
+            <Label htmlFor="department-name">부서명</Label>
+            <Input id="department-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 개발팀" />
           </div>
         )}
 
         {mode.type === "move" && (
           <div className="space-y-2">
-            <Label>이동할 상위 부서</Label>
+            <Label htmlFor="department-parent">이동할 상위 부서</Label>
             <Select value={newParentId} onValueChange={setNewParentId}>
-              <SelectTrigger>
+              <SelectTrigger id="department-parent">
                 {/* 선택값은 상위 부서부터 경로로: "개발 › 234" */}
                 <SelectValue>
                   {newParentId === "root"

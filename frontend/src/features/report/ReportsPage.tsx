@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, Search, X } from "lucide-react";
 import { reportApi } from "@/api/dashboard";
+import { downloadFile } from "@/lib/download";
+import { isValidYear } from "@/lib/dateFormat";
 import { departmentApi } from "@/api/departments";
 import { employeeApi } from "@/api/employees";
 import DepartmentTreeSelect from "@/components/DepartmentTreeSelect";
@@ -24,7 +26,10 @@ const ALL_EMPLOYEES = 1000;
 
 export default function ReportsPage() {
   const { toast } = useToast();
-  const [year, setYear] = useState(new Date().getFullYear());
+  // 칸을 비우고 다시 쓸 수 있게 글자로 두고, 쓸 수 있는 연도일 때만 내려받는다(빈 칸이 0년이 되지 않게)
+  const [yearText, setYearText] = useState(String(new Date().getFullYear()));
+  const year = Number(yearText);
+  const yearValid = isValidYear(yearText);
   const [loading, setLoading] = useState(false);
   const [departmentIds, setDepartmentIds] = useState<Set<number>>(new Set());
   const [employeeIds, setEmployeeIds] = useState<Set<number>>(new Set());
@@ -88,17 +93,9 @@ export default function ReportsPage() {
     setLoading(true);
     try {
       const url = reportApi.usageExportUrl(year, [], [...employeeIds]);
-      const res = await fetch(url, { credentials: "same-origin" });
-      if (!res.ok) throw new Error("다운로드 실패");
-      const blob = await res.blob();
-      const href = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = `연차현황표_${todayForFileName()}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(href);
-    } catch {
-      toast({ title: "리포트를 내려받지 못했습니다.", variant: "destructive" });
+      await downloadFile(url, `연차현황표_${todayForFileName()}.xlsx`, "리포트를 내려받지 못했습니다.");
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -123,11 +120,13 @@ export default function ReportsPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label>연도</Label>
+            <Label htmlFor="report-year">연도</Label>
             <Input
+              id="report-year"
               type="number"
-              value={year}
-              onChange={(e) => setYear(Number(e.target.value))}
+              value={yearText}
+              onChange={(e) => setYearText(e.target.value)}
+              aria-invalid={!yearValid}
               className="max-w-[140px]"
             />
           </div>
@@ -167,6 +166,7 @@ export default function ReportsPage() {
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   placeholder="이름 · 부서 · 직급으로 찾기"
+                  aria-label="사용자를 이름 · 부서 · 직급으로 찾기"
                   className="pl-8"
                 />
               </div>
@@ -217,7 +217,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={download} disabled={loading || emptyDepartments}>
+            <Button onClick={download} disabled={loading || emptyDepartments || !yearValid}>
               <Download className="h-4 w-4" /> 엑셀 다운로드
             </Button>
             <span className="text-sm text-muted-foreground">

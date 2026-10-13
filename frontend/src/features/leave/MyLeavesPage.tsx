@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
+import QueryError from "@/components/QueryError";
+import StatusReason from "./StatusReason";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { LEAVE_STATUS_LABEL, type LeaveRequestStatus } from "@/types";
@@ -18,9 +21,12 @@ import {
   SortableTableHead,
 } from "@/components/ui/table";
 import { useTableSort } from "@/lib/useTableSort";
+import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
+import { todayString } from "@/lib/dateFormat";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -42,6 +48,8 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warnin
 
 const STATUS_RANK: LeaveRequestStatus[] = ["PENDING", "APPROVED", "CANCEL_REQUESTED", "REJECTED", "CANCELLED"];
 
+const PAGE_SIZE = 20;
+
 export default function MyLeavesPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -50,9 +58,28 @@ export default function MyLeavesPage() {
   const [open, setOpen] = useState(false);
   const [requestWarning, setRequestWarning] = useState<string | null>(null);
   const canCancelOwn = !!user;
+  const today = todayString();
 
-  const { data: balance } = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
-  const { data: requests } = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
+  const balanceQuery = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
+  // 서버가 시작일 최신순으로 20건씩 나눠 준다. 지난 신청(반려·취소 포함)도 볼 수 있게 페이지를 넘긴다
+  const [page, setPage] = useState(0);
+  const requestsQuery = useQuery({
+    queryKey: ["myRequests", { page }],
+    queryFn: () => leaveApi.myRequests(page, PAGE_SIZE),
+    placeholderData: (prev) => prev,
+  });
+  const totalPages = requestsQuery.data?.totalPages ?? 0;
+  useArrowKeyNavigation({
+    onPrev: page > 0 ? () => setPage((p) => p - 1) : null,
+    onNext: page + 1 < totalPages ? () => setPage((p) => p + 1) : null,
+  });
+  // 취소 등으로 마지막 페이지가 없어지면 남은 마지막 페이지로
+  useEffect(() => {
+    if (totalPages > 0 && page >= totalPages) setPage(totalPages - 1);
+  }, [page, totalPages]);
+  const balance = balanceQuery.data;
+  const requests = requestsQuery.data;
+  const loadError = balanceQuery.error ?? requestsQuery.error;
   const { sorted, sort, toggle } = useTableSort(requests?.content ?? [], {
     type: (r) => r.leaveTypeName,
     period: (r) => `${r.startDate} ${r.endDate}`,
@@ -70,9 +97,7 @@ export default function MyLeavesPage() {
         title: approved ? "취소 요청되었습니다. 결재자가 승인하면 확정됩니다." : "신청이 취소되었습니다.",
         variant: "success",
       });
-      qc.invalidateQueries({ queryKey: ["myRequests"] });
-      qc.invalidateQueries({ queryKey: ["myBalance"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      invalidateLeaveData(qc);
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
@@ -94,6 +119,16 @@ export default function MyLeavesPage() {
         </Button>
       </div>
 
+      {/* 실패를 잔여 0일·"신청 내역이 없습니다"로 보이지 않게 */}
+      {loadError && (
+        <QueryError
+          error={loadError}
+          onRetry={() => {
+            void balanceQuery.refetch();
+            void requestsQuery.refetch();
+          }}
+        />
+      )}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="잔여 연차" value={balance?.remaining ?? 0} accent />
         <StatCard label="부여" value={balance?.granted ?? 0} />
@@ -156,6 +191,7 @@ export default function MyLeavesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
+                      <StatusReason leave={r} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">{r.approverName ?? "-"}</TableCell>
                     <TableCell className="text-right">
@@ -177,7 +213,8 @@ export default function MyLeavesPage() {
                           <X className="h-4 w-4" /> 취소
                         </Button>
                       )}
-                      {canCancelOwn && r.employeeId === user?.id && r.status === "APPROVED" && (
+                      {/* 시작한 휴가는 서버가 취소 요청을 받지 않는다(이미 시작된 휴가) */}
+                      {canCancelOwn && r.employeeId === user?.id && r.status === "APPROVED" && r.startDate > today && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -203,8 +240,14 @@ export default function MyLeavesPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <CalendarDays className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                    신청 내역이 없습니다.
+                    {requestsQuery.isError ? (
+                      "신청 내역을 불러오지 못했습니다."
+                    ) : (
+                      <>
+                        <CalendarDays className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                        {requestsQuery.isLoading ? "불러오는 중…" : "신청 내역이 없습니다."}
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -213,12 +256,26 @@ export default function MyLeavesPage() {
         </CardContent>
       </Card>
 
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>총 {requestsQuery.data?.totalElements ?? 0}건</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+              이전
+            </Button>
+            <span>
+              {page + 1} / {totalPages}
+            </span>
+            <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              다음
+            </Button>
+          </div>
+        </div>
+      )}
+
       {open && <LeaveRequestDialog onClose={() => setOpen(false)} onSaved={(warning) => {
         setRequestWarning(warning ?? null);
         setOpen(false);
-        qc.invalidateQueries({ queryKey: ["myRequests"] });
-        qc.invalidateQueries({ queryKey: ["myBalance"] });
-        qc.invalidateQueries({ queryKey: ["dashboard"] });
       }} />}
     </div>
   );
@@ -240,7 +297,7 @@ export function LeaveRequestDialog({ onClose, onSaved }: {
   onClose: () => void;
   onSaved: (warning?: string | null) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayString();
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const form = useLeaveRequestForm({ start, end, onSaved });
@@ -251,18 +308,20 @@ export function LeaveRequestDialog({ onClose, onSaved }: {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>휴가 신청</DialogTitle>
+          <DialogDescription className="sr-only">날짜와 종류를 고르면 신청할 수 있는지와 차감 일수를 바로 확인합니다.</DialogDescription>
         </DialogHeader>
         <LeaveRequestFields
           form={form}
           dates={
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>{isPartial ? "날짜" : "시작일"}</Label>
-                <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+                <Label htmlFor="leave-request-start">{isPartial ? "날짜" : "시작일"}</Label>
+                <Input id="leave-request-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>종료일</Label>
+                <Label htmlFor="leave-request-end">종료일</Label>
                 <Input
+                  id="leave-request-end"
                   type="date"
                   value={isPartial ? start : end}
                   min={start}

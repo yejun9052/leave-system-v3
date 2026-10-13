@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
+import QueryError from "@/components/QueryError";
 import axios from "axios";
 import { CalendarPlus, Check, X, Inbox } from "lucide-react";
 import { leaveApi } from "@/api/leave";
@@ -22,6 +24,7 @@ import { useTableSort } from "@/lib/useTableSort";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -76,7 +79,7 @@ export default function ApprovalsPage() {
   };
   const [rejecting, setRejecting] = useState<RejectTarget | null>(null);
 
-  const { data: pending = [], isLoading } = useQuery({
+  const { data: pending = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ["pendingApprovals"],
     queryFn: leaveApi.pending,
   });
@@ -91,11 +94,7 @@ export default function ApprovalsPage() {
     reason: (r) => (r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason),
   });
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
-    qc.invalidateQueries({ queryKey: ["calendarEvents"] });
-    qc.invalidateQueries({ queryKey: ["leaveList"] });
-  };
+  const invalidate = () => invalidateLeaveData(qc);
   const onError = (e: unknown) => {
     toast({ title: extractErrorMessage(e), variant: "destructive" });
     if (isAlreadyProcessed(e)) invalidate();
@@ -140,7 +139,9 @@ export default function ApprovalsPage() {
           <TabsTrigger value="pending">결재 대기{pending.length > 0 && ` (${pending.length})`}</TabsTrigger>
           <TabsTrigger value="list">휴가 목록</TabsTrigger>
         </TabsList>
-        <TabsContent value="pending">
+        <TabsContent value="pending" className="space-y-3">
+          {/* 실패를 "대기 중인 결재가 없습니다"로 보이면 결재할 건이 없다고 오해한다 */}
+          {isError && <QueryError error={error} onRetry={() => void refetch()} />}
           <Card>
             <CardContent className="p-0">
               <Table>
@@ -259,8 +260,14 @@ export default function ApprovalsPage() {
                   ) : (
                     <TableRow>
                       <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                        <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                        대기 중인 결재가 없습니다.
+                        {isError ? (
+                          "결재 목록을 불러오지 못했습니다."
+                        ) : (
+                          <>
+                            <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                            대기 중인 결재가 없습니다.
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   )}
@@ -334,10 +341,11 @@ function RejectDialog({
           <DialogTitle>
             {target.req.employeeName} 님의 {isCancel ? "취소 요청 반려" : "신청 반려"}
           </DialogTitle>
+          <DialogDescription>반려 사유는 신청자에게 알림과 메일로 전달됩니다.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label>반려 사유</Label>
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="사유를 입력하세요" />
+          <Label htmlFor="reject-reason">반려 사유</Label>
+          <Input id="reject-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="사유를 입력하세요" />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

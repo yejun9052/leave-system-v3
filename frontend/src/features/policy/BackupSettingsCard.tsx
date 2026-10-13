@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarClock, CircleAlert, Save } from "lucide-react";
 import { backupApi, type BackupSettings, type BackupSettingsForm } from "@/api/backups";
 import { extractErrorMessage } from "@/api/client";
+import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 import { useServerForm } from "@/lib/useServerForm";
@@ -11,16 +12,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 
 /**
  * 화면에 보이는 숫자 칸(월 → 일 → 시 → 분 순). index 는 cron 6칸(초 분 시 일 월 요일) 중 위치.
  * 비우면 매월·매일처럼 모든 값(*). 초는 화면에 두지 않고 저장된 값을 그대로 둔다.
- * 월 칸만 간격이다: 3 → 3개월마다(1·4·7·10월, cron *&#47;3). 특정 달 하나만 고르는 칸이 아니다.
+ * 월 칸만 간격이고 숫자 대신 고른다: 3개월마다 → 1·4·7·10월(cron *&#47;3). 특정 달 하나만 고르는 칸이 아니다.
  */
 const NUMBER_FIELDS = [
-  { index: 4, name: "개월마다", hint: "1~12 · 비우면 매월", every: "매월", unit: "개월" },
+  { index: 4, name: "개월마다", hint: "1월부터 간격", every: "매월", unit: "개월" },
   { index: 3, name: "일", hint: "1~31", every: "매일", unit: "일" },
   { index: 2, name: "시", hint: "0~23", every: "매시", unit: "시간" },
   { index: 1, name: "분", hint: "0~59", every: "매분", unit: "분" },
@@ -74,14 +76,14 @@ function splitCron(cron: string): string[] {
 /** 숫자 칸에 보일 값: 숫자·쉼표·범위만 그대로 보이고, *·L·0/6 같은 값은 빈 칸(설명은 placeholder 로). */
 const numberValue = (part: string) => (/^[\d,-]+$/.test(part) ? part : "");
 
-/** 월 칸(간격)에 보일 값: 1월부터 N개월 간격(*&#47;N, 1/N)이면 N, 매월(*)이나 특정 달(1,7)이면 빈 칸 */
-const monthEveryValue = (part: string) => /^(?:\*|1)\/(\d{1,2})$/.exec(part)?.[1] ?? "";
+/** 고를 수 있는 월 간격. 서버는 12 의 약수만 받는다(5개월마다는 11월 다음이 이듬해 1월이라 간격이 어긋남) */
+const MONTH_STEPS = [1, 2, 3, 4, 6, 12];
 
-/** 월 칸 입력 → cron: 비우면 매월(*), N 이면 1월부터 N개월마다(*&#47;N). 12 넘으면 12 */
-function monthEveryCron(input: string): string {
-  const digits = input.replace(/\D/g, "");
-  if (digits === "") return "*";
-  return `*/${Math.min(12, Number(digits))}`;
+/** 월 칸 → 고른 간격("1"=매월, "3"=3개월마다). 고를 수 없는 값(특정 달 1,7·5개월마다 등)이면 "custom" */
+function monthStepKey(part: string): string {
+  if (part === "" || part === "*" || part === "?") return "1";
+  const step = /^(?:\*|1)\/(\d{1,2})$/.exec(part)?.[1];
+  return step && MONTH_STEPS.includes(Number(step)) ? String(Number(step)) : "custom";
 }
 
 /** 월 칸이 비었을 때 회색 글씨: 매월, 또는 예전에 직접 입력한 특정 달("1·7월만") */
@@ -134,6 +136,12 @@ function formatDays(days: Set<number>): string {
   return parts.join(",");
 }
 
+/** 보관 기간 칸 값이 1~24 개월(정수)인지 */
+function isValidKeepMonths(text: string): boolean {
+  const months = Number(text);
+  return text.trim() !== "" && Number.isInteger(months) && months >= 1 && months <= 24;
+}
+
 function toForm(s: BackupSettings): BackupSettingsForm {
   return { enabled: s.enabled, cron: s.cron, keepMonths: s.keepMonths };
 }
@@ -155,9 +163,11 @@ function useDebounced<T>(value: T, ms: number): T {
 export default function BackupSettingsCard() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["backupSettings"], queryFn: backupApi.settings });
+  const { data, error, refetch } = useQuery({ queryKey: ["backupSettings"], queryFn: backupApi.settings });
   const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? toForm(data) : undefined);
   const [recent, setRecent] = useState<RecentSchedule[]>(readRecent);
+  // 보관 기간 칸: 비우고 다시 쓰는 중에는 글자로 두고(바로 1 이 들어가 "16"이 되지 않게), 1~24 일 때만 값에 넣는다
+  const [keepText, setKeepText] = useState<string | null>(null);
 
   const cron = normalize(form?.cron ?? "");
   const debouncedCron = useDebounced(cron, 300);
@@ -170,8 +180,8 @@ export default function BackupSettingsCard() {
 
   const save = useMutation({
     mutationFn: (f: BackupSettingsForm) => backupApi.updateSettings({ ...f, cron: normalize(f.cron) }),
-    onSuccess: (saved) => {
-      reset(toForm(saved));
+    onSuccess: (saved, sent) => {
+      reset(toForm(saved), sent);
       setRecent((list) => pushRecent(list, { cron: saved.cron, label: saved.scheduleLabel }));
       qc.setQueryData(["backupSettings"], saved);
       qc.invalidateQueries({ queryKey: ["automation"] });
@@ -184,7 +194,10 @@ export default function BackupSettingsCard() {
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
-  if (!data || !form) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  if (!data || !form) {
+    if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+    return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  }
 
   const set = <K extends keyof BackupSettingsForm>(key: K, value: BackupSettingsForm[K]) =>
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -195,8 +208,8 @@ export default function BackupSettingsCard() {
     next[i] = value === "" ? "*" : value;
     set("cron", next.join(" "));
   };
-  // 월 칸은 간격: 비우면 매월, N 이면 N개월마다
-  const setMonthEvery = (input: string) => setField(4, monthEveryCron(input) === "*" ? "" : monthEveryCron(input));
+  // 월 칸은 간격: 매월(*) 또는 N개월마다(*&#47;N)
+  const setMonthStep = (key: string) => setField(4, key === "1" ? "" : `*/${key}`);
   const days = parseDays(fields[5]);
   const toggleDay = (d: number) => {
     const next = new Set(days ?? []);
@@ -223,7 +236,13 @@ export default function BackupSettingsCard() {
   // 미리보기가 지금 입력과 같은 값을 해석했을 때만 믿는다
   const current = preview.data && preview.data.cron === cron ? preview.data : null;
   const cronError = cron === "" ? "실행 시각을 입력해 주세요." : current?.error ?? null;
-  const checking = cron !== "" && !current;
+  // 미리보기 요청 자체가 실패(서버 오류·네트워크)하면 "확인하는 중…"에 머물지 않고 알린다. 저장할 때 서버가 다시 확인한다
+  const previewFailed = cron !== "" && !current && debouncedCron === cron && preview.isError;
+  const checking = cron !== "" && !current && !previewFailed;
+  // 실행 시각을 바꾸지 않았으면 미리보기와 상관없이 켜기·끄기·보관 기간만 저장할 수 있다
+  const cronChanged = cron !== data.cron;
+  const blockedByCron = cronChanged && (!!cronError || checking);
+  const keepInvalid = keepText !== null && !isValidKeepMonths(keepText);
 
   return (
     <Card>
@@ -269,22 +288,42 @@ export default function BackupSettingsCard() {
               const part = fields[f.index];
               return (
                 <div key={f.name} className="flex flex-col items-center gap-1 rounded-lg border bg-muted/30 p-2">
-                  <label className="flex w-full flex-col items-center gap-1">
-                    <Input
-                      value={f.index === 4 ? monthEveryValue(part) : numberValue(part)}
-                      placeholder={f.index === 4 ? monthPlaceholder(part) : numberPlaceholder(part, f)}
-                      onChange={(e) =>
-                        f.index === 4
-                          ? setMonthEvery(e.target.value)
-                          : setField(f.index, e.target.value.replace(/[^\d,-]/g, ""))
-                      }
-                      inputMode="numeric"
-                      aria-label={f.name}
-                      className="h-11 text-center text-lg font-semibold tabular-nums placeholder:text-sm placeholder:font-normal"
-                      spellCheck={false}
-                    />
-                    <span className="text-sm font-medium">{f.index === 3 ? dayCaption : f.name}</span>
-                  </label>
+                  {f.index === 4 ? (
+                    <div className="flex w-full flex-col items-center gap-1">
+                      <Select value={monthStepKey(part)} onValueChange={setMonthStep}>
+                        <SelectTrigger aria-label="개월마다" className="h-11 justify-center gap-1 text-base font-semibold">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTH_STEPS.map((m) => (
+                            <SelectItem key={m} value={String(m)}>
+                              {m === 1 ? "매월" : `${m}개월마다`}
+                            </SelectItem>
+                          ))}
+                          {monthStepKey(part) === "custom" && (
+                            // cron 으로 직접 넣은 값(특정 달 등)은 보여 주기만 한다
+                            <SelectItem value="custom" disabled>
+                              {/\//.test(part) ? numberPlaceholder(part, f) : monthPlaceholder(part)}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm font-medium">월</span>
+                    </div>
+                  ) : (
+                    <label className="flex w-full flex-col items-center gap-1">
+                      <Input
+                        value={numberValue(part)}
+                        placeholder={numberPlaceholder(part, f)}
+                        onChange={(e) => setField(f.index, e.target.value.replace(/[^\d,-]/g, ""))}
+                        inputMode="numeric"
+                        aria-label={f.name}
+                        className="h-11 text-center text-lg font-semibold tabular-nums placeholder:text-sm placeholder:font-normal"
+                        spellCheck={false}
+                      />
+                      <span className="text-sm font-medium">{f.index === 3 ? dayCaption : f.name}</span>
+                    </label>
+                  )}
                   {f.index === 3 ? (
                     <button
                       type="button"
@@ -356,6 +395,13 @@ export default function BackupSettingsCard() {
                   ))}
                 </div>
               </>
+            ) : previewFailed ? (
+              <p className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                <CircleAlert className="h-4 w-4 shrink-0" /> 실행 시각을 미리 확인하지 못했습니다. 저장할 때 다시 확인합니다.
+                <Button type="button" variant="outline" size="sm" className="h-7" onClick={() => void preview.refetch()}>
+                  다시 확인
+                </Button>
+              </p>
             ) : (
               <p className="text-muted-foreground">확인하는 중…</p>
             )}
@@ -371,8 +417,8 @@ export default function BackupSettingsCard() {
             <summary className="cursor-pointer select-none">입력하는 법 · cron 으로 직접 입력</summary>
             <ul className="mt-1.5 space-y-0.5 pl-4">
               <li>칸을 비우면 매월·매일처럼 모든 값입니다. 여러 개는 쉼표(예: 시 <code>2,14</code>), 범위는 <code>-</code>(예: 일 <code>1-7</code>).</li>
-              <li>개월마다 칸은 간격입니다: <code>3</code> · 일 <code>1</code> = 1·4·7·10월 1일(3개월마다 한 번씩, 1년에 4번). 비우거나 <code>1</code>이면 매월.</li>
-              <li>예: 월 비움 · 일 비움 · 시 <code>0</code> · 분 <code>10</code> = 매일 00:10 / 일 <code>1</code> · 시 <code>4</code> · 분 <code>0</code> = 매월 1일 04:00</li>
+              <li>월은 간격을 고릅니다(매월·2·3·4·6·12개월마다): 3개월마다 · 일 <code>1</code> = 1·4·7·10월 1일(1년에 4번).</li>
+              <li>예: 매월 · 일 비움 · 시 <code>0</code> · 분 <code>10</code> = 매일 00:10 / 매월 · 일 <code>1</code> · 시 <code>4</code> · 분 <code>0</code> = 매월 1일 04:00</li>
               <li>백업은 1시간보다 자주 실행할 수 없습니다.</li>
             </ul>
             <div className="mt-2 flex items-center gap-2">
@@ -392,8 +438,20 @@ export default function BackupSettingsCard() {
           <Label htmlFor="keep-months">보관 기간 (자동 백업)</Label>
           <div className="flex items-center gap-1.5">
             <span className="text-sm">최대</span>
-            <Input id="keep-months" type="number" min={1} max={24} className="w-20" value={form.keepMonths}
-              onChange={(e) => set("keepMonths", Math.max(1, Math.min(24, Math.trunc(Number(e.target.value) || 1))))} />
+            <Input
+              id="keep-months"
+              type="number"
+              min={1}
+              max={24}
+              className="w-20"
+              value={keepText ?? form.keepMonths}
+              aria-invalid={keepInvalid}
+              onChange={(e) => {
+                setKeepText(e.target.value);
+                if (isValidKeepMonths(e.target.value)) set("keepMonths", Number(e.target.value));
+              }}
+              onBlur={() => setKeepText(null)}
+            />
             <span className="text-sm">개월 동안 저장 (1~24)</span>
           </div>
           <p className="text-xs text-muted-foreground">
@@ -411,7 +469,7 @@ export default function BackupSettingsCard() {
         </div>
 
         <div className="flex justify-end">
-          <Button onClick={() => save.mutate(form)} disabled={!dirty || !!cronError || checking || save.isPending}>
+          <Button onClick={() => save.mutate(form)} disabled={!dirty || blockedByCron || keepInvalid || save.isPending}>
             <Save className="h-4 w-4" /> 저장
           </Button>
         </div>

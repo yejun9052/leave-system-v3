@@ -33,17 +33,8 @@ export function formatKoreanDate(date: string): string {
   return `${y}년 ${m}월 ${d}일 (${weekdayLabel(date)})`;
 }
 
-/** Date 의 로컬 날짜 "YYYY-MM-DD"(FullCalendar 가 넘기는 날짜는 로컬 자정) */
-export function localDateString(date: Date): string {
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${m}-${d}`;
-}
-
-/** 로컬 시간 기준 오늘 "YYYY-MM-DD" */
-export function todayString(): string {
-  return localDateString(new Date());
-}
+// 오늘·로컬 날짜는 다른 화면도 쓰므로 lib/dateFormat 에 둔다
+export { localDateString, todayString } from "@/lib/dateFormat";
 
 /** "YYYY-MM" 달을 delta 만큼 옮긴다("2026-12", 1 → "2027-01"). */
 export function shiftMonth(month: string, delta: number): string {

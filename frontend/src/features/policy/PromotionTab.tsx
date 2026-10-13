@@ -107,7 +107,8 @@ export default function PromotionTab() {
         variant: "success",
       });
       setSelected(new Set());
-      qc.invalidateQueries({ queryKey: ["promotionTargets"] });
+      // 자동화 탭의 "지금 실행하면 보낼 대상"과 알림도 바뀐다
+      for (const key of ["promotionTargets", "automation", "notifications"]) void qc.invalidateQueries({ queryKey: [key] });
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
@@ -135,9 +136,9 @@ export default function PromotionTab() {
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1">
-            <Label className="text-xs">사용 기한까지</Label>
+            <Label htmlFor="promotion-months" className="text-xs">사용 기한까지</Label>
             <Select value={String(months)} onValueChange={(v) => setMonths(Number(v))}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger id="promotion-months" className="w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -154,6 +155,7 @@ export default function PromotionTab() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
+                aria-label="이름·부서 검색"
                 placeholder="이름·부서 검색"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}

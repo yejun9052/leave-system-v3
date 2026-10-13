@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Save } from "lucide-react";
 import { automationApi, type AutomationJob, type AutomationJobState } from "@/api/policy";
 import { extractErrorMessage } from "@/api/client";
+import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 import { useServerForm } from "@/lib/useServerForm";
@@ -40,8 +41,9 @@ const EVENT_MAILS: { when: string; to: string }[] = [
  * 일이 생길 때 자동으로 가는 메일 안내.
  */
 export default function AutomationTab() {
-  const { data, isLoading } = useQuery({ queryKey: ["automation"], queryFn: automationApi.get });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["automation"], queryFn: automationApi.get });
 
+  if (error && !data) return <QueryError error={error} onRetry={() => void refetch()} />;
   if (isLoading || !data) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
 
   return (
@@ -90,13 +92,15 @@ function PromotionAutomation({
   });
   const shownPreview = !monthsChanged ? preview : sortedMonths.length === 0 ? [] : (draftPreview.data ?? preview);
 
+  // 서버와 같은 순서(큰 값부터)로 둔다: 껐다 켜서 [2,6] 처럼 순서만 바뀌면 고치는 중으로 보여 남이 바꾼 값을 받지 않았다
   const toggleMonth = (m: number) =>
-    setMonths((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+    setMonths((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m].sort((a, b) => b - a)));
 
   const save = useMutation({
-    mutationFn: () => automationApi.updatePromotion(enabled, sortedMonths),
-    onSuccess: (r) => {
-      reset({ enabled: r.promotionEnabled, months: r.promotionMonths });
+    mutationFn: (sent: { enabled: boolean; months: number[] }) =>
+      automationApi.updatePromotion(sent.enabled, [...sent.months].sort((a, b) => b - a)),
+    onSuccess: (r, sent) => {
+      reset({ enabled: r.promotionEnabled, months: r.promotionMonths }, sent);
       qc.setQueryData(["automation"], r);
       qc.invalidateQueries({ queryKey: ["policy"] });
       toast({ title: r.promotionEnabled ? "자동 발송을 켰습니다." : "자동 발송 설정을 저장했습니다.", variant: "success" });
@@ -113,7 +117,7 @@ function PromotionAutomation({
       });
       if (!ok) return;
     }
-    save.mutate();
+    save.mutate({ enabled, months });
   };
 
   return (
@@ -168,7 +172,7 @@ function PromotionAutomation({
           <p className="mb-2 font-medium">발송 규칙</p>
           <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
             <li>
-              매일 <b className="text-foreground">09:00</b>에 직원마다 사용 기한(입사 기념일 전날)을 확인해, 고른 시기에
+              매일 <b className="text-foreground">09:00</b>에 직원마다 사용 기한(연차 기간의 마지막 날)을 확인해, 고른 시기에
               들어왔고 남은 연차가 있으면 안내 메일과 앱 알림을 보냅니다.
             </li>
             <li>

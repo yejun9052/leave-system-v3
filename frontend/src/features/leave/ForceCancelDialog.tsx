@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { extractErrorMessage } from "@/api/client";
 import { leaveApi } from "@/api/leave";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,7 @@ export default function ForceCancelDialog({ leave, onClose }: { leave: ForceCanc
     mutationFn: () => leaveApi.cancel(leave.id, reason.trim()),
     onSuccess: () => {
       toast({ title: "휴가를 강제 취소했습니다.", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["calendarDay"] });
-      qc.invalidateQueries({ queryKey: ["calendarEvents"] });
-      qc.invalidateQueries({ queryKey: ["pendingApprovals"] });
-      qc.invalidateQueries({ queryKey: ["leaveList"] });
+      invalidateLeaveData(qc);
       onClose();
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
@@ -69,8 +67,9 @@ export default function ForceCancelDialog({ leave, onClose }: { leave: ForceCanc
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label>취소 사유 (필수)</Label>
+          <Label htmlFor="force-cancel-reason">취소 사유 (필수)</Label>
           <Input
+            id="force-cancel-reason"
             value={reason}
             maxLength={500}
             onChange={(e) => setReason(e.target.value)}

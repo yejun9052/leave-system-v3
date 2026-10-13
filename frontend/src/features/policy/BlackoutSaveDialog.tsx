@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import {
   BLACKOUT_CONFLICT_LABEL,
@@ -40,14 +41,17 @@ const ACTION_LABEL: Record<BlackoutImpactItem["action"], string> = {
  *
  * @param editing 수정할 금지 기간(추가면 없음)
  * @param initial 추가할 때 입력한 값. 있으면 바로 확인 단계부터 보여 준다
+ * @param onSaved 저장했을 때(취소·닫기와 구분: 추가 화면은 저장했을 때만 명칭 입력을 비운다)
  */
 export default function BlackoutSaveDialog({
   editing,
   initial,
+  onSaved,
   onClose,
 }: {
   editing?: Blackout;
   initial?: Omit<Blackout, "id">;
+  onSaved?: () => void;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -59,7 +63,11 @@ export default function BlackoutSaveDialog({
   const [checking, setChecking] = useState(false);
 
   const check = async (s = startDate, e = endDate) => {
-    if (!s || !e || e < s) {
+    if (!s || !e) {
+      toast({ title: "시작일과 종료일을 입력해 주세요.", variant: "destructive" });
+      return;
+    }
+    if (e < s) {
       toast({ title: "종료일이 시작일보다 빠릅니다.", variant: "destructive" });
       return;
     }
@@ -95,9 +103,10 @@ export default function BlackoutSaveDialog({
             : undefined,
         variant: "success",
       });
-      for (const key of ["blackouts", "leaveList", "pendingApprovals", "calendarEvents", "calendarDay", "myBalance"]) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
+      void qc.invalidateQueries({ queryKey: ["blackouts"] });
+      // 겹친 휴가가 자동 반려·취소됐을 수 있다
+      invalidateLeaveData(qc);
+      onSaved?.();
       onClose();
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
@@ -120,16 +129,16 @@ export default function BlackoutSaveDialog({
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">시작</Label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <Label htmlFor="blackout-dialog-start" className="text-xs">시작</Label>
+                <Input id="blackout-dialog-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">종료</Label>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <Label htmlFor="blackout-dialog-end" className="text-xs">종료</Label>
+                <Input id="blackout-dialog-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
               <div className="min-w-[200px] flex-1 space-y-1">
-                <Label className="text-xs">명칭</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Label htmlFor="blackout-dialog-name" className="text-xs">명칭</Label>
+                <Input id="blackout-dialog-name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
             </div>
             {checking && (

@@ -50,7 +50,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
       {children}
       <Dialog open={pending !== null} onOpenChange={(open) => !open && close(false)}>
         {pending && (
-          <DialogContent className="max-w-md" hideClose>
+          <DialogContent
+            className="max-w-md"
+            hideClose
+            {...(!pending.description && { "aria-describedby": undefined })}
+          >
             <DialogHeader>
               <DialogTitle>{pending.title}</DialogTitle>
               {pending.description && (

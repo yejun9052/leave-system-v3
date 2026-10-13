@@ -37,10 +37,14 @@ import {
   SortableTableHead,
 } from "@/components/ui/table";
 import { useTableSort } from "@/lib/useTableSort";
+import { todayString } from "@/lib/dateFormat";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
+import { invalidateOrgData } from "@/lib/invalidate";
+import { downloadFile } from "@/lib/download";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -68,6 +72,11 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
 
 const STATUS_RANK: EmployeeStatus[] = ["ACTIVE", "ON_LEAVE", "RESIGNED"];
 
+/** 주소의 "3,4,7" → 부서 id 집합 */
+function parseIds(text: string): Set<number> {
+  return new Set(text.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0));
+}
+
 export default function EmployeePage() {
   const qc = useQueryClient();
   const myId = useAuthStore((s) => s.user?.id);
@@ -75,18 +84,26 @@ export default function EmployeePage() {
   const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // 검색어는 주소(?keyword=)에 둔다: 부서 관리에서 부서를 눌러 넘어오면 그 부서 이름으로 검색된 상태로 열린다
+  // 검색어는 주소(?keyword=)에 둔다. 부서 관리에서 부서를 눌러 넘어오면 ?departmentIds= 로 그 부서(하위 포함)가 체크된 채 열린다
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("keyword") ?? "";
+  const deptParam = searchParams.get("departmentIds") ?? "";
   const [keyword, setKeyword] = useState(search);
   const [page, setPage] = useState(0);
-  const [departmentIds, setDepartmentIds] = useState<Set<number>>(new Set());
+  const [departmentIds, setDepartmentIds] = useState<Set<number>>(() => parseIds(deptParam));
   useEffect(() => {
     setKeyword(search);
     setPage(0);
   }, [search]);
+  useEffect(() => {
+    if (!deptParam) return;
+    setDepartmentIds(parseIds(deptParam));
+    setPage(0);
+  }, [deptParam]);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [creating, setCreating] = useState(false);
+  /** 엑셀 일괄 등록에서 등록하지 못한 행과 이유(닫을 때까지 보여 줌) */
+  const [importErrors, setImportErrors] = useState<string[]>([]);
 
   // 부서 선택은 부서 관리 트리와 같은 순서·들여쓰기로 보여 준다
   const { data: departmentTree = [] } = useQuery({
@@ -115,7 +132,7 @@ export default function EmployeePage() {
     status: (e) => STATUS_RANK.indexOf(e.status),
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["employees"] });
+  const invalidate = () => invalidateOrgData(qc);
 
   const resignMutation = useMutation({
     mutationFn: (id: number) => employeeApi.resign(id),
@@ -131,12 +148,15 @@ export default function EmployeePage() {
       toast({ title: "복원되었습니다.", variant: "success" });
       invalidate();
     },
+    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
   const onImport = async (file: File) => {
     const ok = await confirm({
       title: "엑셀 파일로 사용자를 일괄 등록할까요?",
-      description: `${file.name}\n등록된 사용자마다 임시 비밀번호 메일이 발송됩니다.`,
+      description:
+        `${file.name}\n부서는 이름 또는 경로(연구소 › 개발팀)로 적습니다. 이름이 같은 부서가 여럿이면 경로로 적어 주세요.\n` +
+        "등록된 사용자마다 임시 비밀번호 메일이 발송됩니다.",
       confirmText: "등록",
     });
     if (!ok) return;
@@ -144,10 +164,10 @@ export default function EmployeePage() {
       const result = await employeeApi.importExcel(file);
       toast({
         title: `${result.created}명 등록 완료`,
-        description: result.errors.length ? `오류 ${result.errors.length}건` : undefined,
+        description: result.errors.length ? `${result.errors.length}건은 등록하지 못했습니다(화면 위 목록 확인).` : undefined,
         variant: result.errors.length ? "default" : "success",
       });
-      if (result.errors.length) console.warn("Import errors:", result.errors);
+      setImportErrors(result.errors);
       invalidate();
     } catch (e) {
       toast({ title: extractErrorMessage(e), variant: "destructive" });
@@ -155,17 +175,9 @@ export default function EmployeePage() {
   };
 
   const onExport = () => {
-    // 세션 쿠키로 인증(같은 출처) → fetch 후 blob 다운로드
-    fetch(employeeApi.exportUrl, { credentials: "same-origin" })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "employees.xlsx";
-        a.click();
-        URL.revokeObjectURL(url);
-      });
+    downloadFile(employeeApi.exportUrl, "employees.xlsx", "사용자 목록을 내려받지 못했습니다.").catch((e: Error) =>
+      toast({ title: e.message, variant: "destructive" }),
+    );
   };
 
   const onSearch = (e: React.FormEvent) => {
@@ -194,7 +206,11 @@ export default function EmployeePage() {
               e.target.value = "";
             }}
           />
-          <Button variant="outline" onClick={() => fileRef.current?.click()}>
+          <Button
+            variant="outline"
+            title="부서는 이름 또는 경로(연구소 › 개발팀)로 적습니다"
+            onClick={() => fileRef.current?.click()}
+          >
             <Upload className="h-4 w-4" /> 엑셀 등록
           </Button>
           <Button variant="outline" onClick={onExport}>
@@ -206,11 +222,28 @@ export default function EmployeePage() {
         </div>
       </div>
 
+      {importErrors.length > 0 && (
+        <div role="alert" className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="flex items-center justify-between gap-2">
+            <b>엑셀 등록에서 {importErrors.length}건은 등록하지 못했습니다.</b>
+            <Button variant="ghost" size="sm" className="h-7" onClick={() => setImportErrors([])}>
+              닫기
+            </Button>
+          </div>
+          <ul className="max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5">
+            {importErrors.map((message, i) => (
+              <li key={i}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <form onSubmit={onSearch} className="flex gap-2">
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
+            aria-label="이름·이메일·부서·직급·권한·상태 검색"
             placeholder="이름·이메일·부서·직급·권한·상태 검색"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
@@ -409,7 +442,7 @@ function EmployeeDialog({
     departmentId: employee?.departmentId ?? null,
     position: employee?.position ?? "",
     phone: employee?.phone ?? "",
-    hireDate: employee?.hireDate ?? new Date().toISOString().slice(0, 10),
+    hireDate: employee?.hireDate ?? todayString(),
     role: employee?.role ?? "EMPLOYEE",
   });
 
@@ -468,29 +501,31 @@ function EmployeeDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? "사용자 수정" : "사용자 추가"}</DialogTitle>
+          <DialogDescription className="sr-only">사용자 정보와 권한을 입력해 저장합니다.</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="이름">
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <Field id="employee-name" label="이름">
+            <Input id="employee-name" value={form.name} onChange={(e) => set("name", e.target.value)} />
           </Field>
-          <Field label={isSystem ? "아이디 (변경 불가)" : "이메일"}>
+          <Field id="employee-email" label={isSystem ? "아이디 (변경 불가)" : "이메일"}>
             <Input
+              id="employee-email"
               type={isSystem ? "text" : "email"}
               value={form.email}
               disabled={isSystem}
               onChange={(e) => set("email", e.target.value)}
             />
           </Field>
-          <Field label="직급">
-            <Input value={form.position} onChange={(e) => set("position", e.target.value)} />
+          <Field id="employee-position" label="직급">
+            <Input id="employee-position" value={form.position} onChange={(e) => set("position", e.target.value)} />
           </Field>
-          <Field label="부서">
+          <Field id="employee-department" label="부서">
             <Select
               value={form.departmentId ? String(form.departmentId) : "none"}
               onValueChange={(v) => set("departmentId", v === "none" ? null : Number(v))}
             >
-              <SelectTrigger>
+              <SelectTrigger id="employee-department">
                 {/* 선택값은 상위 부서부터 경로로: "개발 › 234" */}
                 <SelectValue placeholder="부서 선택">
                   {form.departmentId
@@ -508,11 +543,11 @@ function EmployeeDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="전화번호">
-            <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+          <Field id="employee-phone" label="전화번호">
+            <Input id="employee-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
           </Field>
-          <Field label="입사일">
-            <Input type="date" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} />
+          <Field id="employee-hire-date" label="입사일">
+            <Input id="employee-hire-date" type="date" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} />
           </Field>
         </div>
         {!isEdit && (
@@ -570,10 +605,11 @@ function EmployeeDialog({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** id 는 children 의 입력 칸(Select 면 SelectTrigger)에도 같이 붙인다. */
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   );

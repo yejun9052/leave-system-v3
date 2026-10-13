@@ -19,11 +19,13 @@ import {
 } from "@/components/ui/table";
 import { formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
 import DepartmentFilter from "@/components/DepartmentFilter";
+import QueryError from "@/components/QueryError";
 import { useTableSort } from "@/lib/useTableSort";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { useAuthStore } from "@/store/auth";
 import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
 import ForceCancelDialog from "./ForceCancelDialog";
+import StatusReason from "./StatusReason";
 
 const PAGE_SIZE = 20;
 
@@ -69,7 +71,7 @@ export default function LeaveListTab() {
   const [forceCancelling, setForceCancelling] = useState<LeaveRequest | null>(null);
 
   const statuses = STATUS_FILTERS.find((f) => f.value === statusFilter)?.statuses ?? [];
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["leaveList", { search, statusFilter, from, to, page, departments: [...departmentIds] }],
     queryFn: () =>
       leaveApi.search({
@@ -110,7 +112,7 @@ export default function LeaveListTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">상태</Label>
+          <Label htmlFor="leave-list-status" className="text-xs text-muted-foreground">상태</Label>
           <Select
             value={statusFilter}
             onValueChange={(v) => {
@@ -118,7 +120,7 @@ export default function LeaveListTab() {
               setPage(0);
             }}
           >
-            <SelectTrigger className="w-[260px]">
+            <SelectTrigger id="leave-list-status" className="w-[260px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -131,10 +133,11 @@ export default function LeaveListTab() {
           </Select>
         </div>
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">기간 (이 기간과 겹치는 휴가)</Label>
-          <div className="flex items-center gap-1">
+          <Label id="leave-list-period" className="text-xs text-muted-foreground">기간 (이 기간과 겹치는 휴가)</Label>
+          <div role="group" aria-labelledby="leave-list-period" className="flex items-center gap-1">
             <Input
               type="date"
+              aria-label="기간 시작"
               className="w-[150px]"
               value={from}
               onChange={(e) => {
@@ -145,6 +148,7 @@ export default function LeaveListTab() {
             <span className="text-muted-foreground">~</span>
             <Input
               type="date"
+              aria-label="기간 끝"
               className="w-[150px]"
               value={to}
               onChange={(e) => {
@@ -159,6 +163,7 @@ export default function LeaveListTab() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               className="pl-9"
+              aria-label="이름·부서·종류·사유·결재자·상태 검색"
               placeholder="이름·부서·종류·사유·결재자·상태 검색"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
@@ -177,6 +182,7 @@ export default function LeaveListTab() {
         </form>
       </div>
 
+      {isError && <QueryError error={error} onRetry={() => void refetch()} />}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -229,6 +235,7 @@ export default function LeaveListTab() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
+                      <StatusReason leave={r} />
                     </TableCell>
                     <TableCell>{r.approverName ?? "-"}</TableCell>
                     {canForceCancel && (
@@ -250,7 +257,7 @@ export default function LeaveListTab() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={columns} className="py-8 text-center text-muted-foreground">
-                    조건에 맞는 휴가가 없습니다.
+                    {isError ? "휴가 목록을 불러오지 못했습니다." : "조건에 맞는 휴가가 없습니다."}
                   </TableCell>
                 </TableRow>
               )}

@@ -58,7 +58,7 @@ function actionOf(n: AppNotification): { to: string; label: string; primary?: bo
 
 /**
  * 종 아이콘과 알림 목록. 열림 상태는 바깥(상단 안내 "확인하기")에서도 열 수 있게 받는다.
- * 목록을 열면 모두 읽음으로 바꾼다. 알림 줄을 누르면 그 알림의 화면으로 가고 목록을 닫는다.
+ * 목록을 닫을 때 모두 읽음으로 바꾼다(열려 있는 동안은 새 알림이 강조된다). 알림 줄을 누르면 그 알림의 화면으로 가고 목록을 닫는다.
  */
 export default function NotificationBell({ open, onOpenChange }: {
   open: boolean;
@@ -84,9 +84,23 @@ export default function NotificationBell({ open, onOpenChange }: {
     return () => document.removeEventListener("mousedown", onClick);
   }, [setOpen]);
 
-  // 열면 모두 읽음(종을 누르든 상단 안내를 누르든 같음)
+  // Esc 로 닫는다
   useEffect(() => {
-    if (!open || unread === 0) return;
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, setOpen]);
+
+  // 닫을 때 모두 읽음(종·상단 안내·Esc·바깥 누르기·알림 줄 누르기 모두 같음).
+  // 열자마자 읽음으로 바꾸면 열려 있는 동안 새 알림 강조(배경색)가 바로 사라졌다
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    const closed = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (!closed || unread === 0) return;
     void notificationApi.readAll().then(() => qc.invalidateQueries({ queryKey: ["notifications"] }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -95,7 +109,15 @@ export default function NotificationBell({ open, onOpenChange }: {
 
   return (
     <div className="relative" ref={ref}>
-      <Button variant="ghost" size="icon" onClick={toggle} className="relative" aria-label="알림">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={toggle}
+        className="relative"
+        aria-label="알림"
+        aria-expanded={open}
+        aria-controls="notification-panel"
+      >
         <Bell className="h-5 w-5" />
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -104,7 +126,11 @@ export default function NotificationBell({ open, onOpenChange }: {
         )}
       </Button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-lg border bg-popover shadow-lg">
+        // 좁은 화면(360px)에서는 종 오른쪽의 이름 칸 때문에 320px 패널이 왼쪽으로 잘려, 화면 양옆 16px 에 맞춰 편다
+        <div
+          id="notification-panel"
+          className="fixed inset-x-4 top-16 z-50 overflow-hidden rounded-lg border bg-popover shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80"
+        >
           <div className="border-b px-4 py-2 text-sm font-semibold">알림</div>
           <ul className="max-h-96 overflow-y-auto">
             {items.length > 0 ? (

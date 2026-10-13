@@ -61,9 +61,12 @@ export interface BlackoutImpact {
   kept: BlackoutImpactItem[];
 }
 
+/** 연차 정책 저장 값. 촉진 자동 발송 설정은 자동화 탭에서 따로 저장하므로 뺀다 */
+export type PolicyInput = Omit<Policy, "id" | "promotionEnabled" | "promotionMonths">;
+
 export const policyApi = {
   get: () => unwrap<Policy>(api.get("/policy")),
-  update: (body: Omit<Policy, "id">) => unwrap<Policy>(api.put("/policy", body)),
+  update: (body: PolicyInput) => unwrap<Policy>(api.put("/policy", body)),
 };
 
 // --- 정책 규칙 (포상 / 경조사 / 블랙아웃) ---
@@ -92,8 +95,6 @@ export interface Blackout {
 export const policyRulesApi = {
   awards: () => unwrap<AwardRule[]>(api.get("/policy/award-rules")),
   createAward: (b: Omit<AwardRule, "id">) => unwrap<AwardRule>(api.post("/policy/award-rules", b)),
-  updateAward: (id: number, b: Omit<AwardRule, "id">) =>
-    unwrap<AwardRule>(api.put(`/policy/award-rules/${id}`, b)),
   removeAward: (id: number) => unwrap<void>(api.delete(`/policy/award-rules/${id}`)),
 
   specials: () => unwrap<SpecialRule[]>(api.get("/policy/special-rules")),

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
 import { Pencil, Plus, Save, Trash2, PlayCircle } from "lucide-react";
 import {
   policyApi,
@@ -13,11 +14,13 @@ import {
   type SpecialRule,
   type Blackout,
   type BlackoutConflictMode,
+  type PolicyInput,
   BLACKOUT_CONFLICT_LABEL,
 } from "@/api/policy";
 import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
 import { useTableSort, type SortValue } from "@/lib/useTableSort";
+import { todayString } from "@/lib/dateFormat";
 import { useServerForm } from "@/lib/useServerForm";
 import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
@@ -27,7 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -47,6 +50,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
+import QueryError from "@/components/QueryError";
 import { cn } from "@/lib/utils";
 import HolidayTab from "./HolidayTab";
 import PromotionTab from "./PromotionTab";
@@ -77,6 +81,15 @@ export default function PolicyPage() {
   const requested = params.get("tab");
   const tab = requested && TABS.includes(requested) ? requested : "policy";
   const changeTab = (v: string) => setParams(v === "policy" ? {} : { tab: v }, { replace: true });
+  // 한 번 연 탭은 다른 탭으로 옮겨도 숨기기만 하고 그대로 둔다: 저장하지 않은 입력이 탭을 옮기는 순간 사라졌다
+  const [visited, setVisited] = useState<Set<string>>(() => new Set([tab]));
+  if (!visited.has(tab)) setVisited(new Set(visited).add(tab));
+  const panel = (value: string, content: React.ReactNode) =>
+    visited.has(value) && (
+      <TabsContent value={value} forceMount className="data-[state=inactive]:hidden">
+        {content}
+      </TabsContent>
+    );
   return (
     <div className="space-y-6">
       <div>
@@ -94,39 +107,29 @@ export default function PolicyPage() {
           <TabsTrigger value="automation">자동화</TabsTrigger>
           <TabsTrigger value="backup">백업</TabsTrigger>
         </TabsList>
-        <TabsContent value="policy">
-          <PolicyTab />
-        </TabsContent>
-        <TabsContent value="types">
-          <LeaveTypeTab />
-        </TabsContent>
-        <TabsContent value="rules">
-          <RulesTab />
-        </TabsContent>
-        <TabsContent value="blackout">
-          <BlackoutTab />
-        </TabsContent>
-        <TabsContent value="holidays">
-          <HolidayTab />
-        </TabsContent>
-        <TabsContent value="promotion">
-          <PromotionTab />
-        </TabsContent>
-        <TabsContent value="automation">
-          <AutomationTab />
-        </TabsContent>
-        <TabsContent value="backup">
-          <BackupTab />
-        </TabsContent>
+        {panel("policy", <PolicyTab />)}
+        {panel("types", <LeaveTypeTab />)}
+        {panel("rules", <RulesTab />)}
+        {panel("blackout", <BlackoutTab />)}
+        {panel("holidays", <HolidayTab />)}
+        {panel("promotion", <PromotionTab />)}
+        {panel("automation", <AutomationTab />)}
+        {panel("backup", <BackupTab />)}
       </Tabs>
     </div>
   );
 }
 
-/** 정책 화면 입력: 서버 값에서 id 를 뺀 것 */
-function policyForm(p: Policy): Omit<Policy, "id"> {
-  const { id: _id, ...rest } = p;
+/**
+ * 정책 화면 입력: 서버 값에서 id 와 촉진 자동 발송 설정을 뺀 것.
+ * 촉진 설정은 자동화 탭에서 따로 저장하므로, 넣어 두면 다른 관리자가 자동화 탭만 바꿔도
+ * 이 화면에 "다른 사람이 바꿨습니다"가 잘못 뜬다.
+ */
+function policyForm(p: Policy): PolicyInput {
+  const { id: _id, promotionEnabled: _enabled, promotionMonths: _months, ...rest } = p;
   void _id;
+  void _enabled;
+  void _months;
   return rest;
 }
 
@@ -134,29 +137,37 @@ function PolicyTab() {
   const { toast } = useToast();
   const confirm = useConfirm();
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
+  const { data, error, refetch } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
   const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? policyForm(data) : undefined);
 
-  const set = <K extends keyof Omit<Policy, "id">>(k: K, v: Omit<Policy, "id">[K]) =>
+  const set = <K extends keyof PolicyInput>(k: K, v: PolicyInput[K]) =>
     setForm((f) => (f ? { ...f, [k]: v } : f));
 
   const save = useMutation({
-    mutationFn: () => policyApi.update(form!),
-    onSuccess: (saved) => {
-      reset(policyForm(saved));
+    mutationFn: (sent: PolicyInput) => policyApi.update(sent),
+    onSuccess: (saved, sent) => {
+      reset(policyForm(saved), sent);
       toast({ title: "정책이 저장되었습니다.", variant: "success" });
-      qc.invalidateQueries({ queryKey: ["policy"] });
+      void qc.invalidateQueries({ queryKey: ["policy"] });
+      // 반차·시간차 허용, 사전 신청 기한 등이 신청 미리보기와 잔여 연차에 바로 반영되게
+      invalidateLeaveData(qc);
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
   const grant = useMutation({
     mutationFn: () => leaveAdminApi.grantAll(),
-    onSuccess: (r) => toast({ title: `${r.granted}명 연차 부여/재계산 완료`, variant: "success" }),
+    onSuccess: (r) => {
+      toast({ title: `${r.granted}명 연차 부여/재계산 완료`, variant: "success" });
+      invalidateLeaveData(qc);
+    },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
-  if (!form) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  if (!form) {
+    if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+    return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -171,9 +182,9 @@ function PolicyTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>연차 부여 기준</Label>
+            <Label htmlFor="policy-grant-basis">연차 부여 기준</Label>
             <Select value={form.grantBasis} onValueChange={(v) => set("grantBasis", v as GrantBasis)}>
-              <SelectTrigger>
+              <SelectTrigger id="policy-grant-basis">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -185,8 +196,9 @@ function PolicyTab() {
           {form.grantBasis === "FISCAL_YEAR" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>회계 시작 월</Label>
+                <Label htmlFor="policy-fiscal-month">회계 시작 월</Label>
                 <Input
+                  id="policy-fiscal-month"
                   type="number"
                   min={1}
                   max={12}
@@ -195,8 +207,9 @@ function PolicyTab() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>회계 시작 일</Label>
+                <Label htmlFor="policy-fiscal-day">회계 시작 일</Label>
                 <Input
+                  id="policy-fiscal-day"
                   type="number"
                   min={1}
                   max={31}
@@ -244,8 +257,9 @@ function PolicyTab() {
           />
           {form.carryOverEnabled && (
             <div className="space-y-2">
-              <Label>최대 이월 일수</Label>
+              <Label htmlFor="policy-max-carry-over">최대 이월 일수</Label>
               <Input
+                id="policy-max-carry-over"
                 type="number"
                 step="0.5"
                 value={form.maxCarryOverDays}
@@ -263,23 +277,23 @@ function PolicyTab() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>기본 연차(1년 이상)</Label>
-              <Input type="number" step="0.5" value={form.baseAnnualDays}
+              <Label htmlFor="policy-base-annual">기본 연차(1년 이상)</Label>
+              <Input id="policy-base-annual" type="number" step="0.5" value={form.baseAnnualDays}
                 onChange={(e) => set("baseAnnualDays", Number(e.target.value))} />
             </div>
             <div className="space-y-2">
-              <Label>상한(최대 연차)</Label>
-              <Input type="number" step="0.5" value={form.maxAnnualDays}
+              <Label htmlFor="policy-max-annual">상한(최대 연차)</Label>
+              <Input id="policy-max-annual" type="number" step="0.5" value={form.maxAnnualDays}
                 onChange={(e) => set("maxAnnualDays", Number(e.target.value))} />
             </div>
             <div className="space-y-2">
-              <Label>가산 주기(년)</Label>
-              <Input type="number" min={1} value={form.seniorityStepYears}
+              <Label htmlFor="policy-seniority-step">가산 주기(년)</Label>
+              <Input id="policy-seniority-step" type="number" min={1} value={form.seniorityStepYears}
                 onChange={(e) => set("seniorityStepYears", Number(e.target.value))} />
             </div>
             <div className="space-y-2">
-              <Label>가산량(일)</Label>
-              <Input type="number" step="0.5" value={form.seniorityIncrementDays}
+              <Label htmlFor="policy-seniority-increment">가산량(일)</Label>
+              <Input id="policy-seniority-increment" type="number" step="0.5" value={form.seniorityIncrementDays}
                 onChange={(e) => set("seniorityIncrementDays", Number(e.target.value))} />
             </div>
           </div>
@@ -290,8 +304,8 @@ function PolicyTab() {
             onChange={(v) => set("monthlyAccrualEnabled", v)} />
           {form.monthlyAccrualEnabled && (
             <div className="space-y-2">
-              <Label>월차 상한(일)</Label>
-              <Input type="number" min={0} value={form.monthlyAccrualMax}
+              <Label htmlFor="policy-monthly-max">월차 상한(일)</Label>
+              <Input id="policy-monthly-max" type="number" min={0} value={form.monthlyAccrualMax}
                 onChange={(e) => set("monthlyAccrualMax", Number(e.target.value))} />
             </div>
           )}
@@ -304,23 +318,23 @@ function PolicyTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>팀 동시 부재 최대 인원 (0 = 무제한, 넘어도 신청은 되고 결재할 때 경고)</Label>
-            <Input type="number" min={0} value={form.maxConcurrentAbsence}
+            <Label htmlFor="policy-max-concurrent">팀 동시 부재 최대 인원 (0 = 무제한, 넘어도 신청은 되고 결재할 때 경고)</Label>
+            <Input id="policy-max-concurrent" type="number" min={0} value={form.maxConcurrentAbsence}
               onChange={(e) => set("maxConcurrentAbsence", Number(e.target.value))} />
           </div>
           <div className="space-y-2">
-            <Label>최소 사전 신청 기한(일, 0 = 제한 없음)</Label>
-            <Input type="number" min={0} value={form.minAdvanceDays}
+            <Label htmlFor="policy-min-advance">최소 사전 신청 기한(일, 0 = 제한 없음)</Label>
+            <Input id="policy-min-advance" type="number" min={0} value={form.minAdvanceDays}
               onChange={(e) => set("minAdvanceDays", Number(e.target.value))} />
           </div>
           <div className="space-y-2">
-            <Label>최대 연속 사용일 (0 = 무제한)</Label>
-            <Input type="number" min={0} value={form.maxConsecutiveDays}
+            <Label htmlFor="policy-max-consecutive">최대 연속 사용일 (0 = 무제한)</Label>
+            <Input id="policy-max-consecutive" type="number" min={0} value={form.maxConsecutiveDays}
               onChange={(e) => set("maxConsecutiveDays", Number(e.target.value))} />
           </div>
           <div className="space-y-2">
-            <Label>사용 금지 기간을 등록할 때 겹치는 기존 휴가</Label>
-            <div className="grid gap-2">
+            <Label id="policy-blackout-conflict">사용 금지 기간을 등록할 때 겹치는 기존 휴가</Label>
+            <div className="grid gap-2" role="radiogroup" aria-labelledby="policy-blackout-conflict">
               {(Object.keys(BLACKOUT_CONFLICT_LABEL) as BlackoutConflictMode[]).map((mode) => (
                 <label
                   key={mode}
@@ -366,7 +380,7 @@ function PolicyTab() {
               description: "저장하면 이후 연차 계산에 바로 적용됩니다.",
               confirmText: "저장",
             });
-            if (ok) save.mutate();
+            if (ok) save.mutate(form);
           }}
           disabled={save.isPending}
         >
@@ -408,7 +422,7 @@ function ToggleRow({
         <p className="text-sm font-medium">{label}</p>
         {desc && <p className="text-xs text-muted-foreground">{desc}</p>}
       </div>
-      <Switch checked={checked} onCheckedChange={onChange} />
+      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
     </div>
   );
 }
@@ -479,7 +493,7 @@ function LeaveTypeTab() {
                     </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{t.code}</TableCell>
-                  <TableCell>{formatDays(t.deductDays)}</TableCell>
+                  <TableCell>{formatDays(t.deductDays)}일</TableCell>
                   <TableCell>{PORTION_LABEL[t.portion] ?? "-"}</TableCell>
                   <TableCell>{ANNUAL_DEDUCTION_LABEL[t.annualDeductionMode] ?? "-"}</TableCell>
                   <TableCell>{t.allowedDuringBlackout ? "가능" : "-"}</TableCell>
@@ -490,12 +504,13 @@ function LeaveTypeTab() {
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(t)}>
+                      <Button size="sm" variant="ghost" aria-label={`${t.name} 수정`} onClick={() => setEditing(t)}>
                         수정
                       </Button>
                       <Button
                         size="icon"
                         variant="ghost"
+                        aria-label={`${t.name} 삭제`}
                         onClick={async () => {
                           const ok = await confirm({
                             title: `'${t.name}' 휴가 종류를 삭제할까요?`,
@@ -575,24 +590,27 @@ function LeaveTypeDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base">{isEdit ? "휴가 종류 수정" : "휴가 종류 추가"}</DialogTitle>
+          <DialogDescription className="sr-only">휴가 종류의 이름·차감 일수·단위·연차 차감 방식을 정합니다.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>이름</Label>
-              <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+              <Label htmlFor="leave-type-name">이름</Label>
+              <Input id="leave-type-name" value={form.name} onChange={(e) => set("name", e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>코드</Label>
+              <Label htmlFor="leave-type-code">코드</Label>
               <Input
+                id="leave-type-code"
                 value={form.code}
                 disabled={isEdit}
                 onChange={(e) => set("code", e.target.value.toUpperCase())}
               />
             </div>
             <div className="space-y-2">
-              <Label>차감 일수</Label>
+              <Label htmlFor="leave-type-deduct">차감 일수</Label>
               <Input
+                id="leave-type-deduct"
                 type="number"
                 step="0.125"
                 value={form.deductDays}
@@ -600,15 +618,15 @@ function LeaveTypeDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>색상</Label>
-              <Input type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
+              <Label htmlFor="leave-type-color">색상</Label>
+              <Input id="leave-type-color" type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
             </div>
           </div>
           <ToggleRow label="유급" checked={form.paid} onChange={(v) => set("paid", v)} />
           <div className="space-y-2">
-            <Label>단위</Label>
+            <Label htmlFor="leave-type-portion">단위</Label>
             <Select value={form.portion} onValueChange={(v) => set("portion", v as LeavePortion)}>
-              <SelectTrigger>
+              <SelectTrigger id="leave-type-portion">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -621,8 +639,8 @@ function LeaveTypeDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>연차 차감 방식</Label>
-            <div className="space-y-2" role="radiogroup" aria-label="연차 차감 방식">
+            <Label id="leave-type-deduction-mode">연차 차감 방식</Label>
+            <div className="space-y-2" role="radiogroup" aria-labelledby="leave-type-deduction-mode">
               {DEDUCTION_MODES.map((m) => (
                 <button
                   key={m}
@@ -707,12 +725,12 @@ function RulesTab() {
         <CardHeader><CardTitle className="text-base">장기근속 포상휴가</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1"><Label className="text-xs">근속(년)</Label>
-              <Input type="number" min={1} className="w-20" value={aYears} onChange={(e) => setAYears(Number(e.target.value))} /></div>
-            <div className="space-y-1"><Label className="text-xs">포상(일)</Label>
-              <Input type="number" step="0.5" className="w-20" value={aDays} onChange={(e) => setADays(Number(e.target.value))} /></div>
-            <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
-              <Input value={aName} onChange={(e) => setAName(e.target.value)} placeholder="예: 5년 근속 포상" /></div>
+            <div className="space-y-1"><Label htmlFor="award-years" className="text-xs">근속(년)</Label>
+              <Input id="award-years" type="number" min={1} className="w-20" value={aYears} onChange={(e) => setAYears(Number(e.target.value))} /></div>
+            <div className="space-y-1"><Label htmlFor="award-days" className="text-xs">포상(일)</Label>
+              <Input id="award-days" type="number" step="0.5" className="w-20" value={aDays} onChange={(e) => setADays(Number(e.target.value))} /></div>
+            <div className="space-y-1 flex-1"><Label htmlFor="award-name" className="text-xs">명칭</Label>
+              <Input id="award-name" value={aName} onChange={(e) => setAName(e.target.value)} placeholder="예: 5년 근속 포상" /></div>
             <Button
               size="sm"
               onClick={async () => {
@@ -767,6 +785,7 @@ function SpecialRuleCard({
   const limitValue = limit.trim() === "" ? null : Number(limit);
   const limitInvalid = limitValue != null && (!Number.isInteger(limitValue) || limitValue < 1);
   const reasonLabel = typeCode === "CONDOLENCE" ? "사유/관계" : "사유";
+  const id = useId();
 
   const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
   const add = useMutation({
@@ -794,14 +813,14 @@ function SpecialRuleCard({
       <CardContent className="space-y-3">
         {typeCode && (
           <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1 flex-1"><Label className="text-xs">{reasonLabel}</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} aria-label={`${typeName} ${reasonLabel}`}
+            <div className="space-y-1 flex-1"><Label htmlFor={`${id}-name`} className="text-xs">{reasonLabel}</Label>
+              <Input id={`${id}-name`} value={name} onChange={(e) => setName(e.target.value)} aria-label={`${typeName} ${reasonLabel}`}
                 placeholder={typeCode === "CONDOLENCE" ? "예: 본인 결혼" : typeCode === "OFFICIAL" ? "예: 예비군" : "예: 사유"} /></div>
-            <div className="space-y-1"><Label className="text-xs">일수</Label>
-              <Input type="number" step="0.5" className="w-20" value={days} onChange={(e) => setDays(Number(e.target.value))}
+            <div className="space-y-1"><Label htmlFor={`${id}-days`} className="text-xs">일수</Label>
+              <Input id={`${id}-days`} type="number" step="0.5" className="w-20" value={days} onChange={(e) => setDays(Number(e.target.value))}
                 aria-label={`${typeName} 일수`} /></div>
-            <div className="space-y-1"><Label className="text-xs">연간 횟수</Label>
-              <Input type="number" min={1} className="w-28" value={limit} placeholder="제한 없음"
+            <div className="space-y-1"><Label htmlFor={`${id}-limit`} className="text-xs">연간 횟수</Label>
+              <Input id={`${id}-limit`} type="number" min={1} className="w-28" value={limit} placeholder="제한 없음"
                 onChange={(e) => setLimit(e.target.value)} aria-label={`${typeName} 연간 횟수`} /></div>
             <Button
               size="sm"
@@ -844,7 +863,7 @@ function BlackoutTab() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: rows = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayString();
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const [name, setName] = useState("");
@@ -863,12 +882,12 @@ function BlackoutTab() {
       <CardHeader><CardTitle className="text-base">연차 사용 금지 기간 (블랙아웃)</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1"><Label className="text-xs">시작</Label>
-            <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
-          <div className="space-y-1"><Label className="text-xs">종료</Label>
-            <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
-          <div className="space-y-1 flex-1"><Label className="text-xs">명칭</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
+          <div className="space-y-1"><Label htmlFor="blackout-start" className="text-xs">시작</Label>
+            <Input id="blackout-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
+          <div className="space-y-1"><Label htmlFor="blackout-end" className="text-xs">종료</Label>
+            <Input id="blackout-end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+          <div className="space-y-1 flex-1"><Label htmlFor="blackout-name" className="text-xs">명칭</Label>
+            <Input id="blackout-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
           <Button
             size="sm"
             onClick={() => setSaving({ initial: { startDate: start, endDate: end, name: name.trim() } })}
@@ -894,10 +913,11 @@ function BlackoutTab() {
         <BlackoutSaveDialog
           editing={saving.editing}
           initial={saving.initial}
-          onClose={() => {
+          // 취소·닫기로 돌아오면 입력한 명칭을 그대로 둔다
+          onSaved={() => {
             if (saving.initial) setName("");
-            setSaving(null);
           }}
+          onClose={() => setSaving(null)}
         />
       )}
     </Card>
@@ -939,11 +959,11 @@ function RuleTable({
             {r.cells.map((c, i) => <TableCell key={i}>{c}</TableCell>)}
             <TableCell className="text-right">
               {onEdit && (
-                <Button size="icon" variant="ghost" aria-label="수정" onClick={() => onEdit(r.id)}>
+                <Button size="icon" variant="ghost" aria-label={`${r.cells.join(" ")} 수정`} onClick={() => onEdit(r.id)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               )}
-              <Button size="icon" variant="ghost" aria-label="삭제" onClick={() => onDelete(r.id)}>
+              <Button size="icon" variant="ghost" aria-label={`${r.cells.join(" ")} 삭제`} onClick={() => onDelete(r.id)}>
                 <Trash2 className="h-4 w-4 text-destructive" />
               </Button>
             </TableCell>

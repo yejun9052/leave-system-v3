@@ -10,6 +10,7 @@ export interface DepartmentCreate {
 
 export interface DepartmentUpdate {
   name: string;
+  /** 보내지 않으면 부서장을 바꾸지 않는다(부서 관리 화면은 보내지 않음, 부서장은 사용자 관리에서 정함) */
   leadId?: number | null;
   sortOrder?: number;
 }

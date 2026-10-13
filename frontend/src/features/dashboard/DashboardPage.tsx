@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { todayString } from "@/lib/dateFormat";
+import QueryError from "@/components/QueryError";
 import {
   Bar,
   BarChart,
@@ -37,17 +39,10 @@ import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/components/ui/toast";
 import { LeaveRequestDialog } from "@/features/leave/MyLeavesPage";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** 오늘(브라우저 시간) yyyy-MM-dd */
-function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 /** "2026-10-08" → 자정 기준 Date */
 function parseIso(iso: string): Date {
@@ -57,7 +52,7 @@ function parseIso(iso: string): Date {
 
 /** 오늘부터 그 날까지 남은 날 수(오늘 0, 내일 1) */
 function daysFromToday(iso: string): number {
-  return Math.round((parseIso(iso).getTime() - parseIso(todayIso()).getTime()) / DAY_MS);
+  return Math.round((parseIso(iso).getTime() - parseIso(todayString()).getTime()) / DAY_MS);
 }
 
 /** "2026-10-08" → "2026.10.08" */
@@ -76,8 +71,6 @@ function period(start: string, end: string): string {
 export default function DashboardPage() {
   const { user, isManager } = useAuthStore();
   const manager = isManager();
-  const qc = useQueryClient();
-  const { toast } = useToast();
   const [applying, setApplying] = useState(false);
   const now = new Date();
 
@@ -103,11 +96,8 @@ export default function DashboardPage() {
       {applying && (
         <LeaveRequestDialog
           onClose={() => setApplying(false)}
-          onSaved={(warning) => {
-            setApplying(false);
-            if (warning) toast({ title: warning, variant: "destructive" });
-            for (const key of ["dashboard", "myRequests", "myBalance"]) qc.invalidateQueries({ queryKey: [key] });
-          }}
+          // 다시 불러오기와 경고(신청 완료 알림의 설명)는 신청 폼이 맡는다
+          onSaved={() => setApplying(false)}
         />
       )}
     </div>
@@ -115,7 +105,7 @@ export default function DashboardPage() {
 }
 
 function PersonalSection() {
-  const { data } = useQuery({ queryKey: ["dashboard", "me"], queryFn: dashboardApi.personal });
+  const { data, isError, error, refetch } = useQuery({ queryKey: ["dashboard", "me"], queryFn: dashboardApi.personal });
   const b = data?.balance;
   const nextStart = b?.periodEnd
     ? (() => {
@@ -129,15 +119,28 @@ function PersonalSection() {
   const team = data?.teamOnLeaveToday ?? 0;
   const granted = (b?.granted ?? 0) + (b?.carriedOver ?? 0);
 
+  // 실패하면 잔여 0일·대기 0건이 정상 값처럼 보이고 팀 일정이 계속 "불러오는 중…"이라, 따로 불러오는 카드만 두고 오류를 알린다
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <QueryError error={error} onRetry={() => void refetch()} />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <RecentRequests />
+          <UpcomingHolidays />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi icon={CalendarCheck2} label="잔여 연차" value={`${formatDays(b?.remaining)}일`} accent
           sub={`이번 기간 부여 ${formatDays(granted)}일`} />
         <Kpi icon={Inbox} label="결재 대기" value={`${pending}건`}
-          sub={pending > 0 ? <><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" />내 신청 승인 대기</> : "대기 중인 신청이 없어요"} />
+          sub={pending > 0 ? <><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" />내 새 신청 승인 대기</> : "대기 중인 새 신청이 없어요"} />
         <Kpi icon={CalendarClock} label="기산일 D-DAY" valueClassName="text-primary"
-          value={dDay == null ? "-" : dDay <= 0 ? "D-DAY" : `D-${dDay}`}
+          value={dDayLabel(dDay)}
           sub={nextStart ? `다음 기산일 ${monthDay(nextStart)}` : "연차 기간 정보 없음"} />
         <Kpi icon={Users} label="오늘 팀 부재" value={`${team}명`}
           sub={team === 0 ? "오늘은 모두 함께해요" : `팀원 ${team}명이 휴가 중이에요`} />
@@ -155,6 +158,17 @@ function PersonalSection() {
       </div>
     </div>
   );
+}
+
+/** 비어 있을 때 문구: 불러오는 중이면 그 안내, 아니면 "없음" 문구 */
+function emptyText(loading: boolean, empty: string): string {
+  return loading ? "불러오는 중…" : empty;
+}
+
+/** 기산일까지 남은 날: 모르면 "-", 당일·지난 날이면 "D-DAY" */
+function dDayLabel(dDay: number | null): string {
+  if (dDay == null) return "-";
+  return dDay <= 0 ? "D-DAY" : `D-${dDay}`;
 }
 
 function Kpi({ icon: Icon, label, value, sub, accent, valueClassName }: {
@@ -194,9 +208,10 @@ const STATUS_PILL: Record<LeaveRequestStatus, string> = {
 const STATUS_SHORT: Partial<Record<LeaveRequestStatus, string>> = { PENDING: "대기" };
 
 type RecentTab = "ALL" | "PENDING" | "APPROVED";
+// "결재 대기"는 위 결재 대기 KPI 와 같은 기준(새 신청만). 취소 요청 중인 건은 "전체"에서 "취소대기"로 보인다
 const RECENT_TABS: { key: RecentTab; label: string }[] = [
   { key: "ALL", label: "전체" },
-  { key: "PENDING", label: "대기" },
+  { key: "PENDING", label: "결재 대기" },
   { key: "APPROVED", label: "승인" },
 ];
 
@@ -208,10 +223,13 @@ function leaveIcon(r: LeaveRequest): LucideIcon {
 
 function RecentRequests({ className }: { className?: string }) {
   const [tab, setTab] = useState<RecentTab>("ALL");
-  const { data, isLoading } = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["myRequests"],
+    queryFn: () => leaveApi.myRequests(),
+  });
   const rows = [...(data?.content ?? [])]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .filter((r) => tab === "ALL" || (tab === "PENDING" ? r.status === "PENDING" || r.status === "CANCEL_REQUESTED" : r.status === tab))
+    .filter((r) => tab === "ALL" || r.status === tab)
     .slice(0, 5);
 
   return (
@@ -271,7 +289,11 @@ function RecentRequests({ className }: { className?: string }) {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
-                    {isLoading ? "불러오는 중…" : "해당하는 신청이 없습니다."}
+                    {isError ? (
+                      <QueryError error={error} onRetry={() => void refetch()} className="text-left" />
+                    ) : (
+                      emptyText(isLoading, "해당하는 신청이 없습니다.")
+                    )}
                   </td>
                 </tr>
               )}
@@ -355,7 +377,7 @@ function UpcomingHolidays({ className }: { className?: string }) {
   const year = new Date().getFullYear();
   const thisYear = useQuery({ queryKey: ["holidays", year], queryFn: () => holidayApi.list(year) });
   const nextYear = useQuery({ queryKey: ["holidays", year + 1], queryFn: () => holidayApi.list(year + 1) });
-  const today = todayIso();
+  const today = todayString();
   const upcoming: Holiday[] = [...(thisYear.data ?? []), ...(nextYear.data ?? [])]
     .filter((h) => h.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -371,7 +393,8 @@ function UpcomingHolidays({ className }: { className?: string }) {
           const d = parseIso(h.date);
           const left = daysFromToday(h.date);
           return (
-            <div key={h.date} className="flex items-center gap-3 rounded-xl border px-3 py-3 sm:gap-4 sm:px-4">
+            // 같은 날 공휴일이 둘일 수 있다(예: 어린이날·부처님오신날)
+            <div key={`${h.date}-${h.name}`} className="flex items-center gap-3 rounded-xl border px-3 py-3 sm:gap-4 sm:px-4">
               <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-lg bg-muted text-xs font-medium leading-tight">
                 <span>{d.getMonth() + 1}월</span>
                 <span>{d.getDate()}일</span>
@@ -386,11 +409,14 @@ function UpcomingHolidays({ className }: { className?: string }) {
             </div>
           );
         })}
-        {upcoming.length === 0 && (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            {thisYear.isLoading ? "불러오는 중…" : "등록된 공휴일이 없습니다. 정책 › 공휴일에서 받아 올 수 있습니다."}
-          </p>
-        )}
+        {upcoming.length === 0 &&
+          (thisYear.isError ? (
+            <QueryError error={thisYear.error} onRetry={() => void thisYear.refetch()} />
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              {emptyText(thisYear.isLoading, "등록된 공휴일이 없습니다. 정책 › 공휴일에서 받아 올 수 있습니다.")}
+            </p>
+          ))}
       </CardContent>
     </Card>
   );
@@ -403,7 +429,7 @@ function initial(name: string): string {
 function TeamSchedule({ className, leaves, loaded }: { className?: string; leaves: TeamLeave[]; loaded: boolean }) {
   const [range, setRange] = useState<"today" | "week">("today");
   const hasDept = useAuthStore((s) => s.user?.departmentId != null);
-  const today = todayIso();
+  const today = todayString();
   const shown = range === "today" ? leaves.filter((l) => l.startDate <= today && l.endDate >= today) : leaves;
   const people = [...new Map(shown.map((l) => [l.employeeId, l.employeeName])).entries()];
 
@@ -475,18 +501,31 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
 }
 
 function AdminSection() {
-  const { data } = useQuery({ queryKey: ["dashboard", "admin"], queryFn: dashboardApi.admin });
+  const { data, isError, error, refetch } = useQuery({ queryKey: ["dashboard", "admin"], queryFn: dashboardApi.admin });
   const palette = ["#6366f1", "#8b5cf6", "#ec4899", "#14b8a6", "#f59e0b", "#3b82f6", "#10b981"];
+
+  const heading = (
+    <div>
+      <h2 className="text-xl font-bold">회사 현황</h2>
+      <p className="text-sm text-muted-foreground">인사관리자·시스템 관리자에게만 보입니다.</p>
+    </div>
+  );
+  if (isError) {
+    return (
+      <div className="space-y-4 pt-2">
+        {heading}
+        <QueryError error={error} onRetry={() => void refetch()} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 pt-2">
-      <div>
-        <h2 className="text-xl font-bold">회사 현황</h2>
-        <p className="text-sm text-muted-foreground">인사관리자·시스템 관리자에게만 보입니다.</p>
-      </div>
+      {heading}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi icon={Users} label="재직 인원" value={`${data?.totalEmployees ?? 0}명`} sub="재직 중인 직원" />
-        <Kpi icon={UserMinus} label="오늘 부재" value={`${data?.onLeaveToday ?? 0}명`} sub="오늘 승인된 휴가" />
+        {/* 서버 값은 오늘에 걸린 승인 휴가 신청 건수(사람 수 아님: 한 사람이 오전·오후 반차를 따로 내면 2건) */}
+        <Kpi icon={UserMinus} label="오늘 휴가(승인)" value={`${data?.onLeaveToday ?? 0}건`} sub="오늘 승인된 휴가 신청" />
         <Kpi icon={Inbox} label="결재 대기 (전체)" value={`${data?.pendingApprovals ?? 0}건`} sub="신청·취소 요청" />
         <Kpi icon={TrendingUp} label="연차 사용률" value={`${data?.usageRate ?? 0}%`} accent
           sub={`사용 ${formatDays(data?.totalUsed)}일 / 부여 ${formatDays(data?.totalGranted)}일`} />

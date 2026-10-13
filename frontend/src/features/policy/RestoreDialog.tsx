@@ -56,6 +56,10 @@ export default function RestoreDialog({ fileName, source, onClose }: {
         window.location.href = "/login";
       }, 2500);
     } catch (e) {
+      // 복원하는 동안 이 탭의 다른 요청(알림·실시간 연결)이 503 을 받아 점검 표시가 켜졌을 수 있다.
+      // 서버가 실패로 답했으면 점검은 끝났으므로 끄고, 점검 화면 대신 이 창의 실패 안내를 보여 준다
+      // (서버가 아직 점검 중이면 다음 요청이 503 을 받아 다시 켠다)
+      useMaintenanceStore.getState().setActive(false);
       setSelfRestoring(false);
       setPhase({ step: "failed", message: extractErrorMessage(e, "복원에 실패했습니다.") });
       qc.invalidateQueries({ queryKey: ["backups"] });

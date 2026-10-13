@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DatabaseBackup, Download, FolderInput, History, Loader2, Trash2 } from "lucide-react";
 import { BACKUP_KIND_LABEL, backupApi, type BackupFile, type BackupKind, type RestoreSource } from "@/api/backups";
 import { extractErrorMessage } from "@/api/client";
+import { downloadFile } from "@/lib/download";
+import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { useAuthStore } from "@/store/auth";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +44,7 @@ export default function BackupTab() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const isSystemAdmin = useAuthStore((s) => s.hasAnyRole("SYSTEM_ADMIN"));
-  const { data, isLoading, error } = useQuery({ queryKey: ["backups"], queryFn: backupApi.overview });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["backups"], queryFn: backupApi.overview });
   const [downloading, setDownloading] = useState<string | null>(null);
   const [restoring, setRestoring] = useState<{ fileName: string; source: RestoreSource } | null>(null);
 
@@ -50,16 +52,9 @@ export default function BackupTab() {
   const download = async (fileName: string) => {
     setDownloading(fileName);
     try {
-      const res = await fetch(backupApi.downloadUrl(fileName), { credentials: "same-origin" });
-      if (!res.ok) throw new Error("다운로드 실패");
-      const href = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(href);
-    } catch {
-      toast({ title: "백업 파일을 내려받지 못했습니다.", variant: "destructive" });
+      await downloadFile(backupApi.downloadUrl(fileName), fileName, "백업 파일을 내려받지 못했습니다.");
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
     } finally {
       setDownloading(null);
     }
@@ -98,7 +93,13 @@ export default function BackupTab() {
 
   if (isLoading) return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
   if (error || !data) {
-    return <p className="text-sm text-destructive">{extractErrorMessage(error, "백업 정보를 불러오지 못했습니다.")}</p>;
+    // 백업 목록을 못 읽어도(백업 폴더 오류 등) 자동 백업 설정은 바꿀 수 있게 둔다
+    return (
+      <div className="space-y-6">
+        <BackupSettingsCard />
+        <QueryError error={error} onRetry={() => void refetch()} />
+      </div>
+    );
   }
 
   const busy = run.isPending || data.running;

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateLeaveData } from "@/lib/invalidate";
+import { isValidYear } from "@/lib/dateFormat";
 import { RefreshCw } from "lucide-react";
 import { holidayApi, type HolidaySyncResult } from "@/api/holidays";
 import { extractErrorMessage } from "@/api/client";
@@ -19,13 +21,16 @@ export default function HolidayTab() {
   const { toast } = useToast();
   const confirm = useConfirm();
   const qc = useQueryClient();
-  const [year, setYear] = useState(new Date().getFullYear());
+  // 칸을 비우고 다시 쓸 수 있게 글자로 두고, 쓸 수 있는 연도일 때만 조회·동기화한다(빈 칸이 0년이 되지 않게)
+  const [yearText, setYearText] = useState(String(new Date().getFullYear()));
+  const year = Number(yearText);
+  const yearValid = isValidYear(yearText);
   const [result, setResult] = useState<HolidaySyncResult | null>(null);
 
   const { data: holidays = [], isLoading } = useQuery({
     queryKey: ["holidays", year],
     queryFn: () => holidayApi.list(year),
-    enabled: year >= 2000 && year <= 2100,
+    enabled: yearValid,
   });
   const { sorted, sort, toggle } = useTableSort(holidays, { date: (h) => h.date, name: (h) => h.name });
 
@@ -33,7 +38,9 @@ export default function HolidayTab() {
     mutationFn: () => holidayApi.sync(year),
     onSuccess: (r) => {
       setResult(r);
-      qc.invalidateQueries({ queryKey: ["holidays", year] });
+      void qc.invalidateQueries({ queryKey: ["holidays"] });
+      // 공휴일이 바뀌면 캘린더 표시와 그날 휴가의 차감 일수(조정·환원)가 바뀐다
+      invalidateLeaveData(qc);
       toast({ title: `${r.year}년 공휴일 동기화 완료`, variant: "success" });
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
@@ -51,15 +58,17 @@ export default function HolidayTab() {
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1">
-            <Label className="text-xs">연도</Label>
+            <Label htmlFor="holiday-year" className="text-xs">연도</Label>
             <Input
+              id="holiday-year"
               type="number"
               className="w-28"
-              value={year}
+              value={yearText}
               onChange={(e) => {
-                setYear(Number(e.target.value));
+                setYearText(e.target.value);
                 setResult(null);
               }}
+              aria-invalid={!yearValid}
             />
           </div>
           <Button
@@ -72,7 +81,7 @@ export default function HolidayTab() {
               });
               if (ok) sync.mutate();
             }}
-            disabled={sync.isPending}
+            disabled={sync.isPending || !yearValid}
           >
             <RefreshCw className={sync.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
             {year}년 동기화

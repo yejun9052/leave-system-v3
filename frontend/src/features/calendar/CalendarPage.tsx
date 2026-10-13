@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -129,8 +130,8 @@ export default function CalendarPage() {
   const canApply = useAuthStore((s) => !!s.user);
   const [range, setRange] = useState<{ start: string; end: string }>(() => {
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-    const end = new Date(now.getFullYear(), now.getMonth() + 2, 0).toISOString().slice(0, 10);
+    const start = localDateString(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const end = localDateString(new Date(now.getFullYear(), now.getMonth() + 2, 0));
     return { start, end };
   });
   // 보기 탭은 주소(?view=department 등)와 맞춘다: 대시보드 "팀 캘린더 보기"가 부서 탭으로 바로 연다
@@ -335,13 +336,8 @@ export default function CalendarPage() {
     selector.clear();
   };
 
-  const onLeaveSaved = () => {
-    qc.invalidateQueries({ queryKey: ["myRequests"] });
-    qc.invalidateQueries({ queryKey: ["myBalance"] });
-    qc.invalidateQueries({ queryKey: ["calendarEvents"] });
-    qc.invalidateQueries({ queryKey: ["calendarDay"] });
-    closePanel();
-  };
+  // 다시 불러오기는 신청 폼(invalidateLeaveData)이 맡는다
+  const onLeaveSaved = () => closePanel();
 
   // 이름(제목) 검색은 휴가·일정만 거른다(공휴일·연차 제한·연차 기간 표시는 그대로). 모바일 돋보기와 같은 규칙
   const q = query.trim();
@@ -415,7 +411,8 @@ export default function CalendarPage() {
         map.set(d, [...(map.get(d) ?? []), mark]);
       }
     };
-    for (const e of events) {
+    // 보기 탭(부서·개인 등)에 맞춘 일정만 점으로 찍는다(공휴일은 모든 탭에 들어 있음)
+    for (const e of filtered) {
       const kind: DayMark["kind"] =
         e.source === "HOLIDAY" ? "HOLIDAY" : e.source === "LEAVE_REQUEST" ? "LEAVE" : "EVENT";
       if (kind !== "HOLIDAY" && q && !e.title.includes(q)) continue;
@@ -427,7 +424,19 @@ export default function CalendarPage() {
     const order: DayMark["kind"][] = ["HOLIDAY", "BLACKOUT", "PERIOD", "LEAVE", "EVENT"];
     for (const list of map.values()) list.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
     return map;
-  }, [isMobile, viewMonth, events, blackouts, periodMarks, q]);
+  }, [isMobile, viewMonth, filtered, blackouts, periodMarks, q]);
+
+  // 모바일 요약 카드도 보기 탭대로 거른다. 전체면 거르지 않음(null)
+  const summaryFilter = useMemo(() => {
+    if (view === "ALL") return null;
+    const eventIds = new Set(filtered.filter((e) => e.source === "ADMIN_EVENT").map((e) => e.id));
+    const leave = (l: { employeeId: number; departmentId: number | null }) => {
+      if (view === "DEPARTMENT") return l.departmentId != null && deptIds.has(l.departmentId);
+      if (view === "PERSONAL") return !!me && l.employeeId === me.id;
+      return false;
+    };
+    return { leave, eventIds };
+  }, [view, filtered, deptIds, me]);
 
   const focusedBlackouts = blackouts
     .filter((b) => b.startDate <= focused && b.endDate >= focused)
@@ -442,8 +451,9 @@ export default function CalendarPage() {
   };
 
   const onDatesSet = (arg: DatesSetArg) => {
-    const start = arg.start.toISOString().slice(0, 10);
-    const end = arg.end.toISOString().slice(0, 10);
+    // 보이는 첫날 ~ 마지막 날(arg.end 는 다음 날 자정이라 1ms 앞). 서버는 끝 날짜를 포함한다
+    const start = localDateString(arg.start);
+    const end = localDateString(new Date(arg.end.getTime() - 1));
     setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
     // 모바일 요약 카드: 다른 달로 넘기면 그 달의 오늘(없으면 1일)을 보여 준다
     const month = localDateString(arg.view.currentStart).slice(0, 7);
@@ -460,7 +470,11 @@ export default function CalendarPage() {
     if (ev && ev.editable) setEditing(ev);
   };
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["calendarEvents"] });
+  // 날짜 상세·모바일 요약 카드(calendarDay)도 일정을 보여 준다
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ["calendarEvents"] });
+    void qc.invalidateQueries({ queryKey: ["calendarDay"] });
+  };
 
   const remove = useMutation({
     mutationFn: (id: number) => calendarApi.remove(id),
@@ -472,10 +486,52 @@ export default function CalendarPage() {
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
+  // 보기 탭(전체·일정·부서·개인)과 부서 탭의 볼 부서: 데스크톱·모바일 같이 쓴다(대시보드 "팀 캘린더 보기"는 ?view=department 로 연다)
+  const viewTabs = (
+    <div className="flex w-fit gap-1 rounded-lg bg-muted p-1" role="group" aria-label="보기">
+      {VIEW_TABS.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          aria-pressed={view === t.key}
+          onClick={() => setView(t.key)}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+            view === t.key ? "bg-background shadow-sm" : "text-muted-foreground",
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+  const deptPicker =
+    view === "DEPARTMENT" && deptChain.length > 0 && (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="group" aria-label="볼 부서">
+        <span className="text-muted-foreground">볼 부서</span>
+        {deptChain.map((d, i) => (
+          <label key={d.id} className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={deptIds.has(d.id)}
+              onChange={() => toggleDept(d.id)}
+            />
+            {d.name}
+            {i === 0 && <span className="text-xs text-muted-foreground">(내 부서)</span>}
+          </label>
+        ))}
+      </div>
+    );
+
   return (
     <div className={cn("space-y-6", isMobile && panelOpen && "pb-48")}>
       {isMobile ? (
         <>
+          <div className="space-y-2">
+            {viewTabs}
+            {deptPicker}
+          </div>
           <MobileMonthView
             month={viewMonth}
             focused={focused}
@@ -496,6 +552,7 @@ export default function CalendarPage() {
           />
           <MobileDaySummary
             date={focused}
+            filter={summaryFilter}
             canApply={canApply}
             query={query}
             blackoutNames={focusedBlackouts}
@@ -519,37 +576,8 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex gap-1 rounded-lg bg-muted p-1 w-fit">
-              {VIEW_TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setView(t.key)}
-                  className={cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                    view === t.key ? "bg-background shadow-sm" : "text-muted-foreground",
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            {view === "DEPARTMENT" && deptChain.length > 0 && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="group" aria-label="볼 부서">
-                <span className="text-muted-foreground">볼 부서</span>
-                {deptChain.map((d, i) => (
-                  <label key={d.id} className="flex cursor-pointer items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={deptIds.has(d.id)}
-                      onChange={() => toggleDept(d.id)}
-                    />
-                    {d.name}
-                    {i === 0 && <span className="text-xs text-muted-foreground">(내 부서)</span>}
-                  </label>
-                ))}
-              </div>
-            )}
+            {viewTabs}
+            {deptPicker}
             <div className="relative ml-auto w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -691,12 +719,12 @@ function EventDialog({
   const isEdit = !!event;
   const [form, setForm] = useState<CalendarEventInput>({
     title: event?.title ?? "",
-    startDate: event?.start ?? new Date().toISOString().slice(0, 10),
+    startDate: event?.start ?? todayString(),
     // stored end is exclusive for allDay; convert back to inclusive for editing
     endDate:
       event && event.allDay
         ? new Date(new Date(event.end).getTime() - 86400000).toISOString().slice(0, 10)
-        : event?.end ?? new Date().toISOString().slice(0, 10),
+        : event?.end ?? todayString(),
     allDay: event?.allDay ?? true,
     scope: (event?.scope as "COMPANY" | "DEPARTMENT") ?? "COMPANY",
     departmentId: event?.departmentId ?? null,
@@ -774,31 +802,32 @@ function EventDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? "일정 수정" : "일정 추가"}</DialogTitle>
+          <DialogDescription className="sr-only">제목·기간·범위·색상을 정해 캘린더 일정을 저장합니다.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>제목</Label>
-            <Input value={form.title} onChange={(e) => set("title", e.target.value)} />
+            <Label htmlFor="event-title">제목</Label>
+            <Input id="event-title" value={form.title} onChange={(e) => set("title", e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>시작일</Label>
-              <Input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
+              <Label htmlFor="event-start">시작일</Label>
+              <Input id="event-start" type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>종료일</Label>
-              <Input type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
+              <Label htmlFor="event-end">종료일</Label>
+              <Input id="event-end" type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>범위</Label>
+              <Label htmlFor="event-scope">범위</Label>
               <Select
                 value={selectedScope ? selectedKey : ""}
                 onValueChange={onScopeChange}
                 disabled={scopesLoading || scopeOptions?.length === 0}
               >
-                <SelectTrigger>
+                <SelectTrigger id="event-scope">
                   <SelectValue placeholder="선택" />
                 </SelectTrigger>
                 <SelectContent>
@@ -820,8 +849,8 @@ function EventDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label>색상</Label>
-              <Input type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
+              <Label htmlFor="event-color">색상</Label>
+              <Input id="event-color" type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
             </div>
           </div>
         </div>
