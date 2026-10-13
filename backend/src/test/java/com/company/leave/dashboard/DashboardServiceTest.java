@@ -54,6 +54,7 @@ class DashboardServiceTest {
     @Mock private EmployeeRepository employeeRepository;
     @Mock private LeaveRequestRepository requestRepository;
     @Mock private LeaveBalanceService balanceService;
+    @Mock private com.company.leave.leave.LeaveRequestService leaveRequestService;
 
     private DashboardService service;
 
@@ -64,7 +65,8 @@ class DashboardServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new DashboardService(employeeRepository, requestRepository, balanceService);
+        service = new DashboardService(employeeRepository, requestRepository, balanceService, leaveRequestService);
+        lenient().when(leaveRequestService.leaveTypeVisibility(any())).thenReturn(r -> true);
         lenient().when(requestRepository.findApprovedBetween(TODAY, TODAY)).thenReturn(List.of());
         lenient().when(requestRepository.findApprovedBetween(WEEK_START, WEEK_END)).thenReturn(List.of());
         lenient().when(requestRepository.findApprovedBetween(LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31)))
@@ -174,7 +176,8 @@ class DashboardServiceTest {
                 org.mockito.Mockito.mock(com.company.leave.calendar.repository.HolidayRepository.class);
         when(holidays.findByDateBetweenOrderByDateAsc(any(), any()))
                 .thenReturn(List.of(new com.company.leave.calendar.domain.Holiday(wedHoliday, "임시공휴일")));
-        DashboardService withHolidays = new DashboardService(employeeRepository, requestRepository, balanceService, holidays);
+        DashboardService withHolidays = new DashboardService(employeeRepository, requestRepository, balanceService, holidays,
+                leaveRequestService);
         when(requestRepository.findApprovedBetween(LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31))).thenReturn(List.of(
                 휴가(직원(1L, 개발팀), mon, mon.plusDays(4), "4")));
 
@@ -287,6 +290,19 @@ class DashboardServiceTest {
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(11L, WEEK_START),
                         org.assertj.core.groups.Tuple.tuple(13L, WEEK_END));
         assertThat(d.teamLeaves().get(0).leaveTypeName()).isEqualTo(연차.getName());
+    }
+
+    @Test
+    void 팀_일정에서_볼_수_없는_동료의_병가_경조사는_휴가로만_보인다() {
+        Employee me = 직원(10L, 개발팀);
+        Employee 가람 = 직원(11L, 개발팀);
+        when(employeeRepository.findById(10L)).thenReturn(Optional.of(me));
+        LeaveRequest 가람_휴가 = 휴가(가람, WEEK_START, WEEK_START, "1");
+        when(requestRepository.findApprovedBetween(WEEK_START, WEEK_END)).thenReturn(List.of(가람_휴가));
+        when(leaveRequestService.leaveTypeVisibility(10L)).thenReturn(r -> false);
+
+        assertThat(service.personal(10L).teamLeaves()).extracting(DashboardDtos.TeamLeave::leaveTypeName)
+                .containsExactly(LeaveRequestDtos.HIDDEN_TYPE_NAME);
     }
 
     @Test

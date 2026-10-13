@@ -43,7 +43,9 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -494,6 +496,7 @@ public class LeaveRequestService {
     @Transactional(readOnly = true)
     public List<LeaveRequestDtos.DayLeave> leavesOnDay(Long callerId, LocalDate date) {
         Employee caller = employeeService.getEntity(callerId);
+        Predicate<LeaveRequest> typeVisible = leaveTypeVisibility(callerId);
         return requestRepository.findByStatusInOverlapping(EnumSet.of(LeaveRequestStatus.PENDING,
                         LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED), date, date).stream()
                 .filter(r -> !r.isAwaitingApproval() || r.getEmployee().getId().equals(callerId)
@@ -503,7 +506,10 @@ public class LeaveRequestService {
                                         ? r.getEmployee().getDepartment().getName() : null,
                                 java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
                         .thenComparing(r -> r.getEmployee().getName()))
-                .map(r -> LeaveRequestDtos.DayLeave.from(r, r.getEmployee().getId().equals(callerId)))
+                .map(r -> {
+                    LeaveRequestDtos.DayLeave leave = LeaveRequestDtos.DayLeave.from(r, r.getEmployee().getId().equals(callerId));
+                    return typeVisible.test(r) ? leave : leave.withHiddenType();
+                })
                 .toList();
     }
 
@@ -1305,6 +1311,44 @@ public class LeaveRequestService {
             return "팀장 " + lead.getName() + "님 승인(인사관리자도 승인 가능)";
         }
         return canSelfApprove(applicant) ? "본인 승인(자가 승인 가능)" : "인사관리자 승인";
+    }
+
+    /**
+     * 휴가 종류를 아무에게나 보여 주지 않을 것(건강·가족사가 드러남): 병가, 경조사.
+     * 본인·인사관리자·시스템 관리자·그 직원을 맡은 팀장이 아니면 캘린더·대시보드에서 "휴가"로만 보인다.
+     */
+    private static final Set<String> PRIVATE_TYPE_CODES = Set.of("SICK", "CONDOLENCE");
+
+    /**
+     * 이 사람이 휴가의 종류(병가·경조사)까지 봐도 되는지 판단기. 여러 건에 쓰도록 맡은 부서는 한 번만 읽는다.
+     * 병가·경조사가 아니면 누구나 본다.
+     */
+    @Transactional(readOnly = true)
+    public Predicate<LeaveRequest> leaveTypeVisibility(Long viewerId) {
+        Employee viewer = employeeService.getEntity(viewerId);
+        if (isHrApprover(viewer)) {
+            return r -> true;
+        }
+        Set<Long> inCharge = subordinateDeptIds(viewer);
+        return r -> !PRIVATE_TYPE_CODES.contains(r.getLeaveType().getCode())
+                || r.getEmployee().getId().equals(viewerId)
+                || (r.getEmployee().getDepartmentId() != null && inCharge.contains(r.getEmployee().getDepartmentId()));
+    }
+
+    /**
+     * 캘린더의 휴가 일정 중 이 사람에게 종류를 가려야 하는 것: 휴가 신청 ID → 가린 제목("이름 - 휴가").
+     * {@link #leaveTypeVisibility}
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, String> hiddenLeaveTitles(Long viewerId, Collection<Long> requestIds) {
+        if (requestIds.isEmpty()) {
+            return Map.of();
+        }
+        Predicate<LeaveRequest> visible = leaveTypeVisibility(viewerId);
+        return requestRepository.findAllById(requestIds).stream()
+                .filter(visible.negate())
+                .collect(Collectors.toMap(LeaveRequest::getId,
+                        r -> r.getEmployee().getName() + " - " + LeaveRequestDtos.HIDDEN_TYPE_NAME));
     }
 
     /** 전사 결재·강제 취소·강제 등록 권한: 인사관리자와 시스템 관리자(같은 권한, 회사 합의). */

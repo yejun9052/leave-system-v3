@@ -15,6 +15,10 @@ import java.time.LocalDate;
 
 public final class LeaveRequestDtos {
 
+    /** 종류를 가린 휴가(병가·경조사를 볼 수 없는 사람에게)의 이름과 색. LeaveRequestService#leaveTypeVisibility */
+    public static final String HIDDEN_TYPE_NAME = "휴가";
+    public static final String HIDDEN_TYPE_COLOR = "#64748b";
+
     private LeaveRequestDtos() {
     }
 
@@ -161,6 +165,12 @@ public final class LeaveRequestDtos {
                     r.getStatus(),
                     mine,
                     r.getHalfDayPart());
+        }
+
+        /** 종류(병가·경조사)를 가린 같은 휴가: "휴가"와 중립 색으로만 보인다. */
+        public DayLeave withHiddenType() {
+            return new DayLeave(id, employeeId, employeeName, departmentId, departmentName, HIDDEN_TYPE_NAME,
+                    HIDDEN_TYPE_COLOR, portion, hours, startDate, endDate, status, mine, halfDayPart);
         }
     }
 
