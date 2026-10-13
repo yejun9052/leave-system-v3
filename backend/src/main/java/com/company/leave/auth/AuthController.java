@@ -58,10 +58,11 @@ public class AuthController {
 
     @Operation(summary = "비밀번호 재설정 링크 요청",
             description = "등록 여부와 관계없이 항상 같은 응답. 등록된 재직 계정이면 30분 유효 1회용 링크를 메일로 보낸다. "
-                    + "요청만으로 기존 비밀번호는 바뀌지 않는다. 이메일당 1시간 3회 제한(초과해도 응답은 동일).")
+                    + "요청만으로 기존 비밀번호는 바뀌지 않는다. 이메일당 1시간 3회·접속 IP 당 1시간 20회 제한(초과해도 응답은 동일).")
     @PostMapping("/password-reset/request")
-    public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequests.Request request) {
-        passwordResetService.requestReset(request.email());
+    public ApiResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequests.Request request,
+                                                  HttpServletRequest httpRequest) {
+        passwordResetService.requestReset(request.email(), httpRequest.getRemoteAddr());
         return ApiResponse.ok();
     }
 
