@@ -12,16 +12,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
 
 /**
  * 화면에 보이는 숫자 칸(월 → 일 → 시 → 분 순). index 는 cron 6칸(초 분 시 일 월 요일) 중 위치.
  * 비우면 매월·매일처럼 모든 값(*). 초는 화면에 두지 않고 저장된 값을 그대로 둔다.
- * 월 칸만 간격이다: 3 → 3개월마다(1·4·7·10월, cron *&#47;3). 특정 달 하나만 고르는 칸이 아니다.
+ * 월 칸만 간격이고 숫자 대신 고른다: 3개월마다 → 1·4·7·10월(cron *&#47;3). 특정 달 하나만 고르는 칸이 아니다.
  */
 const NUMBER_FIELDS = [
-  { index: 4, name: "개월마다", hint: "1~12 · 비우면 매월", every: "매월", unit: "개월" },
+  { index: 4, name: "개월마다", hint: "1월부터 간격", every: "매월", unit: "개월" },
   { index: 3, name: "일", hint: "1~31", every: "매일", unit: "일" },
   { index: 2, name: "시", hint: "0~23", every: "매시", unit: "시간" },
   { index: 1, name: "분", hint: "0~59", every: "매분", unit: "분" },
@@ -75,14 +76,14 @@ function splitCron(cron: string): string[] {
 /** 숫자 칸에 보일 값: 숫자·쉼표·범위만 그대로 보이고, *·L·0/6 같은 값은 빈 칸(설명은 placeholder 로). */
 const numberValue = (part: string) => (/^[\d,-]+$/.test(part) ? part : "");
 
-/** 월 칸(간격)에 보일 값: 1월부터 N개월 간격(*&#47;N, 1/N)이면 N, 매월(*)이나 특정 달(1,7)이면 빈 칸 */
-const monthEveryValue = (part: string) => /^(?:\*|1)\/(\d{1,2})$/.exec(part)?.[1] ?? "";
+/** 고를 수 있는 월 간격. 서버는 12 의 약수만 받는다(5개월마다는 11월 다음이 이듬해 1월이라 간격이 어긋남) */
+const MONTH_STEPS = [1, 2, 3, 4, 6, 12];
 
-/** 월 칸 입력 → cron: 비우면 매월(*), N 이면 1월부터 N개월마다(*&#47;N). 12 넘으면 12 */
-function monthEveryCron(input: string): string {
-  const digits = input.replace(/\D/g, "");
-  if (digits === "") return "*";
-  return `*/${Math.min(12, Number(digits))}`;
+/** 월 칸 → 고른 간격("1"=매월, "3"=3개월마다). 고를 수 없는 값(특정 달 1,7·5개월마다 등)이면 "custom" */
+function monthStepKey(part: string): string {
+  if (part === "" || part === "*" || part === "?") return "1";
+  const step = /^(?:\*|1)\/(\d{1,2})$/.exec(part)?.[1];
+  return step && MONTH_STEPS.includes(Number(step)) ? String(Number(step)) : "custom";
 }
 
 /** 월 칸이 비었을 때 회색 글씨: 매월, 또는 예전에 직접 입력한 특정 달("1·7월만") */
@@ -207,8 +208,8 @@ export default function BackupSettingsCard() {
     next[i] = value === "" ? "*" : value;
     set("cron", next.join(" "));
   };
-  // 월 칸은 간격: 비우면 매월, N 이면 N개월마다
-  const setMonthEvery = (input: string) => setField(4, monthEveryCron(input) === "*" ? "" : monthEveryCron(input));
+  // 월 칸은 간격: 매월(*) 또는 N개월마다(*&#47;N)
+  const setMonthStep = (key: string) => setField(4, key === "1" ? "" : `*/${key}`);
   const days = parseDays(fields[5]);
   const toggleDay = (d: number) => {
     const next = new Set(days ?? []);
@@ -287,22 +288,42 @@ export default function BackupSettingsCard() {
               const part = fields[f.index];
               return (
                 <div key={f.name} className="flex flex-col items-center gap-1 rounded-lg border bg-muted/30 p-2">
-                  <label className="flex w-full flex-col items-center gap-1">
-                    <Input
-                      value={f.index === 4 ? monthEveryValue(part) : numberValue(part)}
-                      placeholder={f.index === 4 ? monthPlaceholder(part) : numberPlaceholder(part, f)}
-                      onChange={(e) =>
-                        f.index === 4
-                          ? setMonthEvery(e.target.value)
-                          : setField(f.index, e.target.value.replace(/[^\d,-]/g, ""))
-                      }
-                      inputMode="numeric"
-                      aria-label={f.name}
-                      className="h-11 text-center text-lg font-semibold tabular-nums placeholder:text-sm placeholder:font-normal"
-                      spellCheck={false}
-                    />
-                    <span className="text-sm font-medium">{f.index === 3 ? dayCaption : f.name}</span>
-                  </label>
+                  {f.index === 4 ? (
+                    <div className="flex w-full flex-col items-center gap-1">
+                      <Select value={monthStepKey(part)} onValueChange={setMonthStep}>
+                        <SelectTrigger aria-label="개월마다" className="h-11 justify-center gap-1 text-base font-semibold">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTH_STEPS.map((m) => (
+                            <SelectItem key={m} value={String(m)}>
+                              {m === 1 ? "매월" : `${m}개월마다`}
+                            </SelectItem>
+                          ))}
+                          {monthStepKey(part) === "custom" && (
+                            // cron 으로 직접 넣은 값(특정 달 등)은 보여 주기만 한다
+                            <SelectItem value="custom" disabled>
+                              {/\//.test(part) ? numberPlaceholder(part, f) : monthPlaceholder(part)}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm font-medium">월</span>
+                    </div>
+                  ) : (
+                    <label className="flex w-full flex-col items-center gap-1">
+                      <Input
+                        value={numberValue(part)}
+                        placeholder={numberPlaceholder(part, f)}
+                        onChange={(e) => setField(f.index, e.target.value.replace(/[^\d,-]/g, ""))}
+                        inputMode="numeric"
+                        aria-label={f.name}
+                        className="h-11 text-center text-lg font-semibold tabular-nums placeholder:text-sm placeholder:font-normal"
+                        spellCheck={false}
+                      />
+                      <span className="text-sm font-medium">{f.index === 3 ? dayCaption : f.name}</span>
+                    </label>
+                  )}
                   {f.index === 3 ? (
                     <button
                       type="button"
@@ -396,8 +417,8 @@ export default function BackupSettingsCard() {
             <summary className="cursor-pointer select-none">입력하는 법 · cron 으로 직접 입력</summary>
             <ul className="mt-1.5 space-y-0.5 pl-4">
               <li>칸을 비우면 매월·매일처럼 모든 값입니다. 여러 개는 쉼표(예: 시 <code>2,14</code>), 범위는 <code>-</code>(예: 일 <code>1-7</code>).</li>
-              <li>개월마다 칸은 간격입니다: <code>3</code> · 일 <code>1</code> = 1·4·7·10월 1일(3개월마다 한 번씩, 1년에 4번). 비우거나 <code>1</code>이면 매월.</li>
-              <li>예: 월 비움 · 일 비움 · 시 <code>0</code> · 분 <code>10</code> = 매일 00:10 / 일 <code>1</code> · 시 <code>4</code> · 분 <code>0</code> = 매월 1일 04:00</li>
+              <li>월은 간격을 고릅니다(매월·2·3·4·6·12개월마다): 3개월마다 · 일 <code>1</code> = 1·4·7·10월 1일(1년에 4번).</li>
+              <li>예: 매월 · 일 비움 · 시 <code>0</code> · 분 <code>10</code> = 매일 00:10 / 매월 · 일 <code>1</code> · 시 <code>4</code> · 분 <code>0</code> = 매월 1일 04:00</li>
               <li>백업은 1시간보다 자주 실행할 수 없습니다.</li>
             </ul>
             <div className="mt-2 flex items-center gap-2">
