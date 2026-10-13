@@ -32,6 +32,7 @@ import {
 import {
   Select,
   SelectContent,
+  SelectItem,
   SelectTreeItem,
   SelectTrigger,
   SelectValue,
@@ -64,12 +65,12 @@ import {
 
 type ViewScope = "ALL" | "SCHEDULE" | "DEPARTMENT" | "PERSONAL";
 
-/** 날짜를 눌러 할 일. 직접 등록·연차 제한은 인사관리자·시스템 관리자만 */
+/** 날짜를 눌러 할 일. 강제 등록(휴가 직접 등록)·블랙아웃은 인사관리자·시스템 관리자만 */
 type EntryMode = "LEAVE" | "REGISTER" | "BLACKOUT";
 const ENTRY_MODES: { key: EntryMode; label: string; menuLabel: string }[] = [
   { key: "LEAVE", label: "휴가 신청", menuLabel: "이 날짜로 신청하기" },
-  { key: "REGISTER", label: "휴가 직접 등록", menuLabel: "이 날짜로 직접 등록하기" },
-  { key: "BLACKOUT", label: "연차 제한 등록", menuLabel: "이 날짜부터 연차 제한 등록하기" },
+  { key: "REGISTER", label: "강제 등록", menuLabel: "이 날짜로 강제 등록하기" },
+  { key: "BLACKOUT", label: "블랙아웃 등록", menuLabel: "이 날짜부터 블랙아웃 등록하기" },
 ];
 
 /** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
@@ -566,26 +567,24 @@ export default function CalendarPage() {
       ))}
     </div>
   );
-  // 관리자만: 날짜를 누르면 무엇을 할지
+  // 관리자만: 날짜를 누르면 무엇을 할지(기본 휴가 신청)
   const modePicker = isAdmin && (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="text-muted-foreground">날짜를 누르면</span>
-      <div className="flex w-fit gap-1 rounded-lg bg-muted p-1" role="group" aria-label="날짜를 누르면">
-        {ENTRY_MODES.map((m) => (
-          <button
-            key={m.key}
-            type="button"
-            aria-pressed={mode === m.key}
-            onClick={() => setEntryMode(m.key)}
-            className={cn(
-              "rounded-md px-3 py-1.5 font-medium transition-colors",
-              mode === m.key ? "bg-background shadow-sm" : "text-muted-foreground",
-            )}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+    <div className="flex items-center gap-2 text-sm">
+      <Label htmlFor="calendar-entry-mode" className="whitespace-nowrap font-normal text-muted-foreground">
+        날짜를 누르면
+      </Label>
+      <Select value={mode} onValueChange={(v) => setEntryMode(v as EntryMode)}>
+        <SelectTrigger id="calendar-entry-mode" className="w-[150px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ENTRY_MODES.map((m) => (
+            <SelectItem key={m.key} value={m.key}>
+              {m.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
   const deptPicker =

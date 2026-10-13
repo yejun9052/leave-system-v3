@@ -29,7 +29,7 @@ export function BlackoutEntryPanel({ selection, variant = "floating", hidden, on
   return (
     <>
       <EntryPanel
-        title="연차 제한 기간 등록"
+        title="블랙아웃(연차 사용 금지 기간) 등록"
         variant={variant}
         hidden={hidden || confirming}
         onClose={onClose}
@@ -100,7 +100,7 @@ export function RegisterEntryPanel({
 
   return (
     <EntryPanel
-      title="휴가 직접 등록"
+      title="휴가 강제 등록"
       variant={variant}
       hidden={hidden}
       onClose={onClose}
