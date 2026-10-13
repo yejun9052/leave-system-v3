@@ -35,6 +35,18 @@ class MaintenanceFilterTest {
     }
 
     @Test
+    void 인코딩한_경로로도_점검_모드를_피하지_못한다() throws Exception {
+        maintenance.begin();
+        FilterChain chain = mock(FilterChain.class);
+
+        MockHttpServletResponse response = call("GET", "/%61pi/employees", chain);
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        org.mockito.Mockito.verifyNoInteractions(chain);
+        maintenance.end();
+    }
+
+    @Test
     void 평소에는_요청을_그대로_통과시킨다() throws Exception {
         FilterChain chain = mock(FilterChain.class);
 

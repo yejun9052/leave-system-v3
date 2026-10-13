@@ -8,6 +8,11 @@ public interface DbVersionSource {
     /** 지금 DB 에 적용된 최신 버전. 알 수 없으면 null. */
     String current();
 
+    /** 이 앱이 가진 마이그레이션 중 가장 새 버전(적용 전 포함). 알 수 없으면 null(그때는 current 로 비교). */
+    default String latestAvailable() {
+        return null;
+    }
+
     /** a 가 b 보다 새 버전이면 양수(Flyway 버전 규칙: "10" > "9", "1.2" > "1.1"). */
     static int compare(String a, String b) {
         return MigrationVersion.fromVersion(a).compareTo(MigrationVersion.fromVersion(b));

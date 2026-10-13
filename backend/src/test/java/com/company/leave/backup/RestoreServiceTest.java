@@ -103,12 +103,13 @@ class RestoreServiceTest {
     }
 
     @Test
-    void 확인_뒤_복원_전_백업을_만들고_점검_모드에서_한_트랜잭션으로_복원한다() {
+    void 확인_뒤_점검_모드에서_복원_전_백업을_만들고_한_트랜잭션으로_복원한다() {
         RestoreService.Result result = service.restore(NAME, Source.BACKUP, 1L, "관리자");
 
+        // 복원 전 백업은 점검 모드로 새 요청을 막은 뒤에 뜬다: 그 사이 저장된 것도 백업에 남는다
         assertThat(calls).containsExactly(
                 "pg_restore --list, maintenance=false",
-                "pre-restore backup, maintenance=false",
+                "pre-restore backup, maintenance=true",
                 "pg_restore, maintenance=true",
                 "psql, maintenance=true");
         assertThat(maintenance.isActive()).isFalse();
@@ -169,8 +170,30 @@ class RestoreServiceTest {
         assertThatThrownBy(() -> service.check(NAME, Source.BACKUP))
                 .isInstanceOfSatisfying(BusinessException.class, e -> {
                     assertThat(e.getErrorCode()).isEqualTo(ErrorCode.BACKUP_NEWER_VERSION);
-                    assertThat(e.getMessage()).contains("백업 DB 버전 10, 지금 9");
+                    assertThat(e.getMessage()).contains("백업 DB 버전 10, 이 앱 9");
                 });
+    }
+
+    @Test
+    void 지금_DB_보다_새_버전이어도_이_앱이_아는_버전이면_복원할_수_있다() throws Exception {
+        // 복원 뒤 DB 업그레이드가 실패해 DB 가 7에 머문 상황: 이 앱(9)으로 만든 복원 전 백업으로 되돌릴 수 있어야 한다
+        DbVersionSource behind = new DbVersionSource() {
+            @Override
+            public String current() {
+                return "7";
+            }
+
+            @Override
+            public String latestAvailable() {
+                return "9";
+            }
+        };
+        RestoreService rollback = new RestoreService(backups, maintenance, behind, migrator, jdbc,
+                mock(DataSource.class), audit, messenger, events);
+        when(backups.readInfo(file)).thenReturn(Optional.of(new BackupInfo(NAME, BACKUP_AT.toString(), "pre-restore",
+                "9", 5, BackupService.sha256(file))));
+
+        assertThat(rollback.check(NAME, Source.BACKUP).dbVersion()).isEqualTo("9");
     }
 
     @Test
