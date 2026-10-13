@@ -105,17 +105,16 @@ class DepartmentServiceTreeAndMoveTest {
     class 생성_수정 {
 
         @Test
-        void 상위_부서와_팀장을_지정해_만들고_정렬순서가_없으면_0으로_둔다() {
+        void 상위_부서를_지정해_만들고_부서장은_비워_두며_정렬순서가_없으면_0으로_둔다() {
             Department 본사 = department(1L, "본사", null);
             when(departments.findById(1L)).thenReturn(Optional.of(본사));
-            when(employees.findById(20L)).thenReturn(Optional.of(employee(20L, "김팀장")));
             when(departments.save(any(Department.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            DepartmentResponse created = service.create(new DepartmentRequests.Create("개발팀", 1L, 20L, null));
+            DepartmentResponse created = service.create(new DepartmentRequests.Create("개발팀", 1L, null));
 
             assertThat(created.name()).isEqualTo("개발팀");
             assertThat(created.parentId()).isEqualTo(1L);
-            assertThat(created.leadName()).isEqualTo("김팀장");
+            assertThat(created.leadId()).isNull(); // 부서장은 사용자 관리에서만 정해진다
             assertThat(created.sortOrder()).isZero();
         }
 
@@ -123,19 +122,9 @@ class DepartmentServiceTreeAndMoveTest {
         void 없는_상위_부서로는_만들_수_없다() {
             when(departments.findById(99L)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> service.create(new DepartmentRequests.Create("개발팀", 99L, null, null)))
+            assertThatThrownBy(() -> service.create(new DepartmentRequests.Create("개발팀", 99L, null)))
                     .isInstanceOfSatisfying(BusinessException.class,
                             ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.DEPARTMENT_NOT_FOUND));
-            verify(departments, never()).save(any());
-        }
-
-        @Test
-        void 없는_직원을_팀장으로_지정하면_거부된다() {
-            when(employees.findById(77L)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> service.create(new DepartmentRequests.Create("개발팀", null, 77L, null)))
-                    .isInstanceOfSatisfying(BusinessException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.EMPLOYEE_NOT_FOUND));
             verify(departments, never()).save(any());
         }
 
@@ -146,28 +135,11 @@ class DepartmentServiceTreeAndMoveTest {
             개발팀.assignLead(employee(20L, "김팀장"));
             when(departments.findById(2L)).thenReturn(Optional.of(개발팀));
 
-            DepartmentResponse updated = service.update(2L, new DepartmentRequests.Update("플랫폼팀", null, null));
+            DepartmentResponse updated = service.update(2L, new DepartmentRequests.Update("플랫폼팀", null));
 
             assertThat(updated.name()).isEqualTo("플랫폼팀");
-            assertThat(updated.leadId()).isEqualTo(20L); // 화면에 남은 옛 값(null)으로 지워지지 않는다
+            assertThat(updated.leadId()).isEqualTo(20L); // 부서 수정으로는 부서장이 바뀌지 않는다
             assertThat(updated.sortOrder()).isEqualTo(3);
-        }
-
-        @Test
-        void 팀장_권한이_없거나_퇴사한_직원은_부서장으로_지정할_수_없다() {
-            Department 개발팀 = new Department("개발팀", null, 3);
-            ReflectionTestUtils.setField(개발팀, "id", 2L);
-            when(departments.findById(2L)).thenReturn(Optional.of(개발팀));
-            Employee 사원 = Employee.builder().email("e@company.com").name("이사원").role(Role.EMPLOYEE).build();
-            ReflectionTestUtils.setField(사원, "id", 31L);
-            when(employees.findById(31L)).thenReturn(Optional.of(사원));
-
-            assertThatThrownBy(() -> service.update(2L, new DepartmentRequests.Update("개발팀", 31L, null)))
-                    .isInstanceOfSatisfying(BusinessException.class, ex -> {
-                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
-                        assertThat(ex.getMessage()).contains("이사원");
-                    });
-            assertThat(개발팀.getLead()).isNull();
         }
     }
 

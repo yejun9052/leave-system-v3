@@ -1,17 +1,15 @@
 import { api, unwrap } from "./client";
 import type { Department } from "@/types";
 
+/** 부서장은 여기서 정하지 않는다(사용자 관리의 팀장 권한·소속 부서로 정해짐) */
 export interface DepartmentCreate {
   name: string;
   parentId?: number | null;
-  leadId?: number | null;
   sortOrder?: number;
 }
 
 export interface DepartmentUpdate {
   name: string;
-  /** 보내지 않으면 부서장을 바꾸지 않는다(부서 관리 화면은 보내지 않음, 부서장은 사용자 관리에서 정함) */
-  leadId?: number | null;
   sortOrder?: number;
 }
 
