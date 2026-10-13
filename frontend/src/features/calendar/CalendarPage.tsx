@@ -131,17 +131,17 @@ function writeDeptIds(ids: number[]) {
   }
 }
 
-/** 데스크톱 달력 본문 높이(요일 머리 + 6주). 한 칸에 날짜와 일정 3줄이 들어가는 높이 */
-const CALENDAR_CONTENT_HEIGHT = 880;
-
-/** 한 칸에 보이는 줄 수. 일정이 이보다 많으면 (줄 수 - 1)개 + "+N개 더보기" */
+/** 한 칸에 보이는 줄 수. 일정이 이보다 많으면 (줄 수 - 1)개 + "+N개 더보기"(더보기가 셋째 줄 자리에 온다) */
 const DAY_MAX_ROWS = 3;
 
 /**
- * 주(행) 높이: 본문 높이에서 요일 머리(약 29px)를 빼고 6주로 나눈 값.
+ * 주(행) 높이: 날짜 숫자(약 33px) + 일정 3줄(줄당 약 25px) + 여유. 아래 빈 공간이 남지 않게 딱 3줄만큼.
  * 줄 수로 자르면 FullCalendar 가 칸 높이를 내용대로 나눠 "더보기"가 있는 주만 높아지므로 모든 주를 이 높이로 고정한다.
  */
-const CALENDAR_ROW_HEIGHT = Math.floor((CALENDAR_CONTENT_HEIGHT - 30) / 6);
+const CALENDAR_ROW_HEIGHT = 114;
+
+/** 데스크톱 달력 본문 높이: 요일 머리(약 30px) + 6주 + 테두리 여유(모자라면 달력 안에 스크롤 막대가 생김) */
+const CALENDAR_CONTENT_HEIGHT = 30 + CALENDAR_ROW_HEIGHT * 6 + 10;
 
 /**
  * 칸에 위에서부터 놓는 순서(작을수록 위): 공휴일·연차 제한 → 회사 일정 → 팀 일정 → 팀원 휴가 → 내 휴가·개인 일정·내 연차 기간.
@@ -703,7 +703,7 @@ export default function CalendarPage() {
                   initialDate={`${viewMonth}-01`}
                   locale="ko"
                   // 일정이 많은 주만 칸이 높아져 달마다 간격이 달라지지 않게: 높이를 고정하고 늘 6주로 그려 모든 주의 칸 높이를 같게 둔다.
-                  // 일정이 3개를 넘는 칸은 우선순위 앞의 2개 + "+N개 더보기"(더보기도 한 줄로 쳐서 칸이 늘지 않음)
+                  // 일정이 3개를 넘는 칸은 우선순위 앞의 2개 + 셋째 줄에 "+N개 더보기"
                   contentHeight={CALENDAR_CONTENT_HEIGHT}
                   expandRows
                   fixedWeekCount

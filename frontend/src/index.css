@@ -104,19 +104,3 @@
 .calendar-equal-rows .fc .fc-daygrid-body tr {
   height: var(--calendar-row-height);
 }
-/* "+N개 더보기"는 일정 바로 아래가 아니라 칸 맨 아래에(FullCalendar 가 주는 위 여백은 무시).
-   더보기는 일정 영역 안에 있으므로 일정 영역을 칸 끝까지 늘리고 그 바닥에 붙인다 */
-.calendar-equal-rows .fc .fc-daygrid-day-frame {
-  display: flex;
-  flex-direction: column;
-}
-.calendar-equal-rows .fc .fc-daygrid-day-events {
-  flex: 1 1 auto;
-}
-.calendar-equal-rows .fc .fc-daygrid-day-bottom {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 2px;
-  margin: 0 2px !important;
-}
