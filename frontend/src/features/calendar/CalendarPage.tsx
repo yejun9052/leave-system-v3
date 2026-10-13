@@ -122,6 +122,9 @@ function writeDeptIds(ids: number[]) {
   }
 }
 
+/** 데스크톱 달력 본문 높이(요일 머리 + 6주). 한 칸에 날짜와 일정 3줄, "+N개" 링크가 들어가는 높이 */
+const CALENDAR_CONTENT_HEIGHT = 880;
+
 export default function CalendarPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -609,7 +612,11 @@ export default function CalendarPage() {
                   initialView="dayGridMonth"
                   initialDate={`${viewMonth}-01`}
                   locale="ko"
-                  height="auto"
+                  // 일정이 많은 주만 칸이 높아져 달마다 간격이 달라지지 않게: 높이를 고정하고 늘 6주로 그려 모든 주의 칸 높이를 같게 둔다.
+                  // 칸에 못 들어가는 일정은 "+N개"로 접힌다(dayMaxEvents)
+                  contentHeight={CALENDAR_CONTENT_HEIGHT}
+                  expandRows
+                  fixedWeekCount
                   headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
                   buttonText={{ today: "오늘" }}
                   events={calendarEvents}
@@ -617,7 +624,7 @@ export default function CalendarPage() {
                   eventClick={onEventClick}
                   dateClick={onDateClick}
                   dayCellClassNames={(arg) => (holidays.has(localDateString(arg.date)) ? ["fc-holiday"] : [])}
-                  dayMaxEvents={3}
+                  dayMaxEvents
                 />
               </div>
             </CardContent>
