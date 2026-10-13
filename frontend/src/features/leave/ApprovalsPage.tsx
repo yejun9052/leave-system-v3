@@ -80,10 +80,10 @@ export default function ApprovalsPage() {
   const [registering, setRegistering] = useState(false);
 
   const onApprove = async (r: LeaveRequest) => {
-    const base = r.approvalWarning ? `${summary(r)}\n⚠ ${r.approvalWarning}` : summary(r);
     const ok = await confirm({
       title: r.ownRequest ? "본인 신청을 자가 승인할까요?" : "휴가를 승인할까요?",
-      description: r.ownRequest ? `${base}\n자가 승인 기록이 이벤트 로그에 남습니다.` : base,
+      description: r.ownRequest ? `${summary(r)}\n자가 승인 기록이 이벤트 로그에 남습니다.` : summary(r),
+      warning: r.approvalWarning ?? undefined,
       confirmText: "승인",
     });
     if (ok) approve.mutate(r.id);

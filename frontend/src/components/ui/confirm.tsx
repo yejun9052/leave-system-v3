@@ -1,4 +1,5 @@
 import * as React from "react";
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +14,8 @@ export interface ConfirmOptions {
   title: string;
   /** 줄바꿈(\n)은 그대로 표시된다 */
   description?: string;
+  /** 결재자가 꼭 봐야 할 주의 사항. 설명 아래 노란 상자로 보인다 */
+  warning?: string;
   confirmText?: string;
   cancelText?: string;
   /** 삭제·퇴사처럼 되돌리기 어려운 작업이면 빨간 확인 버튼 */
@@ -61,6 +64,15 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 <DialogDescription className="whitespace-pre-line">{pending.description}</DialogDescription>
               )}
             </DialogHeader>
+            {pending.warning && (
+              <p
+                role="alert"
+                className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <span className="whitespace-pre-line">{pending.warning}</span>
+              </p>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => close(false)}>
                 {pending.cancelText ?? "취소"}
