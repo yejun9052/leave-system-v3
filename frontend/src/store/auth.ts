@@ -1,11 +1,15 @@
 import { create } from "zustand";
 import { roleIncludes, type Me, type Role } from "@/types";
+import axios from "axios";
 import { authApi } from "@/api/auth";
+import { extractErrorMessage } from "@/api/client";
 import { queryClient } from "@/lib/queryClient";
 
 interface AuthState {
   user: Me | null;
   initialized: boolean;
+  /** 앱을 열 때 로그인 확인이 401 이 아닌 오류(서버 오류·네트워크)로 실패했으면 안내 문구. 로그인 화면으로 보내지 않고 다시 시도하게 한다 */
+  loadError: string | null;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   loadMe: () => Promise<void>;
   /** 로그인한 채로 내 정보(이름·부서·권한)만 다시 받는다. 실패하면 그대로 둔다(세션이 끊겼으면 다음 요청이 로그인 화면으로 보냄) */
@@ -22,21 +26,27 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   initialized: false,
+  loadError: null,
 
   login: async (email, password, rememberMe = false) => {
     await authApi.csrf();
     const user = await authApi.login(email, password, rememberMe);
     await authApi.csrf();
-    set({ user, initialized: true });
+    set({ user, initialized: true, loadError: null });
   },
 
   loadMe: async () => {
     try {
       await authApi.csrf();
       const user = await authApi.me();
-      set({ user, initialized: true });
-    } catch {
-      set({ user: null, initialized: true });
+      set({ user, initialized: true, loadError: null });
+    } catch (err) {
+      const sessionLost = axios.isAxiosError(err) && err.response?.status === 401;
+      set({
+        user: null,
+        initialized: true,
+        loadError: sessionLost ? null : extractErrorMessage(err, "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."),
+      });
     }
   },
 
