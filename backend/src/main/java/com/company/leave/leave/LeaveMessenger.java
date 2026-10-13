@@ -74,6 +74,18 @@ public class LeaveMessenger {
     }
 
     /**
+     * 연차 사용 금지 기간 등록으로 결재 대기 신청이 자동 반려됨: 신청자.
+     *
+     * @param canReapply 휴가 기간에 금지 기간 밖의 근무일이 있음(그 날로 다시 신청하라고 안내)
+     */
+    public void blackoutRejected(LeaveRequest r, Employee actor, String reason, boolean canReapply) {
+        Handler by = handler(actor);
+        deliver(List.of(r.getEmployee()), "LEAVE_REJECTED", "휴가가 반려되었습니다.",
+                summary(r) + " · " + by.title() + " · " + reason + " · " + LeaveMailTemplates.blackoutGuide(canReapply),
+                "/my-leaves", LeaveMailTemplates.blackoutRejected(info(r), domain(), baseUrl(), by, reason, canReapply));
+    }
+
+    /**
      * 결재 대기 중 신청자가 철회: 결재 요청을 받았던 사람.
      *
      * @param waiting 결재자마다 결재함에 남은 신청 수(이 신청은 빠진 뒤). 메일에 "결재 대기 중인 연차 N건"으로 쓴다
@@ -141,16 +153,17 @@ public class LeaveMessenger {
      *
      * @param period 금지 기간 "2026-12-24 ~ 2026-12-31"
      */
-    public void blackoutCancelled(LeaveRequest r, Employee actor, String period, String reason, Employee lead) {
+    public void blackoutCancelled(LeaveRequest r, Employee actor, String period, String reason, boolean canReapply,
+                                  Employee lead) {
         Handler by = handler(actor);
         notify(r.getEmployee(), "LEAVE_FORCE_CANCELLED", "휴가가 강제로 취소되었습니다.",
                 summary(r) + " · 연차 사용 금지 기간(" + period + ") 등록으로 강제 취소"
-                        + " · 문제가 있을 시 담당자에게 문의하세요.", "/my-leaves");
+                        + " · " + LeaveMailTemplates.blackoutGuide(canReapply), "/my-leaves");
         notify(lead, "LEAVE_CANCELLED_INFO", "팀원 휴가 강제 취소",
                 r.getEmployee().getName() + "님의 " + summary(r) + " · 연차 사용 금지 기간(" + period + ") 등록으로 강제 취소",
                 "/calendar");
         mailWithLeadCc(r.getEmployee(), lead,
-                LeaveMailTemplates.blackoutCancelled(info(r), domain(), baseUrl(), by, period, reason));
+                LeaveMailTemplates.blackoutCancelled(info(r), domain(), baseUrl(), by, period, reason, canReapply));
     }
 
     /** 인사관리자 강제 등록(바로 승인): 신청자, 담당 팀장은 참조. */

@@ -982,7 +982,10 @@ class LeaveRequestServiceApprovalTest {
             // 당사자에게 반려 메일·알림, 감사 로그
             assertThat(보낸_메일()).singleElement().satisfies(m -> {
                 assertThat(m.to()).containsExactly("e13@company.com");
-                assertThat(m.text()).contains("반려 사유: 연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)");
+                assertThat(m.text()).contains("반려 사유: 연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)\n")
+                        // 휴가가 모두 금지 기간 안이라 다시 신청할 날이 없다: 문의 안내만
+                        .contains("휴가 신청을 반려했습니다.\n자세한 내용은 관리자에게 문의하세요.")
+                        .doesNotContain("다시 신청");
             });
             verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_REJECTED"), anyString(), anyString(), anyString());
             verify(auditService).record(eq("blackout_reject"), eq("leave-requests"), eq(String.valueOf(대기.getId())),
@@ -1011,7 +1014,8 @@ class LeaveRequestServiceApprovalTest {
                         assertThat(m.cc()).containsExactly("e7@company.com");
                         assertThat(m.text()).contains("취소 사유: 연차 사용 금지 기간 지정 (릴리스")
                                 .contains("연차 사용 금지 기간(2027-05-03 ~ 2027-05-07) 등록으로 인해 연차 사용이 강제로 취소되었습니다.")
-                                .contains("문제가 있을 시 담당자에게 문의하세요.");
+                                .contains("차감된 연차는 돌아갑니다.\n자세한 내용은 관리자에게 문의하세요.")
+                                .doesNotContain("문제가 있을 시 담당자에게");
                     });
             verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_FORCE_CANCELLED"), anyString(), anyString(),
                     anyString());
@@ -1079,7 +1083,7 @@ class LeaveRequestServiceApprovalTest {
         }
 
         @Test
-        void 일부만_겹쳐도_신청_건_전체를_처리하고_겹치지_않는_근무일은_다시_신청하라고_안내한다() {
+        void 일부만_겹쳐도_신청_건_전체를_처리하고_겹치지_않는_근무일이_있으면_메일_안내_문장에서_다시_신청하라고_한다() {
             // 04-29(목) ~ 05-04(화): 금지 기간 밖 근무일은 04-29, 04-30 (05-01·02 주말)
             LeaveRequest 걸친_대기 = 대기_신청(파트원);
             ReflectionTestUtils.setField(걸친_대기, "startDate", LocalDate.of(2027, 4, 29));
@@ -1088,8 +1092,14 @@ class LeaveRequestServiceApprovalTest {
             service.applyBlackout("릴리스", MON, FRI, 전체, BlackoutConflictMode.KEEP_APPROVED, 인사관리자.getId());
 
             assertThat(걸친_대기.getStatus()).isEqualTo(LeaveRequestStatus.REJECTED);
-            assertThat(걸친_대기.getRejectReason()).isEqualTo("연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)."
-                    + " 금지 기간과 겹치지 않는 날(4/29, 4/30)이 필요하면 다시 신청해 주세요.");
+            // 사유에는 금지 기간만, 다시 신청 안내는 메일·알림의 안내 문장으로
+            assertThat(걸친_대기.getRejectReason()).isEqualTo("연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)");
+            assertThat(보낸_메일()).singleElement().satisfies(m -> assertThat(m.text())
+                    .contains("휴가 신청을 반려했습니다.\n금지 기간과 겹치지 않는 날에 다시 신청해 주시기 바랍니다."
+                            + " (자세한 내용은 관리자에게 문의하세요)")
+                    .contains("반려 사유: 연차 사용 금지 기간 지정 (릴리스, 2027-05-03 ~ 2027-05-07)\n"));
+            verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_REJECTED"), anyString(),
+                    org.mockito.ArgumentMatchers.contains("금지 기간과 겹치지 않는 날에 다시 신청해 주시기 바랍니다."), anyString());
         }
 
         @Test

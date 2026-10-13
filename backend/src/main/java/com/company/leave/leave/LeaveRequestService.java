@@ -36,7 +36,6 @@ import com.company.leave.policy.repository.BlackoutPeriodRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -729,7 +728,6 @@ public class LeaveRequestService {
     public static final String BLACKOUT_REASON = "연차 사용 금지 기간 지정";
     private static final Set<LeaveRequestStatus> BLACKOUT_TARGET_STATUSES = EnumSet.of(
             LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED);
-    private static final DateTimeFormatter MONTH_DAY = DateTimeFormatter.ofPattern("M/d");
 
     /** 날짜 구간(양 끝 포함). */
     public record DateRange(LocalDate start, LocalDate end) {
@@ -795,7 +793,7 @@ public class LeaveRequestService {
      *   <li>자동 반려: 기존 반려 메일(신청자)</li>
      *   <li>자동 취소: 연차·소멸분 환원, 캘린더 삭제, 기존 강제 취소 메일(신청자, 담당 팀장 참조)</li>
      * </ul>
-     * 사유에는 금지 기간을 적고, 금지 기간과 겹치지 않는 근무일이 있으면 다시 신청하라는 안내를 붙인다.
+     * 사유에는 금지 기간만 적는다. 금지 기간과 겹치지 않는 근무일이 있으면 메일·알림 안내 문장에 다시 신청하라고 쓴다.
      */
     @Transactional
     public BlackoutPlan applyBlackout(String name, LocalDate start, LocalDate end, List<DateRange> segments,
@@ -805,40 +803,31 @@ public class LeaveRequestService {
             return plan;
         }
         Employee actor = employeeService.getEntity(actorId);
+        String reason = BLACKOUT_REASON + " (" + name + ", " + start + " ~ " + end + ")";
         for (LeaveRequest r : plan.reject()) {
-            String reason = blackoutReason(r, name, start, end);
             r.reject(actor, reason, Instant.now());
-            messenger.rejected(r, actor, reason);
+            messenger.blackoutRejected(r, actor, reason, hasWorkdayOutside(r, start, end));
             auditAfterCommit("blackout_reject", r, "금지 기간 자동 반려: " + summary(r) + " / " + name);
         }
         for (LeaveRequest r : plan.cancel()) {
-            String reason = blackoutReason(r, name, start, end);
             restoreAndClearCalendar(r);
             r.forceCancel(reason);
-            messenger.blackoutCancelled(r, actor, start + " ~ " + end, reason, informedLead(r, actor));
+            messenger.blackoutCancelled(r, actor, start + " ~ " + end, reason, hasWorkdayOutside(r, start, end),
+                    informedLead(r, actor));
             auditAfterCommit("blackout_cancel", r, "금지 기간 자동 취소: " + summary(r) + " / " + name);
         }
         return plan;
     }
 
-    /** "연차 사용 금지 기간 지정 (이름, 시작 ~ 끝)" + 겹치지 않는 근무일이 있으면 다시 신청 안내. */
-    private String blackoutReason(LeaveRequest r, String name, LocalDate start, LocalDate end) {
-        String reason = BLACKOUT_REASON + " (" + name + ", " + start + " ~ " + end + ")";
+    /** 휴가 기간 중 금지 기간 밖의 근무일이 있는지: 있으면 그 날로 다시 신청하라고 안내한다. */
+    private boolean hasWorkdayOutside(LeaveRequest r, LocalDate start, LocalDate end) {
         Set<LocalDate> holidays = holidaysBetween(r.getStartDate(), r.getEndDate());
-        List<LocalDate> outside = new ArrayList<>();
         for (LocalDate d = r.getStartDate(); !d.isAfter(r.getEndDate()); d = d.plusDays(1)) {
             if ((d.isBefore(start) || d.isAfter(end)) && workdayCalculator.isWorkday(d, holidays)) {
-                outside.add(d);
+                return true;
             }
         }
-        if (outside.isEmpty()) {
-            return reason;
-        }
-        String days = outside.size() <= 5
-                ? outside.stream().map(MONTH_DAY::format).collect(Collectors.joining(", "))
-                : outside.stream().limit(3).map(MONTH_DAY::format).collect(Collectors.joining(", "))
-                        + " 외 " + (outside.size() - 3) + "일";
-        return reason + ". 금지 기간과 겹치지 않는 날(" + days + ")이 필요하면 다시 신청해 주세요.";
+        return false;
     }
 
     /** 승인 때 반영한 것 되돌리기: 연차 차감 환원, 병가·공가 소멸분 환원, 캘린더 일정 삭제. */

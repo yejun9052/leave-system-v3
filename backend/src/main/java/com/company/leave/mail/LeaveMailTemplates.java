@@ -30,6 +30,10 @@ public final class LeaveMailTemplates {
     private static final String RESTORED = "차감된 연차는 돌아갑니다.";
     /** 본인이 하지 않은 취소(인사관리자 강제 취소·금지 기간 등록 취소)에 붙이는 안내 */
     static final String ASK_MANAGER = "문제가 있을 시 담당자에게 문의하세요.";
+    /** 금지 기간으로 반려·취소된 휴가: 금지 기간 밖의 근무일이 있으면 다시 신청 안내, 없으면 문의 안내 */
+    private static final String BLACKOUT_REAPPLY =
+            "금지 기간과 겹치지 않는 날에 다시 신청해 주시기 바랍니다. (자세한 내용은 관리자에게 문의하세요)";
+    private static final String BLACKOUT_ASK = "자세한 내용은 관리자에게 문의하세요.";
 
     private LeaveMailTemplates() {
     }
@@ -145,15 +149,34 @@ public final class LeaveMailTemplates {
     /**
      * 연차 사용 금지 기간을 등록(또는 늘려 수정)해 승인된 휴가가 강제로 취소됨.
      *
-     * @param period 금지 기간 "2026-12-24 ~ 2026-12-31"
-     * @param reason 사유(금지 기간 이름과, 겹치지 않는 근무일이 있으면 다시 신청 안내)
+     * @param period     금지 기간 "2026-12-24 ~ 2026-12-31"
+     * @param reason     사유 "연차 사용 금지 기간 지정 (이름, 기간)"
+     * @param canReapply 휴가 기간에 금지 기간 밖의 근무일이 있음(다시 신청 안내)
      */
     public static Mail blackoutCancelled(Info info, String domain, String baseUrl, Handler by, String period,
-                                         String reason) {
+                                         String reason, boolean canReapply) {
         return applicantReply(info, domain, baseUrl, "휴가 강제 취소 안내",
                 List.of("연차 사용 금지 기간(" + period + ") 등록으로 인해 연차 사용이 강제로 취소되었습니다.", RESTORED,
-                        ASK_MANAGER), by,
+                        blackoutGuide(canReapply)), by,
                 List.of(Row.of("취소 사유", orNone(reason))), "강제 취소");
+    }
+
+    /**
+     * 연차 사용 금지 기간을 등록(또는 늘려 수정)해 결재 대기 신청이 반려됨. 일반 반려 메일에 안내 문장을 더한다.
+     *
+     * @param reason     사유 "연차 사용 금지 기간 지정 (이름, 기간)"
+     * @param canReapply 휴가 기간에 금지 기간 밖의 근무일이 있음(다시 신청 안내)
+     */
+    public static Mail blackoutRejected(Info info, String domain, String baseUrl, Handler by, String reason,
+                                        boolean canReapply) {
+        return applicantReply(info, domain, baseUrl, "휴가 반려 안내",
+                List.of(by.honorific() + "이 휴가 신청을 반려했습니다.", blackoutGuide(canReapply)), by,
+                List.of(Row.of("반려 사유", orNone(reason))), "반려");
+    }
+
+    /** 금지 기간으로 반려·취소된 휴가의 안내 문장(메일·앱 알림 공통). */
+    public static String blackoutGuide(boolean canReapply) {
+        return canReapply ? BLACKOUT_REAPPLY : BLACKOUT_ASK;
     }
 
     // --- 결재자 대화 ---
