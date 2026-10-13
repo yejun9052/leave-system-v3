@@ -89,11 +89,13 @@ class LeaveMailTemplatesTest {
     }
 
     @Test
-    void 강제_등록_메일은_신청자가_없음이고_다른_메일은_신청자_이름이다() {
+    void 표의_휴가_주인은_신청자가_아니라_대상자로_쓴다() {
         assertThat(LeaveMailTemplates.registered(info, DOMAIN, BASE, 인사).body())
-                .contains("신청자: -").doesNotContain("신청자: 홍길동");
-        assertThat(LeaveMailTemplates.approved(info, DOMAIN, BASE, 인사).body()).contains("신청자: 홍길동");
-        assertThat(LeaveMailTemplates.forceCancelled(info, DOMAIN, BASE, 인사, "근태 정정").body()).contains("신청자: 홍길동");
+                .contains("대상자: 홍길동").doesNotContain("신청자:");
+        assertThat(LeaveMailTemplates.rejected(info, DOMAIN, BASE, 인사, "인원 부족").body())
+                .contains("대상자: 홍길동").doesNotContain("신청자:");
+        assertThat(LeaveMailTemplates.approvalRequest(info, DOMAIN, BASE).body())
+                .contains("대상자: 홍길동").doesNotContain("신청자:");
     }
 
     @Test
@@ -139,7 +141,7 @@ class LeaveMailTemplatesTest {
         Mail mail = LeaveMailTemplates.approvalRequest(info, DOMAIN, BASE);
 
         assertThat(mail.body())
-                .contains("신청자: 홍길동")
+                .contains("대상자: 홍길동")
                 .contains("소속: 개발팀")
                 .contains("휴가 구분: 경조사(본인 결혼)")
                 .contains("휴가 기간: 2026-10-14 ~ 2026-10-16 (3일)")

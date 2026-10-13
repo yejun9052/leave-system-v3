@@ -761,13 +761,13 @@ class LeaveRequestServiceSickAndPartialTest {
             assertThat(saved.values()).singleElement()
                     .satisfies(r -> assertThat(r.getDays()).isEqualByComparingTo("0.5"));
 
-            // 등록 메일: 신청자 "-", 휴가 구분은 "종류 (규정)"
+            // 등록 메일: 대상자는 휴가 주인, 휴가 구분은 "종류 (규정)"
             org.mockito.ArgumentCaptor<Object> events = org.mockito.ArgumentCaptor.forClass(Object.class);
             verify(eventPublisher, org.mockito.Mockito.atLeastOnce()).publishEvent(events.capture());
             assertThat(events.getAllValues()).filteredOn(com.company.leave.mail.LeaveMail.class::isInstance)
                     .singleElement()
                     .satisfies(m -> assertThat(((com.company.leave.mail.LeaveMail) m).text())
-                            .contains("신청자: -")
+                            .contains("대상자: 홍길동")
                             .contains("휴가 구분: 경조사 휴가 (생일)")
                             .contains("휴가 기간: 2027-05-04 (0.5일, 오후 반차)"));
         }

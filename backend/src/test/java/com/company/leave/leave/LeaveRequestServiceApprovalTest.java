@@ -796,7 +796,7 @@ class LeaveRequestServiceApprovalTest {
                 assertThat(m.cc()).containsExactly(파트장_메일);
                 assertThat(m.messageId()).endsWith(".applicant@company.com>");
                 assertThat(m.text()).contains("직원11님이 직원13님의 휴가를 등록했습니다")
-                        .contains("수신자: 직원13").doesNotContain("참조:").contains("신청자: -");
+                        .contains("수신자: 직원13").doesNotContain("참조:").contains("대상자: 직원13");
             });
         }
 
