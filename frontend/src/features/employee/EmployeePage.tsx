@@ -143,7 +143,9 @@ export default function EmployeePage() {
   const onImport = async (file: File) => {
     const ok = await confirm({
       title: "엑셀 파일로 사용자를 일괄 등록할까요?",
-      description: `${file.name}\n등록된 사용자마다 임시 비밀번호 메일이 발송됩니다.`,
+      description:
+        `${file.name}\n부서는 이름 또는 경로(연구소 › 개발팀)로 적습니다. 이름이 같은 부서가 여럿이면 경로로 적어 주세요.\n` +
+        "등록된 사용자마다 임시 비밀번호 메일이 발송됩니다.",
       confirmText: "등록",
     });
     if (!ok) return;
@@ -193,7 +195,11 @@ export default function EmployeePage() {
               e.target.value = "";
             }}
           />
-          <Button variant="outline" onClick={() => fileRef.current?.click()}>
+          <Button
+            variant="outline"
+            title="부서는 이름 또는 경로(연구소 › 개발팀)로 적습니다"
+            onClick={() => fileRef.current?.click()}
+          >
             <Upload className="h-4 w-4" /> 엑셀 등록
           </Button>
           <Button variant="outline" onClick={onExport}>
