@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -51,6 +52,13 @@ function summary(r: LeaveRequest): string {
 function kindLabel(r: LeaveRequest): string {
   return `${r.leaveTypeName} ${r.status === "CANCEL_REQUESTED" ? "취소 요청" : "신청"}`;
 }
+
+type KindFilter = "ALL" | "PENDING" | "CANCEL_REQUESTED";
+const KIND_FILTERS: { value: KindFilter; label: string }[] = [
+  { value: "ALL", label: "전체" },
+  { value: "PENDING", label: "승인 요청" },
+  { value: "CANCEL_REQUESTED", label: "취소 요청" },
+];
 
 const RECENT_MS = 24 * 60 * 60 * 1000;
 
@@ -95,8 +103,11 @@ export default function ApprovalsPage() {
     queryKey: ["pendingApprovals"],
     queryFn: leaveApi.pending,
   });
+  const [kindFilter, setKindFilter] = useState<KindFilter>("ALL");
+  const countOf = (k: KindFilter) => (k === "ALL" ? pending.length : pending.filter((r) => r.status === k).length);
+  const shown = kindFilter === "ALL" ? pending : pending.filter((r) => r.status === kindFilter);
   // 서버가 결재가 들어온 때 최신순으로 준다(취소 요청은 취소를 요청한 때)
-  const { sorted, sort, toggle } = useTableSort(pending, {
+  const { sorted, sort, toggle } = useTableSort(shown, {
     // 구분: 종류 이름 순, 같은 종류에서는 신청 → 취소 요청
     kind: (r) => `${r.leaveTypeName} ${r.status === "CANCEL_REQUESTED" ? 1 : 0}`,
     employee: (r) => r.employeeName,
@@ -154,6 +165,21 @@ export default function ApprovalsPage() {
         <TabsContent value="pending" className="space-y-3">
           {/* 실패를 "대기 중인 결재가 없습니다"로 보이면 결재할 건이 없다고 오해한다 */}
           {isError && <QueryError error={error} onRetry={() => void refetch()} />}
+          <div className="space-y-1">
+            <Label htmlFor="approval-kind" className="text-xs text-muted-foreground">구분</Label>
+            <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as KindFilter)}>
+              <SelectTrigger id="approval-kind" className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {KIND_FILTERS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label} ({countOf(f.value)})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Card>
             <CardContent className="p-0">
               <Table>
@@ -175,7 +201,7 @@ export default function ApprovalsPage() {
                         불러오는 중…
                       </TableCell>
                     </TableRow>
-                  ) : pending.length > 0 ? (
+                  ) : shown.length > 0 ? (
                     sorted.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell>
@@ -274,7 +300,9 @@ export default function ApprovalsPage() {
                         ) : (
                           <>
                             <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                            대기 중인 결재가 없습니다.
+                            {kindFilter === "ALL"
+                              ? "대기 중인 결재가 없습니다."
+                              : `대기 중인 ${KIND_FILTERS.find((f) => f.value === kindFilter)?.label}이 없습니다.`}
                           </>
                         )}
                       </TableCell>
