@@ -62,7 +62,12 @@ export default function LeaveDetailDialog({ leave, onClose }: { leave: LeaveRequ
     { label: "신청 사유", value: leave.reason || "-" },
     {
       label: "처리자",
-      value: processed ? `${leave.approverName} (${processedLabel(leave.status)})` : "아직 처리 전",
+      // 결재 전에 취소된 신청(본인 철회·인사관리자 취소 등)은 처리자가 없다: "아직 처리 전"이 아니라 "-"
+      value: processed
+        ? `${leave.approverName} (${processedLabel(leave.status)})`
+        : leave.status === "PENDING"
+          ? "아직 처리 전"
+          : "-",
     },
   ];
   if (processed && leave.approvedAt) {
