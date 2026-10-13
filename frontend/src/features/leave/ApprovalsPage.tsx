@@ -167,7 +167,20 @@ export default function ApprovalsPage() {
                     </TableRow>
                   ) : shown.length > 0 ? (
                     sorted.map((r) => (
-                      <TableRow key={r.id}>
+                      // 줄을 누르면(Enter·Space도) 승인 버튼과 같은 결재 창: 신청 내용을 보고 승인하거나 반려로 넘어간다
+                      <TableRow
+                        key={r.id}
+                        tabIndex={0}
+                        aria-label={`${r.employeeName} ${kindLabel(r)} ${r.startDate} 결재 창 열기`}
+                        className="cursor-pointer"
+                        onClick={() => setDeciding({ req: r, step: "review" })}
+                        onKeyDown={(e) => {
+                          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            setDeciding({ req: r, step: "review" });
+                          }
+                        }}
+                      >
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             {isRecent(r) && (
@@ -215,7 +228,8 @@ export default function ApprovalsPage() {
                         <TableCell className="max-w-[180px] truncate text-muted-foreground">
                           {(r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason) ?? "-"}
                         </TableCell>
-                        <TableCell>
+                        {/* 버튼은 각자 단계(승인 창·반려 사유)로 바로 연다: 줄 클릭으로 번지지 않게 */}
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end gap-1">
                             <Button size="sm" onClick={() => setDeciding({ req: r, step: "review" })}>
                               <Check className="h-4 w-4" /> {isCancelRequest(r) ? "취소 승인" : "승인"}
