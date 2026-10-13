@@ -113,7 +113,7 @@ export default function ReportsPage() {
         <p className="text-sm text-muted-foreground">회사 연차 사용 현황을 보고, 연차현황표를 엑셀로 내려받습니다.</p>
       </div>
 
-      {/* 탭은 주소(?tab=excel)와 맞춘다: 상단 위치 표시가 지금 탭을 보여 준다 */}
+      {/* 탭은 주소(?tab=status)와 맞춘다: 상단 위치 표시가 지금 탭을 보여 준다. 기본은 연차현황표 */}
       <Tabs value={tab} onValueChange={(v) => setParams(v === REPORT_TABS[0].value ? {} : { tab: v }, { replace: true })}>
         <TabsList>
           {REPORT_TABS.map((t) => (

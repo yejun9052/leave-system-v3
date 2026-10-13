@@ -474,7 +474,7 @@ function AdminSection() {
         <h2 className="text-xl font-bold">회사 현황</h2>
         <p className="text-sm text-muted-foreground">인사관리자·시스템 관리자에게만 보입니다.</p>
       </div>
-      <Link to="/admin/reports" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+      <Link to="/admin/reports?tab=status" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
         사용률·그래프 보기 <ArrowRight className="h-4 w-4" />
       </Link>
     </div>

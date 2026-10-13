@@ -27,8 +27,8 @@ export const APPROVAL_TABS: PageSection[] = [
 
 /** 리포트(/admin/reports?tab=) */
 export const REPORT_TABS: PageSection[] = [
-  { value: "status", label: "회사 현황" },
   { value: "excel", label: "연차현황표" },
+  { value: "status", label: "회사 현황" },
 ];
 
 /** 캘린더 보기(/calendar?view=, 값은 소문자로 주소에 들어간다) */
