@@ -25,18 +25,18 @@ class LeaveMailTemplatesTest {
 
     @Test
     void 대화의_첫_메일은_신청_번호와_신청_시각으로_정한_Message_ID_를_쓴다() {
-        Mail mail = LeaveMailTemplates.submitted(info, DOMAIN, BASE, "팀장 김팀장님 승인(인사관리자도 승인 가능)");
+        Mail mail = LeaveMailTemplates.submitted(info, DOMAIN, BASE);
 
         assertThat(mail.messageId()).isEqualTo("<leave-42-1700000000000.applicant@company.com>");
         assertThat(mail.inReplyTo()).isNull();
         assertThat(mail.subject()).isEqualTo("[연차관리] 휴가 - 홍길동 경조사(본인 결혼) 2026-10-14 ~ 2026-10-16");
         assertThat(mail.references()).isEmpty();
-        assertThat(mail.body()).contains("결재: 팀장 김팀장님 승인(인사관리자도 승인 가능)");
+        assertThat(mail.body()).contains("처리 상태: 결재 대기").doesNotContain("결재: ");
     }
 
     @Test
     void 답장은_첫_메일_ID_에_붙고_제목은_RE_와_첫_메일_제목이다() {
-        Mail root = LeaveMailTemplates.submitted(info, DOMAIN, BASE, "인사관리자 승인");
+        Mail root = LeaveMailTemplates.submitted(info, DOMAIN, BASE);
         Mail reply = LeaveMailTemplates.approved(info, DOMAIN, BASE, 팀장);
 
         assertThat(reply.messageId()).isNull();
@@ -47,7 +47,7 @@ class LeaveMailTemplatesTest {
 
     @Test
     void 신청자_대화와_결재_요청_대화는_제목이_같고_답장은_두_대화를_모두_참조한다() {
-        Mail submitted = LeaveMailTemplates.submitted(info, DOMAIN, BASE, "팀장 김팀장님 승인");
+        Mail submitted = LeaveMailTemplates.submitted(info, DOMAIN, BASE);
         Mail request = LeaveMailTemplates.approvalRequest(info, DOMAIN, BASE);
         Mail approved = LeaveMailTemplates.approved(info, DOMAIN, BASE, 인사);
 
@@ -67,7 +67,7 @@ class LeaveMailTemplatesTest {
 
     @Test
     void 신청_접수와_취소_반려_문구() {
-        assertThat(LeaveMailTemplates.submitted(info, DOMAIN, BASE, "인사관리자 승인").body())
+        assertThat(LeaveMailTemplates.submitted(info, DOMAIN, BASE).body())
                 .contains("결재가 처리되면 안내 메일이 발송됩니다.");
         assertThat(LeaveMailTemplates.cancelRejected(info, DOMAIN, BASE, 팀장, "인력 부족").body())
                 .contains("휴가가 승인 상태로 유지됩니다.");
@@ -189,7 +189,7 @@ class LeaveMailTemplatesTest {
 
     @Test
     void 신청과_취소_요청_메일에는_처리자_줄이_없다() {
-        assertThat(LeaveMailTemplates.submitted(info, DOMAIN, BASE, "인사관리자 승인").body()).doesNotContain("처리자:");
+        assertThat(LeaveMailTemplates.submitted(info, DOMAIN, BASE).body()).doesNotContain("처리자:");
         assertThat(LeaveMailTemplates.approvalRequest(info, DOMAIN, BASE).body()).doesNotContain("처리자:");
         assertThat(LeaveMailTemplates.cancelRequested(info, DOMAIN, BASE, "일정 변경").body()).doesNotContain("처리자:");
     }

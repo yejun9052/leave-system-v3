@@ -50,7 +50,7 @@ public class LeaveMessenger {
         Info info = info(r);
         deliver(List.of(r.getEmployee()), "LEAVE_SUBMITTED", "휴가 신청이 접수되었습니다.",
                 summary(r) + " · " + route, "/my-leaves",
-                LeaveMailTemplates.submitted(info, domain(), baseUrl(), route));
+                LeaveMailTemplates.submitted(info, domain(), baseUrl()));
         deliver(approvers, "LEAVE_REQUESTED", "새 휴가 결재 요청", withApplicant(r), "/approvals",
                 LeaveMailTemplates.approvalRequest(info, domain(), baseUrl()));
     }

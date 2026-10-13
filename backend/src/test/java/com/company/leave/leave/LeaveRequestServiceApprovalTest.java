@@ -666,7 +666,7 @@ class LeaveRequestServiceApprovalTest {
             assertThat(mails).extracting(LeaveMail::to)
                     .containsExactlyInAnyOrder(List.of(파트원_메일), List.of(파트장_메일));
             assertThat(받은(mails, 파트원_메일).subject()).startsWith("[연차관리] 휴가 - 직원13 연차");
-            assertThat(받은(mails, 파트원_메일).text()).contains("팀장 직원7님 승인(인사관리자도 승인 가능)");
+            assertThat(받은(mails, 파트원_메일).text()).contains("처리 상태: 결재 대기").doesNotContain("결재: ");
             assertThat(받은(mails, 파트장_메일).subject()).isEqualTo(받은(mails, 파트원_메일).subject());
             assertThat(받은(mails, 파트장_메일).messageId()).endsWith(".approver@company.com>");
         }

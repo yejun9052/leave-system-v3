@@ -82,11 +82,11 @@ public final class LeaveMailTemplates {
 
     // --- 신청자 대화 ---
 
-    /** @param route 결재 경로 안내(예: "팀장 홍길동님 승인(인사관리자도 승인 가능)") */
-    public static Mail submitted(Info info, String domain, String baseUrl, String route) {
+    /** 결재 진행은 처리 상태 줄("결재 대기")로만 알린다(결재 경로 줄은 처리 상태와 겹쳐 넣지 않는다). */
+    public static Mail submitted(Info info, String domain, String baseUrl) {
         Content content = content("휴가 신청 접수 안내",
                 List.of("휴가 신청이 접수되었습니다.", "결재가 처리되면 안내 메일이 발송됩니다."),
-                null, info, List.of(Row.of("결재", route)), "결재 대기", MY_LEAVES, baseUrl, "/my-leaves");
+                null, info, List.of(), "결재 대기", MY_LEAVES, baseUrl, "/my-leaves");
         return root(info, Thread.APPLICANT, domain, content);
     }
 
