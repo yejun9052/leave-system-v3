@@ -1,5 +1,7 @@
 package com.company.leave.dashboard;
 
+import com.company.leave.calendar.domain.Holiday;
+import com.company.leave.calendar.repository.HolidayRepository;
 import com.company.leave.dashboard.dto.DashboardDtos;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.EmployeeStatus;
@@ -20,7 +22,10 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,13 +35,24 @@ public class DashboardService {
     private final EmployeeRepository employeeRepository;
     private final LeaveRequestRepository requestRepository;
     private final LeaveBalanceService balanceService;
+    /** 없으면(단위 테스트) 공휴일 없이 주말만 빼고 나눈다 */
+    private final HolidayRepository holidayRepository;
 
     public DashboardService(EmployeeRepository employeeRepository,
                             LeaveRequestRepository requestRepository,
                             LeaveBalanceService balanceService) {
+        this(employeeRepository, requestRepository, balanceService, null);
+    }
+
+    @Autowired
+    public DashboardService(EmployeeRepository employeeRepository,
+                            LeaveRequestRepository requestRepository,
+                            LeaveBalanceService balanceService,
+                            HolidayRepository holidayRepository) {
         this.employeeRepository = employeeRepository;
         this.requestRepository = requestRepository;
         this.balanceService = balanceService;
+        this.holidayRepository = holidayRepository;
     }
 
     @Transactional(readOnly = true)
@@ -56,17 +72,22 @@ public class DashboardService {
                 .map(LeaveBalance::getGranted).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalUsed = balances.stream()
                 .map(LeaveBalance::getUsed).reduce(BigDecimal.ZERO, BigDecimal::add);
-        double usageRate = totalGranted.signum() > 0
-                ? totalUsed.divide(totalGranted, 4, RoundingMode.HALF_UP).doubleValue() * 100 : 0;
+        BigDecimal totalCarried = balances.stream()
+                .map(LeaveBalance::getCarriedOver).reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 쓸 수 있던 연차 = 부여 + 이월. 이월로 쓴 날도 사용에 들어가므로 분모에도 넣어야 100%를 넘지 않는다
+        BigDecimal usable = totalGranted.add(totalCarried);
+        double usageRate = usable.signum() > 0
+                ? totalUsed.divide(usable, 4, RoundingMode.HALF_UP).doubleValue() * 100 : 0;
 
-        List<LeaveRequest> approvedThisYear = requestRepository.findApprovedBetween(
-                LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31));
+        LocalDate yearStart = LocalDate.of(year, 1, 1);
+        LocalDate yearEnd = LocalDate.of(year, 12, 31);
+        List<DayShare> shares = dayShares(requestRepository.findApprovedBetween(yearStart, yearEnd), yearStart, yearEnd);
 
-        List<DashboardDtos.MonthlyUsage> monthly = monthlyUsage(approvedThisYear);
-        List<DashboardDtos.DepartmentUsage> byDept = departmentUsage(approvedThisYear);
+        List<DashboardDtos.MonthlyUsage> monthly = monthlyUsage(shares);
+        List<DashboardDtos.DepartmentUsage> byDept = departmentUsage(shares);
 
         return new DashboardDtos.AdminDashboard(totalEmployees, onLeaveToday, pending,
-                totalGranted, totalUsed, round1(usageRate), monthly, byDept);
+                totalGranted, totalUsed, totalCarried, round1(usageRate), monthly, byDept);
     }
 
     @Transactional
@@ -111,26 +132,68 @@ public class DashboardService {
         return new DashboardDtos.PersonalDashboard(balance, pendingCount, upcoming, teamOnLeave, teamLeaves);
     }
 
-    private List<DashboardDtos.MonthlyUsage> monthlyUsage(List<LeaveRequest> approved) {
+    /** 휴가 한 건 중 하루치(쉰 날짜와 그날 몫, 부서 이름). */
+    private record DayShare(LocalDate date, BigDecimal days, String department) {
+    }
+
+    /**
+     * 승인된 휴가를 쉰 날짜마다 나눈다. 올해 날짜만 남긴다(작년 12/30~올해 1/2 휴가는 1/2 만 올해 1월).
+     * 여러 날 휴가는 주말·공휴일을 뺀 근무일마다 같은 몫(일수 ÷ 근무일 수), 하루짜리(반차·시간차 포함)는 그날에 전부.
+     */
+    private List<DayShare> dayShares(List<LeaveRequest> approved, LocalDate from, LocalDate to) {
+        if (approved.isEmpty()) {
+            return List.of();
+        }
+        LocalDate min = approved.stream().map(LeaveRequest::getStartDate).min(Comparator.naturalOrder()).orElse(from);
+        LocalDate max = approved.stream().map(LeaveRequest::getEndDate).max(Comparator.naturalOrder()).orElse(to);
+        Set<LocalDate> holidays = holidayRepository == null ? Set.of()
+                : holidayRepository.findByDateBetweenOrderByDateAsc(min, max).stream()
+                        .map(Holiday::getDate).collect(Collectors.toSet());
+        List<DayShare> shares = new ArrayList<>();
+        for (LeaveRequest r : approved) {
+            String dept = r.getEmployee().getDepartment() != null
+                    ? r.getEmployee().getDepartment().getName() : "미배정";
+            if (r.getStartDate().equals(r.getEndDate())) {
+                if (!r.getStartDate().isBefore(from) && !r.getStartDate().isAfter(to)) {
+                    shares.add(new DayShare(r.getStartDate(), r.getDays(), dept));
+                }
+                continue;
+            }
+            List<LocalDate> workdays = new ArrayList<>();
+            for (LocalDate d = r.getStartDate(); !d.isAfter(r.getEndDate()); d = d.plusDays(1)) {
+                if (d.getDayOfWeek() != DayOfWeek.SATURDAY && d.getDayOfWeek() != DayOfWeek.SUNDAY
+                        && !holidays.contains(d)) {
+                    workdays.add(d);
+                }
+            }
+            if (workdays.isEmpty()) {
+                continue;
+            }
+            BigDecimal each = r.getDays().divide(BigDecimal.valueOf(workdays.size()), 3, RoundingMode.HALF_UP);
+            workdays.stream()
+                    .filter(d -> !d.isBefore(from) && !d.isAfter(to))
+                    .forEach(d -> shares.add(new DayShare(d, each, dept)));
+        }
+        return shares;
+    }
+
+    private List<DashboardDtos.MonthlyUsage> monthlyUsage(List<DayShare> shares) {
         Map<Integer, BigDecimal> map = new TreeMap<>();
         for (int m = 1; m <= 12; m++) {
             map.put(m, BigDecimal.ZERO);
         }
-        for (LeaveRequest r : approved) {
-            int m = r.getStartDate().getMonthValue();
-            map.merge(m, r.getDays(), BigDecimal::add);
+        for (DayShare s : shares) {
+            map.merge(s.date().getMonthValue(), s.days(), BigDecimal::add);
         }
         List<DashboardDtos.MonthlyUsage> list = new ArrayList<>();
         map.forEach((m, d) -> list.add(new DashboardDtos.MonthlyUsage(m, d)));
         return list;
     }
 
-    private List<DashboardDtos.DepartmentUsage> departmentUsage(List<LeaveRequest> approved) {
+    private List<DashboardDtos.DepartmentUsage> departmentUsage(List<DayShare> shares) {
         Map<String, BigDecimal> map = new LinkedHashMap<>();
-        for (LeaveRequest r : approved) {
-            String dept = r.getEmployee().getDepartment() != null
-                    ? r.getEmployee().getDepartment().getName() : "미배정";
-            map.merge(dept, r.getDays(), BigDecimal::add);
+        for (DayShare s : shares) {
+            map.merge(s.department(), s.days(), BigDecimal::add);
         }
         List<DashboardDtos.DepartmentUsage> list = new ArrayList<>();
         map.forEach((name, d) -> list.add(new DashboardDtos.DepartmentUsage(name, d)));

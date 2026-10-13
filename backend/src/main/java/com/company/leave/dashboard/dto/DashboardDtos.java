@@ -24,6 +24,8 @@ public final class DashboardDtos {
             long pendingApprovals,
             BigDecimal totalGranted,
             BigDecimal totalUsed,
+            /** 지난 기간에서 넘어온 연차 합계. 사용률 분모 = 부여 + 이월 */
+            BigDecimal totalCarriedOver,
             double usageRate,
             List<MonthlyUsage> monthlyUsage,
             List<DepartmentUsage> departmentUsage) {

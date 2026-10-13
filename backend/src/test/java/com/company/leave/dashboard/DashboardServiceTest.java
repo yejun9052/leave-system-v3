@@ -118,7 +118,7 @@ class DashboardServiceTest {
     }
 
     @Test
-    void 월별_사용은_올해_승인된_휴가를_시작일의_달로_모으고_12달을_모두_채운다() {
+    void 월별_사용은_올해_승인된_휴가를_쉰_날의_달로_모으고_12달을_모두_채운다() {
         when(requestRepository.findApprovedBetween(LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31))).thenReturn(List.of(
                 휴가(직원(1L, 개발팀), LocalDate.of(YEAR, 3, 2), LocalDate.of(YEAR, 3, 3), "2"),
                 휴가(직원(2L, QA팀), LocalDate.of(YEAR, 3, 20), LocalDate.of(YEAR, 3, 20), "1"),
@@ -131,6 +131,69 @@ class DashboardServiceTest {
         assertThat(monthly.get(2).days()).isEqualByComparingTo("3");
         assertThat(monthly.get(4).days()).isEqualByComparingTo("0.5");
         assertThat(monthly.get(0).days()).isZero();
+    }
+
+    @Test
+    void 해를_걸친_휴가는_올해_날짜만_세고_작년_날짜는_올해_12월에_넣지_않는다() {
+        LocalDate start = LocalDate.of(YEAR - 1, 12, 29);
+        LocalDate end = LocalDate.of(YEAR, 1, 4);
+        int workdays = 0;
+        int janWorkdays = 0;
+        for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+            if (d.getDayOfWeek().getValue() < 6) {
+                workdays++;
+                if (d.getYear() == YEAR) {
+                    janWorkdays++;
+                }
+            }
+        }
+        when(requestRepository.findApprovedBetween(LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31))).thenReturn(List.of(
+                휴가(직원(1L, 개발팀), start, end, String.valueOf(workdays))));
+
+        DashboardDtos.AdminDashboard d = service.admin();
+
+        assertThat(d.monthlyUsage().get(11).days()).as("작년 12월 날짜가 올해 12월로 들어가지 않는다").isZero();
+        assertThat(d.monthlyUsage().get(0).days()).isEqualByComparingTo(String.valueOf(janWorkdays));
+        assertThat(d.departmentUsage().get(0).days()).isEqualByComparingTo(String.valueOf(janWorkdays));
+    }
+
+    @Test
+    void 달을_걸친_휴가는_공휴일을_뺀_근무일마다_그_달에_나눠_넣는다() {
+        // 마지막 날이 화요일인 달: 월·화는 이번 달, 수(다음 달 1일, 공휴일)·목·금은 다음 달
+        LocalDate lastTue = null;
+        for (int m = 1; m <= 11 && lastTue == null; m++) {
+            LocalDate last = LocalDate.of(YEAR, m, 1).withDayOfMonth(LocalDate.of(YEAR, m, 1).lengthOfMonth());
+            if (last.getDayOfWeek() == java.time.DayOfWeek.TUESDAY) {
+                lastTue = last;
+            }
+        }
+        org.junit.jupiter.api.Assumptions.assumeTrue(lastTue != null, "올해 화요일로 끝나는 달이 없음");
+        LocalDate mon = lastTue.minusDays(1);
+        LocalDate wedHoliday = lastTue.plusDays(1);
+        com.company.leave.calendar.repository.HolidayRepository holidays =
+                org.mockito.Mockito.mock(com.company.leave.calendar.repository.HolidayRepository.class);
+        when(holidays.findByDateBetweenOrderByDateAsc(any(), any()))
+                .thenReturn(List.of(new com.company.leave.calendar.domain.Holiday(wedHoliday, "임시공휴일")));
+        DashboardService withHolidays = new DashboardService(employeeRepository, requestRepository, balanceService, holidays);
+        when(requestRepository.findApprovedBetween(LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31))).thenReturn(List.of(
+                휴가(직원(1L, 개발팀), mon, mon.plusDays(4), "4")));
+
+        List<DashboardDtos.MonthlyUsage> monthly = withHolidays.admin().monthlyUsage();
+
+        assertThat(monthly.get(mon.getMonthValue() - 1).days()).isEqualByComparingTo("2");
+        assertThat(monthly.get(wedHoliday.getMonthValue() - 1).days()).isEqualByComparingTo("2");
+    }
+
+    @Test
+    void 사용률의_분모는_부여와_이월을_합친_값이라_100퍼센트를_넘지_않는다() {
+        LeaveBalanceService.PeriodBalance b = 기간_잔액("15", "17");
+        b.balance().setCarriedOver(new BigDecimal("3"));
+        when(balanceService.balancesAsOf(TODAY, true, true)).thenReturn(List.of(b));
+
+        DashboardDtos.AdminDashboard d = service.admin();
+
+        assertThat(d.totalCarriedOver()).isEqualByComparingTo("3");
+        assertThat(d.usageRate()).isEqualTo(94.4); // 17 / (15 + 3)
     }
 
     @Test

@@ -25,6 +25,8 @@ export interface AdminDashboard {
   pendingApprovals: number;
   totalGranted: number;
   totalUsed: number;
+  /** 지난 기간에서 넘어온 연차 합계. 사용률 분모 = 부여 + 이월 */
+  totalCarriedOver: number;
   usageRate: number;
   monthlyUsage: { month: number; days: number }[];
   departmentUsage: { departmentName: string; days: number }[];
