@@ -407,6 +407,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
           initialEnd={form.endDate || undefined}
           single={form.isPartial}
           workdayStart
+          employee={form.employee}
           onPick={(s, e) => {
             setStart(s);
             setEnd(e);

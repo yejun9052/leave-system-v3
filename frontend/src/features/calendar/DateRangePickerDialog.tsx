@@ -6,6 +6,7 @@ import type { DatesSetArg, EventInput } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
 import { useQuery } from "@tanstack/react-query";
 import { calendarApi } from "@/api/calendar";
+import { leaveApi } from "@/api/leave";
 import { policyRulesApi } from "@/api/policy";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,11 +34,13 @@ const HOLIDAY_COLOR = "#ef4444";
 /**
  * 일정만 보이는 달력에서 기간을 고르는 창(블랙아웃 등록·휴가 직접 등록).
  * 공휴일·회사 일정·팀 일정·연차 제한 기간만 보여 주고 휴가는 빼서 날짜를 고르기 쉽게 한다.
+ * 휴가 직접 등록이면 등록할 직원의 휴가(승인·취소 요청 중·결재 대기)만 함께 보여 겹치지 않게 고르게 한다.
  * 고르는 규칙은 캘린더 휴가 신청과 같다: 첫 클릭 시작일, 두 번째 클릭 종료일, 세 번째 클릭은 새로 시작.
  *
  * @param single      하루만 고른다(반차·시간차 등)
  * @param workdayStart 시작일은 근무일이어야 한다(휴가). 블랙아웃은 아무 날이나
  * @param excludeBlackoutId 수정 중인 금지 기간은 달력에 그리지 않는다
+ * @param employee    휴가 직접 등록에서 고른 직원: 그 사람의 휴가를 함께 그린다
  */
 export default function DateRangePickerDialog({
   title,
@@ -46,6 +49,7 @@ export default function DateRangePickerDialog({
   single = false,
   workdayStart = false,
   excludeBlackoutId,
+  employee,
   onPick,
   onClose,
 }: {
@@ -55,6 +59,7 @@ export default function DateRangePickerDialog({
   single?: boolean;
   workdayStart?: boolean;
   excludeBlackoutId?: number;
+  employee?: { id: number; name: string } | null;
   onPick: (start: string, end: string) => void;
   onClose: () => void;
 }) {
@@ -70,6 +75,13 @@ export default function DateRangePickerDialog({
     enabled: !!range,
   });
   const { data: blackouts = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
+  // 승인된 휴가는 캘린더 일정에 있고, 결재 대기는 캘린더에 없어 휴가 목록에서 그 직원 것만 따로 받는다
+  const { data: pendingPage } = useQuery({
+    queryKey: ["leaveList", "picker", employee?.id, range],
+    queryFn: () =>
+      leaveApi.search({ keyword: employee!.name, statuses: ["PENDING"], from: range!.start, to: range!.end, size: 100 }),
+    enabled: !!employee && !!range,
+  });
 
   const holidays = useMemo(
     () => new Set(events.filter((e) => e.source === "HOLIDAY").map((e) => e.start)),
@@ -102,6 +114,35 @@ export default function DateRangePickerDialog({
       borderColor: e.colorHex,
       order: e.source === "HOLIDAY" ? 0 : e.scope === "COMPANY" ? 2 : 3,
     }));
+  if (employee) {
+    for (const e of events) {
+      if (e.source !== "LEAVE_REQUEST" || e.employeeId !== employee.id) continue;
+      calendarEvents.push({
+        id: e.id,
+        title: e.title,
+        start: e.start,
+        end: e.end,
+        allDay: e.allDay,
+        backgroundColor: e.colorHex,
+        borderColor: e.colorHex,
+        order: 4,
+      });
+    }
+    // 결재 대기는 흐린 색으로(아직 확정 전)
+    for (const r of pendingPage?.content ?? []) {
+      if (r.employeeId !== employee.id) continue;
+      calendarEvents.push({
+        id: `P${r.id}`,
+        title: `${r.employeeName} - ${r.leaveTypeName} (결재 대기)`,
+        start: r.startDate,
+        end: addDays(r.endDate, 1),
+        allDay: true,
+        backgroundColor: `${r.leaveTypeColor}80`,
+        borderColor: r.leaveTypeColor,
+        order: 5,
+      });
+    }
+  }
   for (const b of blackouts) {
     if (b.id === excludeBlackoutId) continue;
     calendarEvents.push({
@@ -140,7 +181,10 @@ export default function DateRangePickerDialog({
       <DialogContent className="max-w-4xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>공휴일과 회사·팀 일정만 보입니다. {hint}</DialogDescription>
+          <DialogDescription>
+            {employee ? `공휴일과 회사·팀 일정, ${employee.name}님의 휴가가 보입니다.` : "공휴일과 회사·팀 일정만 보입니다."}{" "}
+            {hint}
+          </DialogDescription>
         </DialogHeader>
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
