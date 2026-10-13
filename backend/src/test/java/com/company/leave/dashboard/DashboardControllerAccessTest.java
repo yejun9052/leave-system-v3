@@ -83,6 +83,19 @@ class DashboardControllerAccessTest {
         verify(service, times(2)).admin();
     }
 
+    @Test
+    void 직원별_사용은_인사관리자와_시스템_관리자만_본다() throws Exception {
+        for (Role role : List.of(Role.EMPLOYEE, Role.TEAM_LEAD)) {
+            authenticate(Set.of(role), 7L);
+            mvc.perform(get("/api/dashboard/admin/employees")).andExpect(status().isForbidden());
+        }
+        for (Role role : List.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN)) {
+            authenticate(Set.of(role), 1L);
+            mvc.perform(get("/api/dashboard/admin/employees")).andExpect(status().isOk());
+        }
+        verify(service, times(2)).employeeUsage();
+    }
+
     private void authenticate(Set<Role> roles, Long id) {
         Employee employee = Employee.builder().email("user@company.com").name("사용자").role(Role.highest(roles))
                 .systemAccount(roles.contains(Role.SYSTEM_ADMIN)).build();

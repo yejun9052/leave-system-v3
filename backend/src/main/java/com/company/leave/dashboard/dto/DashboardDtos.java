@@ -31,6 +31,24 @@ public final class DashboardDtos {
             List<DepartmentUsage> departmentUsage) {
     }
 
+    /**
+     * 리포트 › 회사 현황의 직원별 사용: 직원마다 지금 쓰고 있는 연차 기간의 잔액(관리자 대시보드 사용률과 같은 기준).
+     *
+     * @param usageRate 사용 ÷ (부여 + 이월) × 100, 소수 첫째 자리. 쓸 수 있던 연차가 없으면 0
+     */
+    public record EmployeeUsage(
+            Long employeeId,
+            String name,
+            String departmentName,
+            LocalDate periodStart,
+            LocalDate periodEnd,
+            BigDecimal granted,
+            BigDecimal carriedOver,
+            BigDecimal used,
+            BigDecimal remaining,
+            double usageRate) {
+    }
+
     public record PersonalDashboard(
             LeaveBalanceResponse balance,
             long pendingCount,

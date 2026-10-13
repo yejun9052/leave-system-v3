@@ -14,7 +14,6 @@ import {
   Inbox,
   Plus,
   Sun,
-  UserMinus,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -58,8 +57,7 @@ function period(start: string, end: string): string {
 }
 
 export default function DashboardPage() {
-  const { user, isManager } = useAuthStore();
-  const manager = isManager();
+  const { user } = useAuthStore();
   const [applying, setApplying] = useState(false);
   const now = new Date();
 
@@ -78,9 +76,8 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 개인 연차·휴가 카드를 보여 준다 */}
+      {/* 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 개인 연차·휴가 카드를 보여 준다. 회사 현황은 리포트 › 회사 현황 */}
       <PersonalSection />
-      {manager && <AdminSection />}
 
       {applying && (
         <LeaveRequestDialog
@@ -461,42 +458,5 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-/** 회사 현황: 매일 보는 숫자만. 사용률과 월별·부서별 그래프는 리포트 › 회사 현황 */
-function AdminSection() {
-  const { data, isError, error, refetch } = useQuery({ queryKey: ["dashboard", "admin"], queryFn: dashboardApi.admin });
-
-  const heading = (
-    <div className="flex flex-wrap items-end justify-between gap-2">
-      <div>
-        <h2 className="text-xl font-bold">회사 현황</h2>
-        <p className="text-sm text-muted-foreground">인사관리자·시스템 관리자에게만 보입니다.</p>
-      </div>
-      <Link to="/admin/reports?tab=status" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-        사용률·그래프 보기 <ArrowRight className="h-4 w-4" />
-      </Link>
-    </div>
-  );
-  if (isError) {
-    return (
-      <div className="space-y-4 pt-2">
-        {heading}
-        <QueryError error={error} onRetry={() => void refetch()} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 pt-2">
-      {heading}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi icon={Users} label="재직 인원" value={`${data?.totalEmployees ?? 0}명`} sub="재직 중인 직원" />
-        {/* 서버 값은 오늘에 걸린 승인 휴가 신청 건수(사람 수 아님: 한 사람이 오전·오후 반차를 따로 내면 2건) */}
-        <Kpi icon={UserMinus} label="오늘 휴가(승인)" value={`${data?.onLeaveToday ?? 0}건`} sub="오늘 승인된 휴가 신청" />
-        <Kpi icon={Inbox} label="결재 대기 (전체)" value={`${data?.pendingApprovals ?? 0}건`} sub="신청·취소 요청" />
-      </div>
-    </div>
   );
 }
