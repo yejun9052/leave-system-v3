@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { extractErrorMessage } from "@/api/client";
+import { extractErrorMessage, safeReturnPath } from "@/api/client";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -18,7 +18,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const from = (location.state as { from?: string })?.from ?? "/";
+  // 돌아갈 화면: 앱 안 이동은 라우터 state, 세션이 끊겨 페이지를 새로 연 경우는 ?from=
+  const from =
+    safeReturnPath((location.state as { from?: string } | null)?.from) ??
+    safeReturnPath(new URLSearchParams(location.search).get("from")) ??
+    "/";
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

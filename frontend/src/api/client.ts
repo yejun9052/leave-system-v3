@@ -43,6 +43,21 @@ function isSessionLost(error: AxiosError): boolean {
   return !code || code === "UNAUTHORIZED";
 }
 
+/**
+ * 지금 화면(경로+쿼리)으로 돌아오는 로그인 주소. 페이지를 새로 여는 이동이라 라우터 state 대신 ?from= 에 싣는다
+ * (LoginPage 가 safeReturnPath 로 받는다).
+ */
+export function loginUrlReturningHere(): string {
+  const here = window.location.pathname + window.location.search;
+  return here === "/" || here.startsWith("/login") ? "/login" : `/login?${new URLSearchParams({ from: here })}`;
+}
+
+/** 로그인 뒤 돌아갈 주소로 써도 되는지: 이 사이트 안의 경로만("//다른사이트"·"https://…" 막음) */
+export function safeReturnPath(path: string | null | undefined): string | null {
+  if (!path || !path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
+  return path;
+}
+
 api.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
@@ -59,8 +74,8 @@ api.interceptors.response.use(
       !SKIP_REDIRECT_URLS.includes(url) &&
       window.location.pathname !== "/login"
     ) {
-      // 세션 만료·강제 종료 → 로그인 페이지로
-      window.location.href = "/login";
+      // 세션 만료·강제 종료 → 로그인 페이지로(다시 로그인하면 보던 화면으로)
+      window.location.href = loginUrlReturningHere();
     }
     return Promise.reject(error);
   },

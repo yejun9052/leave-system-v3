@@ -1,4 +1,4 @@
-import type { ApiEnvelope } from "@/api/client";
+import { loginUrlReturningHere, type ApiEnvelope } from "@/api/client";
 import { useMaintenanceStore } from "@/store/maintenance";
 
 /**
@@ -20,7 +20,7 @@ export async function downloadFile(url: string, fileName: string, failMessage: s
     }
     const code = body?.error?.code;
     if (res.status === 503 && code === "MAINTENANCE") useMaintenanceStore.getState().setActive(true);
-    if (res.status === 401 && (!code || code === "UNAUTHORIZED")) window.location.href = "/login";
+    if (res.status === 401 && (!code || code === "UNAUTHORIZED")) window.location.href = loginUrlReturningHere();
     throw new Error(body?.error?.message ?? failMessage);
   }
   const href = URL.createObjectURL(await res.blob());
