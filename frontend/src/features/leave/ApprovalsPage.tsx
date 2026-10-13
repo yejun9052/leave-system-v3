@@ -367,24 +367,27 @@ function DecisionDialog({
             />
           </div>
         )}
-        <DialogFooter>
+        {/* 결재 버튼은 왼쪽, 닫기는 오른쪽 끝에 따로(승인과 닫기를 헷갈려 누르지 않게) */}
+        <DialogFooter className="sm:justify-between">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {rejecting ? (
+              <Button variant="destructive" onClick={onReject} disabled={busy}>
+                반려
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => onStep("reject")} disabled={busy}>
+                  <X className="h-4 w-4" /> {isCancel ? "취소 반려" : "반려"}
+                </Button>
+                <Button onClick={() => approve.mutate()} disabled={busy}>
+                  <Check className="h-4 w-4" /> {isCancel ? "취소 승인" : "승인"}
+                </Button>
+              </>
+            )}
+          </div>
           <Button variant="outline" onClick={onClose}>
             닫기
           </Button>
-          {rejecting ? (
-            <Button variant="destructive" onClick={onReject} disabled={busy}>
-              반려
-            </Button>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => onStep("reject")} disabled={busy}>
-                <X className="h-4 w-4" /> {isCancel ? "취소 반려" : "반려"}
-              </Button>
-              <Button onClick={() => approve.mutate()} disabled={busy}>
-                <Check className="h-4 w-4" /> {isCancel ? "취소 승인" : "승인"}
-              </Button>
-            </>
-          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
