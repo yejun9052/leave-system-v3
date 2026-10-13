@@ -212,7 +212,7 @@ public final class LeaveRequestDtos {
             Instant requestedAt,
             /** 결재함에서만: 결재자 본인의 신청인지(자가 승인 건) */
             Boolean ownRequest,
-            /** 결재함에서만: 결재자에게 보여 줄 경고(예: 경조사가 팀 동시 부재 한도 초과) */
+            /** 결재함에서만: 결재자에게 보여 줄 경고(예: 팀 최소 보류 인원 부족) */
             String approvalWarning,
             /** 신청 응답: 결재할 사람이 없는 경우의 안내 */
             String requestWarning) {

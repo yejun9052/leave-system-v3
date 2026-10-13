@@ -173,7 +173,7 @@ export interface LeaveRequest {
   /** 경조사 규정으로 신청한 경우의 규정 이름·일수 */
   specialRuleName: string | null;
   specialRuleDays: number | null;
-  /** 결재함에서만 채워지는 결재자용 경고(예: 경조사가 팀 동시 부재 한도 초과) */
+  /** 결재함에서만 채워지는 결재자용 경고(예: 팀 최소 보류 인원 부족) */
   approvalWarning?: string | null;
   /** 신청 응답: 결재할 인사관리자가 없는 경우의 안내 */
   requestWarning?: string | null;

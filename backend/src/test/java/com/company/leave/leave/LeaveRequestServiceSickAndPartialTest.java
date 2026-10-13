@@ -949,34 +949,37 @@ class LeaveRequestServiceSickAndPartialTest {
         }
 
         @Test
-        void 팀_동시_부재_한도를_넘어도_연차와_경조사_모두_신청은_막지_않는다() {
-            같은_부서_동료_휴가(1, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED));
+        void 팀_최소_보류_인원보다_적게_남아도_연차와_경조사_모두_신청은_막지_않는다() {
+            같은_부서_동료_휴가(3, 3, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED));
 
             assertThat(신청(연차, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
             assertThat(신청(경조사, null, null).getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
         }
 
         @Test
-        void 결재함_경고는_같은_부서의_결재_대기와_승인_휴가를_함께_센다() {
-            같은_부서_동료_휴가(2, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED),
+        void 결재함_경고는_부서_재직_인원에서_결재_대기와_승인_휴가를_함께_빼서_남는_인원을_센다() {
+            // 5명 중 동료 2명(승인·결재 대기)과 이 신청이 쉬면 2명이 남아 최소 보류 인원 3명보다 적다
+            같은_부서_동료_휴가(3, 5, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED),
                     동료_휴가(12L, TUE, TUE, LeaveRequestStatus.PENDING));
             LeaveRequest request = 신청(연차, null, null);
 
-            assertThat(결재함_경고(request)).contains("부재 3명(승인 1명 · 결재 대기 1명 · 이 신청)").contains("한도(2명)")
-                    .contains(TUE.getMonthValue() + "/" + TUE.getDayOfMonth());
+            assertThat(결재함_경고(request)).isEqualTo(TUE.getMonthValue() + "/" + TUE.getDayOfMonth()
+                    + " 개발팀 남는 인원 2명(전체 5명 · 부재 3명: 승인 1명 · 결재 대기 1명 · 이 신청)으로"
+                    + " 최소 보류 인원(3명)보다 적습니다. 승인 여부를 판단해 주세요.");
         }
 
         @Test
-        void 팀_한도_안이면_결재함_경고가_없다() {
-            같은_부서_동료_휴가(2, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.PENDING));
+        void 남는_인원이_최소_보류_인원_이상이면_결재함_경고가_없다() {
+            // 5명 중 2명(동료·이 신청)이 쉬어도 3명이 남는다
+            같은_부서_동료_휴가(3, 5, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.PENDING));
 
             assertThat(결재함_경고(신청(경조사, null, null))).isNull();
         }
 
         @Test
         void 다른_날_쉬는_동료는_같은_날로_세지_않는다() {
-            // 화·수 신청, 동료 한 명은 화요일만, 다른 한 명은 수요일만 → 날마다 2명(이 신청 포함)이라 한도 2 안
-            같은_부서_동료_휴가(2, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED),
+            // 화·수 신청, 동료 한 명은 화요일만, 다른 한 명은 수요일만 → 날마다 2명(이 신청 포함)만 쉬어 5명 중 3명이 남는다
+            같은_부서_동료_휴가(3, 5, 동료_휴가(11L, TUE, TUE, LeaveRequestStatus.APPROVED),
                     동료_휴가(12L, TUE.plusDays(1), TUE.plusDays(1), LeaveRequestStatus.PENDING));
             LeaveRequestDtos.Response r = service.create(EMP,
                     new LeaveRequestDtos.Create(연차.getId(), TUE, TUE.plusDays(1), "사유"));
@@ -988,7 +991,7 @@ class LeaveRequestServiceSickAndPartialTest {
         void 공휴일은_부재로_세지_않는다() {
             // 화~목 신청인데 수요일이 공휴일: 수요일에 동료 2명이 쉬어도 근무일이 아니라 경고하지 않는다
             java.time.LocalDate wed = TUE.plusDays(1);
-            같은_부서_동료_휴가(2, 동료_휴가(11L, wed, wed, LeaveRequestStatus.APPROVED),
+            같은_부서_동료_휴가(3, 4, 동료_휴가(11L, wed, wed, LeaveRequestStatus.APPROVED),
                     동료_휴가(12L, wed, wed, LeaveRequestStatus.PENDING));
             lenient().when(holidayRepository.findByDateBetweenOrderByDateAsc(any(), any()))
                     .thenReturn(List.of(new com.company.leave.calendar.domain.Holiday(wed, "임시공휴일")));
@@ -1005,9 +1008,41 @@ class LeaveRequestServiceSickAndPartialTest {
             ReflectionTestUtils.setField(다른_부서.getDepartment(), "id", 9L);
             ReflectionTestUtils.setField(다른_부서, "id", 21L);
             LeaveRequest 타부서_휴가 = new LeaveRequest(다른_부서, 연차, TUE, TUE, BigDecimal.ONE, BigDecimal.ONE, 2027, "휴가");
-            같은_부서_동료_휴가(1, 타부서_휴가);
+            같은_부서_동료_휴가(1, 2, 타부서_휴가);
 
             assertThat(결재함_경고(신청(연차, null, null))).isNull();
+        }
+
+        @Test
+        void 부서_인원이_최소_보류_인원보다_적으면_혼자_쉬어도_경고한다() {
+            같은_부서_동료_휴가(2, 2);
+
+            assertThat(결재함_경고(신청(연차, null, null)))
+                    .contains("개발팀 남는 인원 1명(전체 2명 · 부재 1명: 승인 0명 · 결재 대기 0명 · 이 신청)")
+                    .contains("최소 보류 인원(2명)");
+        }
+
+        @Test
+        void 관리_전용_계정의_휴가는_남는_인원을_줄이지_않는다() {
+            // 재직 인원 3명(관리 전용 계정은 인원에 없음). 관리 전용 계정이 같은 날 쉬어도 2명이 남는다
+            LeaveRequest 관리자_휴가 = 동료_휴가(15L, TUE, TUE, LeaveRequestStatus.APPROVED);
+            ReflectionTestUtils.setField(관리자_휴가.getEmployee(), "systemAccount", true);
+            같은_부서_동료_휴가(2, 3, 관리자_휴가);
+
+            assertThat(결재함_경고(신청(연차, null, null))).isNull();
+        }
+
+        @Test
+        void 가장_적게_남는_날을_알려_준다() {
+            // 화·수 신청. 화요일은 동료 1명, 수요일은 동료 2명이 쉰다 → 4명 중 수요일에 1명만 남는다
+            java.time.LocalDate wed = TUE.plusDays(1);
+            같은_부서_동료_휴가(3, 4, 동료_휴가(11L, TUE, wed, LeaveRequestStatus.APPROVED),
+                    동료_휴가(12L, wed, wed, LeaveRequestStatus.PENDING));
+            LeaveRequestDtos.Response r = service.create(EMP,
+                    new LeaveRequestDtos.Create(연차.getId(), TUE, wed, "사유"));
+
+            assertThat(결재함_경고(saved.get(r.id())))
+                    .startsWith(wed.getMonthValue() + "/" + wed.getDayOfMonth() + " 개발팀 남는 인원 1명(전체 4명 · 부재 3명");
         }
 
         private final com.company.leave.department.domain.Department 개발팀 = 부서();
@@ -1019,11 +1054,14 @@ class LeaveRequestServiceSickAndPartialTest {
             return team;
         }
 
-        /** 신청자를 개발팀에 넣고, 팀 동시 부재 한도와 겹치는 다른 사람의 휴가(대기·승인·취소 요청 중 조회 결과)를 정한다. */
-        private void 같은_부서_동료_휴가(int limit, LeaveRequest... leaves) {
+        /**
+         * 신청자를 개발팀에 넣고, 팀 최소 보류 인원과 개발팀 재직 인원, 겹치는 다른 사람의 휴가(대기·승인·취소 요청 중 조회 결과)를 정한다.
+         */
+        private void 같은_부서_동료_휴가(int minStaff, long headcount, LeaveRequest... leaves) {
             ReflectionTestUtils.setField(employee, "department", 개발팀);
             lenient().when(requestRepository.findByStatusInOverlapping(any(), any(), any())).thenReturn(List.of(leaves));
-            lenient().when(policy.getMaxConcurrentAbsence()).thenReturn(limit);
+            lenient().when(policy.getMinTeamStaff()).thenReturn(minStaff);
+            lenient().when(employeeService.activeStaffCount(3L)).thenReturn(headcount);
         }
 
         private LeaveRequest 동료_휴가(long id, java.time.LocalDate start, java.time.LocalDate end,

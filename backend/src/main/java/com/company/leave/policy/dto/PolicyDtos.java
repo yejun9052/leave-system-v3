@@ -28,7 +28,7 @@ public final class PolicyDtos {
             boolean allowNegative,
             boolean halfDayEnabled,
             boolean hourlyEnabled,
-            int maxConcurrentAbsence,
+            int minTeamStaff,
             int minAdvanceDays,
             int maxConsecutiveDays,
             boolean promotionEnabled,
@@ -44,7 +44,7 @@ public final class PolicyDtos {
                     p.getSeniorityIncrementDays(), p.getMaxAnnualDays(), p.isMonthlyAccrualEnabled(),
                     p.getMonthlyAccrualMax(), p.isAllowNegative(), p.isHalfDayEnabled(),
                     p.isHourlyEnabled(),
-                    p.getMaxConcurrentAbsence(), p.getMinAdvanceDays(), p.getMaxConsecutiveDays(),
+                    p.getMinTeamStaff(), p.getMinAdvanceDays(), p.getMaxConsecutiveDays(),
                     p.isPromotionEnabled(), p.getPromotionMonths(), p.isCarryOverEnabled(), p.getMaxCarryOverDays(),
                     p.isNextPeriodReservationEnabled(), p.getBlackoutConflictMode());
         }
@@ -63,7 +63,7 @@ public final class PolicyDtos {
             boolean allowNegative,
             boolean halfDayEnabled,
             boolean hourlyEnabled,
-            @Min(0) int maxConcurrentAbsence,
+            @Min(0) int minTeamStaff,
             @Min(0) int minAdvanceDays,
             @Min(0) int maxConsecutiveDays,
             boolean carryOverEnabled,
@@ -77,12 +77,12 @@ public final class PolicyDtos {
                              BigDecimal baseAnnualDays, int seniorityStepYears, BigDecimal seniorityIncrementDays,
                              BigDecimal maxAnnualDays, boolean monthlyAccrualEnabled, int monthlyAccrualMax,
                              boolean allowNegative, boolean halfDayEnabled, boolean hourlyEnabled,
-                             int maxConcurrentAbsence, int minAdvanceDays, int maxConsecutiveDays,
+                             int minTeamStaff, int minAdvanceDays, int maxConsecutiveDays,
                              boolean carryOverEnabled, BigDecimal maxCarryOverDays,
                              Boolean nextPeriodReservationEnabled) {
             this(grantBasis, fiscalStartMonth, fiscalStartDay, baseAnnualDays, seniorityStepYears,
                     seniorityIncrementDays, maxAnnualDays, monthlyAccrualEnabled, monthlyAccrualMax, allowNegative,
-                    halfDayEnabled, hourlyEnabled, maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
+                    halfDayEnabled, hourlyEnabled, minTeamStaff, minAdvanceDays, maxConsecutiveDays,
                     carryOverEnabled, maxCarryOverDays, nextPeriodReservationEnabled, null);
         }
 
@@ -91,7 +91,7 @@ public final class PolicyDtos {
                     baseAnnualDays, seniorityStepYears, seniorityIncrementDays, maxAnnualDays,
                     monthlyAccrualEnabled, monthlyAccrualMax, allowNegative, halfDayEnabled,
                     hourlyEnabled,
-                    maxConcurrentAbsence, minAdvanceDays, maxConsecutiveDays,
+                    minTeamStaff, minAdvanceDays, maxConsecutiveDays,
                     carryOverEnabled, maxCarryOverDays,
                     !Boolean.FALSE.equals(nextPeriodReservationEnabled));
         }

@@ -951,7 +951,7 @@ public class LeaveRequestService {
 
     // --- helpers ---
 
-    /** 정책 기반 사용 통제 검증 (블랙아웃/사전신청/연속일). 팀 동시 부재는 막지 않고 결재할 때 경고한다(teamLimitWarning). */
+    /** 정책 기반 사용 통제 검증 (블랙아웃/사전신청/연속일). 팀 최소 보류 인원은 막지 않고 결재할 때 경고한다(teamLimitWarning). */
     private void validateUsagePolicy(Employee employee, LeaveType type, LocalDate start, LocalDate end,
                                      BigDecimal days, LeavePolicy policy) {
         // 연차 사용 금지 기간은 휴가 종류마다 정한다(경조사·공가는 허용, 병가·연차는 불가).
@@ -976,30 +976,36 @@ public class LeaveRequestService {
         }
     }
 
-    /** 팀 동시 부재에 세는 다른 사람의 휴가: 결재 대기·승인·취소 요청 중(취소 요청은 반려되면 승인으로 돌아간다). */
+    /** 팀 최소 보류 인원에서 부재로 세는 휴가: 결재 대기·승인·취소 요청 중(취소 요청은 반려되면 승인으로 돌아간다). */
     private static final Set<LeaveRequestStatus> TEAM_ABSENCE_STATUSES = EnumSet.of(
             LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED, LeaveRequestStatus.CANCEL_REQUESTED);
 
     /**
-     * 결재자에게 보여 줄 팀 동시 부재 경고(결재 대기 신청만). 휴가 종류와 상관없이, 같은 부서에서 이 신청과 같은 날 쉬는
-     * 다른 사람(결재 대기·승인)을 평일마다 세어 이 신청을 더한 인원이 한도를 넘는 날이 있으면 가장 많은 날을 알려 준다.
-     * 신청은 막지 않고 승인 여부는 결재자가 판단한다. 해당 없으면 null.
+     * 결재자에게 보여 줄 팀 최소 보류 인원 경고(결재 대기 신청만). 휴가 종류와 상관없이 근무일마다
+     * 같은 부서 재직 인원(관리 전용 계정 제외)에서 그날 쉬는 사람(결재 대기·승인, 이 신청 포함)을 빼서
+     * 남는 인원이 최소 보류 인원보다 적은 날이 있으면 가장 적게 남는 날을 알려 준다.
+     * 반차·시간차도 한 명으로 센다. 신청은 막지 않고 승인 여부는 결재자가 판단한다. 해당 없으면 null.
      */
     private String teamLimitWarning(LeaveRequest request, LeavePolicy policy) {
-        int limit = policy.getMaxConcurrentAbsence();
+        int minStaff = policy.getMinTeamStaff();
         Employee applicant = request.getEmployee();
         Long departmentId = applicant.getDepartmentId();
-        if (request.getStatus() != LeaveRequestStatus.PENDING || limit <= 0 || departmentId == null) {
+        if (request.getStatus() != LeaveRequestStatus.PENDING || minStaff <= 0 || departmentId == null) {
             return null;
         }
+        long headcount = employeeService.activeStaffCount(departmentId);
+        // 재직 인원에 들지 않는 사람(관리 전용 계정·퇴사자)의 휴가는 남는 인원을 줄이지 않는다
+        boolean applicantCounts = applicant.isActive() && !applicant.isSystemAccount();
         List<LeaveRequest> others = requestRepository.findByStatusInOverlapping(TEAM_ABSENCE_STATUSES,
                         request.getStartDate(), request.getEndDate()).stream()
                 .filter(r -> departmentId.equals(r.getEmployee().getDepartmentId()))
                 .filter(r -> !r.getEmployee().getId().equals(applicant.getId()))
+                .filter(r -> r.getEmployee().isActive() && !r.getEmployee().isSystemAccount())
                 .toList();
         // 주말·공휴일은 근무일이 아니라 부재로 세지 않는다
         Set<LocalDate> holidays = holidaysBetween(request.getStartDate(), request.getEndDate());
         LocalDate worstDay = null;
+        long worstRemaining = Long.MAX_VALUE;
         Set<Long> worstApproved = Set.of();
         Set<Long> worstPending = Set.of();
         for (LocalDate day = request.getStartDate(); !day.isAfter(request.getEndDate()); day = day.plusDays(1)) {
@@ -1015,9 +1021,10 @@ public class LeaveRequestService {
             Set<Long> pending = onDay.stream().filter(r -> r.getStatus() == LeaveRequestStatus.PENDING)
                     .map(r -> r.getEmployee().getId()).filter(id -> !approved.contains(id))
                     .collect(Collectors.toSet());
-            int total = approved.size() + pending.size();
-            if (total + 1 > limit && total > worstApproved.size() + worstPending.size()) {
+            long remaining = headcount - approved.size() - pending.size() - (applicantCounts ? 1 : 0);
+            if (remaining < minStaff && remaining < worstRemaining) {
                 worstDay = day;
+                worstRemaining = remaining;
                 worstApproved = approved;
                 worstPending = pending;
             }
@@ -1025,12 +1032,14 @@ public class LeaveRequestService {
         if (worstDay == null) {
             return null;
         }
-        int absent = worstApproved.size() + worstPending.size() + 1;
-        return worstDay.getMonthValue() + "/" + worstDay.getDayOfMonth() + " 같은 부서 부재 " + absent
-                + "명(승인 " + worstApproved.size() + "명 · 결재 대기 " + worstPending.size() + "명 · 이 신청)으로 한도("
-                + limit + "명)를 넘습니다. 승인 여부를 판단해 주세요.";
+        int absent = worstApproved.size() + worstPending.size() + (applicantCounts ? 1 : 0);
+        String team = applicant.getDepartment() != null ? applicant.getDepartment().getName() : "같은 부서";
+        return worstDay.getMonthValue() + "/" + worstDay.getDayOfMonth() + " " + team + " 남는 인원 "
+                + Math.max(worstRemaining, 0) + "명(전체 " + headcount + "명 · 부재 " + absent + "명: 승인 "
+                + worstApproved.size() + "명 · 결재 대기 " + worstPending.size() + "명"
+                + (applicantCounts ? " · 이 신청" : "") + ")으로 최소 보류 인원(" + minStaff
+                + "명)보다 적습니다. 승인 여부를 판단해 주세요.";
     }
-
 
     private void validatePeriod(LocalDate start, LocalDate end, LeaveType type, DayPortion portion) {
         if (end.isBefore(start)) {

@@ -272,6 +272,12 @@ public class EmployeeService {
                 EnumSet.of(Role.HR_ADMIN, Role.SYSTEM_ADMIN), EmployeeStatus.ACTIVE);
     }
 
+    /** 부서(하위 부서 제외)의 재직 인원(퇴사자·관리 전용 계정 제외). 팀 최소 보류 인원 계산용 */
+    @Transactional(readOnly = true)
+    public long activeStaffCount(Long departmentId) {
+        return employeeRepository.countActiveStaff(departmentId);
+    }
+
     @Transactional(readOnly = true)
     public java.util.Set<Long> employeeIdsInDepartments(java.util.Collection<Long> departmentIds) {
         return new java.util.HashSet<>(employeeRepository.findIdsByDepartmentIdIn(departmentIds));

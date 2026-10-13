@@ -97,7 +97,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
                                                                  Collection<LeaveRequestStatus> statuses,
                                                                  LocalDate date);
 
-    /** 특정 기간 내 승인된 휴가 (팀 동시부재/캘린더용) */
+    /** 특정 기간 내 승인된 휴가 (캘린더용) */
     @Query("""
             select r from LeaveRequest r
             where r.status = com.company.leave.leave.domain.LeaveRequestStatus.APPROVED

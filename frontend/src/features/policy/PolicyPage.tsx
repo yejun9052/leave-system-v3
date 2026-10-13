@@ -303,19 +303,32 @@ function PolicyTab() {
 
           <PolicySection title="사용 통제">
             <div className="space-y-2">
-              <Label htmlFor="policy-max-concurrent">팀 동시 부재 최대 인원 (0 = 무제한, 넘어도 신청은 되고 결재할 때 경고)</Label>
-              <Input id="policy-max-concurrent" type="number" min={0} value={form.maxConcurrentAbsence}
-                onChange={(e) => set("maxConcurrentAbsence", Number(e.target.value))} />
+              <Label htmlFor="policy-min-team-staff">팀 최소 보류 인원</Label>
+              <Input id="policy-min-team-staff" type="number" min={0} value={form.minTeamStaff}
+                aria-describedby="policy-min-team-staff-desc"
+                onChange={(e) => set("minTeamStaff", Number(e.target.value))} />
+              <p id="policy-min-team-staff-desc" className="text-xs text-muted-foreground">
+                휴가 날마다 같은 부서에 최소 몇 명은 남아 있어야 하는지(명). 0이면 제한 없음. 모자라도 신청은 되고, 결재할 때
+                경고합니다.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="policy-min-advance">최소 사전 신청 기한(일, 0 = 제한 없음)</Label>
+              <Label htmlFor="policy-min-advance">최소 며칠 전까지 신청</Label>
               <Input id="policy-min-advance" type="number" min={0} value={form.minAdvanceDays}
+                aria-describedby="policy-min-advance-desc"
                 onChange={(e) => set("minAdvanceDays", Number(e.target.value))} />
+              <p id="policy-min-advance-desc" className="text-xs text-muted-foreground">
+                휴가 시작일 며칠 전까지 신청해야 하는지(일). 0이면 제한 없음. 연차처럼 차감하는 휴가에만 적용합니다.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="policy-max-consecutive">최대 연속 사용일 (0 = 무제한)</Label>
+              <Label htmlFor="policy-max-consecutive">연속 사용 한도</Label>
               <Input id="policy-max-consecutive" type="number" min={0} value={form.maxConsecutiveDays}
+                aria-describedby="policy-max-consecutive-desc"
                 onChange={(e) => set("maxConsecutiveDays", Number(e.target.value))} />
+              <p id="policy-max-consecutive-desc" className="text-xs text-muted-foreground">
+                한 번에 이어서 쓸 수 있는 최대 일수(일). 0이면 제한 없음. 연차처럼 차감하는 휴가에만 적용합니다.
+              </p>
             </div>
             <div className="space-y-2">
               <Label id="policy-blackout-conflict">사용 금지 기간을 등록할 때 겹치는 기존 휴가</Label>

@@ -43,6 +43,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
             + "and e.systemAccount = false group by e.department.id")
     List<Object[]> countGroupByDepartment();
 
+    /** 한 부서(하위 부서 제외)의 재직 인원 수(퇴사자·관리 전용 계정 제외) */
+    @Query("select count(e) from Employee e where e.department.id = :departmentId "
+            + "and e.status = com.company.leave.employee.domain.EmployeeStatus.ACTIVE and e.systemAccount = false")
+    long countActiveStaff(@Param("departmentId") Long departmentId);
+
     @Query("select e.id from Employee e")
     List<Long> findAllIds();
 

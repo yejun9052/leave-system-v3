@@ -72,9 +72,9 @@ public class LeavePolicy extends BaseTimeEntity {
     @Column(name = "hourly_enabled", nullable = false)
     private boolean hourlyEnabled = false;
 
-    /** 같은 부서 동시 부재 최대 인원 (0 = 무제한) */
-    @Column(name = "max_concurrent_absence", nullable = false)
-    private int maxConcurrentAbsence = 0;
+    /** 팀 최소 보류 인원: 휴가 날마다 같은 부서에 남아 있어야 할 재직 인원 (0 = 제한 없음). 모자라면 결재할 때 경고 */
+    @Column(name = "min_team_staff", nullable = false)
+    private int minTeamStaff = 0;
 
     /** 최소 사전 신청 기한(일). 0 = 제한 없음 */
     @Column(name = "min_advance_days", nullable = false)
@@ -132,7 +132,7 @@ public class LeavePolicy extends BaseTimeEntity {
         this.allowNegative = s.allowNegative();
         this.halfDayEnabled = s.halfDayEnabled();
         this.hourlyEnabled = s.hourlyEnabled();
-        this.maxConcurrentAbsence = s.maxConcurrentAbsence();
+        this.minTeamStaff = s.minTeamStaff();
         this.minAdvanceDays = s.minAdvanceDays();
         this.maxConsecutiveDays = s.maxConsecutiveDays();
         this.carryOverEnabled = s.carryOverEnabled();
@@ -161,7 +161,7 @@ public class LeavePolicy extends BaseTimeEntity {
             boolean allowNegative,
             boolean halfDayEnabled,
             boolean hourlyEnabled,
-            int maxConcurrentAbsence,
+            int minTeamStaff,
             int minAdvanceDays,
             int maxConsecutiveDays,
             boolean carryOverEnabled,

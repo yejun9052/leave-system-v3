@@ -17,7 +17,8 @@ export interface Policy {
   allowNegative: boolean;
   halfDayEnabled: boolean;
   hourlyEnabled: boolean;
-  maxConcurrentAbsence: number;
+  /** 팀 최소 보류 인원: 휴가 날마다 같은 부서에 남아 있어야 할 재직 인원(0 = 제한 없음, 모자라면 결재할 때 경고) */
+  minTeamStaff: number;
   minAdvanceDays: number;
   maxConsecutiveDays: number;
   /** 연차 촉진 자동 발송 ON/OFF (자동화 탭에서 따로 저장, 연차 정책 저장에는 반영되지 않음) */

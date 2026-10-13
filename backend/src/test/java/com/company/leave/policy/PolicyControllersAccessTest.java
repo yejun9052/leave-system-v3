@@ -54,7 +54,7 @@ class PolicyControllersAccessTest {
              "baseAnnualDays":15,"seniorityStepYears":2,"seniorityIncrementDays":1,"maxAnnualDays":25,
              "monthlyAccrualEnabled":true,"monthlyAccrualMax":11,"allowNegative":false,
              "halfDayEnabled":true,"hourlyEnabled":true,
-             "maxConcurrentAbsence":0,"minAdvanceDays":0,"maxConsecutiveDays":0,
+             "minTeamStaff":0,"minAdvanceDays":0,"maxConsecutiveDays":0,
              "carryOverEnabled":false,"maxCarryOverDays":0,"nextPeriodReservationEnabled":true}
             """;
     private static final String AWARD = "{\"years\":10,\"bonusDays\":3,\"name\":\"10년 근속\"}";

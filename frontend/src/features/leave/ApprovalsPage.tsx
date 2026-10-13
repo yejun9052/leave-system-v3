@@ -457,7 +457,7 @@ function RequestDetails({ r }: { r: LeaveRequest }) {
           </>
         )}
       </dl>
-      {/* 결재 경고(팀 동시 부재 등)는 확인창과 같은 노란 상자로 눈에 띄게 */}
+      {/* 결재 경고(팀 최소 보류 인원 부족 등)는 확인창과 같은 노란 상자로 눈에 띄게 */}
       {r.approvalWarning && (
         <p
           role="alert"
