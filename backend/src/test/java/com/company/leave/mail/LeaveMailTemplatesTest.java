@@ -125,10 +125,10 @@ class LeaveMailTemplatesTest {
         Mail approved = LeaveMailTemplates.approved(info, DOMAIN, BASE, 인사);
 
         MailLayout.Content content = LeaveMailTemplates.withLeadLink(
-                approved.content().withRecipient("홍길동", "김팀장"), BASE);
+                approved.content().withRecipient("홍길동"), BASE);
 
         assertThat(content.text())
-                .contains("수신자: 홍길동\n참조: 김팀장")
+                .contains("수신자: 홍길동").doesNotContain("참조")
                 .contains("내 휴가 확인하기: https://leave.company.com/my-leaves")
                 .contains("캘린더 보기: https://leave.company.com/calendar");
         assertThat(content.html()).contains("href=\"https://leave.company.com/calendar\"");

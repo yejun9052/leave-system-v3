@@ -153,14 +153,14 @@ public class LeaveMessenger {
                 LeaveMailTemplates.blackoutCancelled(info(r), domain(), baseUrl(), by, period, reason));
     }
 
-    /** 인사관리자 강제 등록(바로 승인): 신청자, 담당 팀장은 참조(메일 표에는 참조 줄을 넣지 않는다). */
+    /** 인사관리자 강제 등록(바로 승인): 신청자, 담당 팀장은 참조. */
     public void registered(LeaveRequest r, Employee hr, Employee lead) {
         Handler by = handler(hr);
         notify(r.getEmployee(), "LEAVE_REGISTERED", "휴가가 등록되었습니다.",
                 summary(r) + " · " + by.title() + " 등록", "/my-leaves");
         notify(lead, "LEAVE_APPROVED_INFO", "팀원 휴가 등록",
                 r.getEmployee().getName() + "님의 " + summary(r) + " · " + by.title() + " 등록", "/calendar");
-        mailWithLeadCc(r.getEmployee(), lead, LeaveMailTemplates.registered(info(r), domain(), baseUrl(), by), false);
+        mailWithLeadCc(r.getEmployee(), lead, LeaveMailTemplates.registered(info(r), domain(), baseUrl(), by));
     }
 
     // --- 공통 ---
@@ -212,14 +212,9 @@ public class LeaveMessenger {
 
     /**
      * 결과 메일 한 통: 받는 사람 신청자, 참조 담당 팀장. 팀장이 없거나 메일을 받을 수 없으면(이메일 없음·관리 전용 계정)
-     * 신청자에게만. 신청자가 메일을 받을 수 없으면 팀장에게만 보낸다.
+     * 신청자에게만. 신청자가 메일을 받을 수 없으면 팀장에게만 보낸다. 메일 표에는 수신자 줄만 넣는다(참조 줄은 없다).
      */
     private void mailWithLeadCc(Employee applicant, Employee lead, LeaveMailTemplates.Mail mail) {
-        mailWithLeadCc(applicant, lead, mail, true);
-    }
-
-    /** @param ccRow 메일 표에 "참조: 팀장" 줄을 넣을지(직접 등록 메일은 넣지 않는다. 참조로 보내는 것은 같다) */
-    private void mailWithLeadCc(Employee applicant, Employee lead, LeaveMailTemplates.Mail mail, boolean ccRow) {
         Employee to = mailable(applicant) ? applicant : null;
         Employee cc = lead != null && mailable(lead) && (to == null || !lead.getEmail().equals(to.getEmail()))
                 ? lead : null;
@@ -230,10 +225,10 @@ public class LeaveMessenger {
         if (to == null) {
             return;
         }
-        MailLayout.Content content = cc != null
-                ? LeaveMailTemplates.withLeadLink(ccRow ? mail.content().withRecipient(to.getName(), cc.getName())
-                        : mail.content().withRecipient(to.getName()), baseUrl())
-                : mail.content().withRecipient(to.getName());
+        MailLayout.Content content = mail.content().withRecipient(to.getName());
+        if (cc != null) {
+            content = LeaveMailTemplates.withLeadLink(content, baseUrl());
+        }
         publish(List.of(to.getEmail()), cc != null ? List.of(cc.getEmail()) : List.of(), mail, content);
     }
 

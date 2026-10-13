@@ -57,11 +57,6 @@ public final class MailLayout {
             return withTop(List.of(Row.of("수신자", recipient)));
         }
 
-        /** 표 맨 위에 수신자·참조 줄을 넣은 사본(한 통을 함께 받을 때). */
-        public Content withRecipient(String recipient, String cc) {
-            return withTop(List.of(Row.of("수신자", recipient), Row.of("참조", cc)));
-        }
-
         /** 바로가기 링크를 하나 더 붙인 사본. */
         public Content withLink(String label, String url) {
             List<Link> links = new ArrayList<>(moreLinks);

@@ -712,7 +712,7 @@ class LeaveRequestServiceApprovalTest {
                         "<leave-" + request.getId() + "-0.applicant@company.com>",
                         "<leave-" + request.getId() + "-0.approver@company.com>");
                 assertThat(m.text()).contains("직원13님의 휴가가 승인되었습니다")
-                        .contains("수신자: 직원13").contains("참조: 직원7")
+                        .contains("수신자: 직원13").doesNotContain("참조:")
                         .contains("처리자: 직원11 (인사관리자)")
                         .contains("내 휴가 확인하기:").contains("캘린더 보기:");
             });
