@@ -186,4 +186,6 @@ export interface LeaveRequest {
   rejectReason: string | null;
   cancelReason: string | null;
   createdAt: string;
+  /** 결재가 들어온 때: 취소 요청 중이면 취소를 요청한 때, 아니면 신청한 때 */
+  requestedAt: string;
 }

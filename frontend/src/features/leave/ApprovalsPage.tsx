@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -45,6 +46,25 @@ function summary(r: LeaveRequest): string {
   const period = r.startDate === r.endDate ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
   const rule = r.specialRuleName ? ` ${formatSpecialRule(r)}` : "";
   return `${r.employeeName} · ${r.leaveTypeName}${rule} ${period} (${formatLeaveAmount(r)})`;
+}
+
+/** 구분: "연차 신청", "공가 신청", "연차 취소 요청" */
+function kindLabel(r: LeaveRequest): string {
+  return `${r.leaveTypeName} ${r.status === "CANCEL_REQUESTED" ? "취소 요청" : "신청"}`;
+}
+
+type KindFilter = "ALL" | "PENDING" | "CANCEL_REQUESTED";
+const KIND_FILTERS: { value: KindFilter; label: string }[] = [
+  { value: "ALL", label: "전체" },
+  { value: "PENDING", label: "승인 요청" },
+  { value: "CANCEL_REQUESTED", label: "취소 요청" },
+];
+
+const RECENT_MS = 24 * 60 * 60 * 1000;
+
+/** 결재가 들어온 지 24시간이 안 된 요청 */
+function isRecent(r: LeaveRequest): boolean {
+  return Date.now() - new Date(r.requestedAt).getTime() < RECENT_MS;
 }
 
 /** 다른 결재자가 먼저 처리한 신청(409): 목록을 새로 불러와야 한다. */
@@ -83,12 +103,15 @@ export default function ApprovalsPage() {
     queryKey: ["pendingApprovals"],
     queryFn: leaveApi.pending,
   });
-  const { sorted, sort, toggle } = useTableSort(pending, {
-    // 구분: 신규 → 취소요청, 같은 구분 안에서는 본인 신청 먼저
-    kind: (r) => (r.status === "CANCEL_REQUESTED" ? 2 : 0) + (r.ownRequest ? 0 : 1),
+  const [kindFilter, setKindFilter] = useState<KindFilter>("ALL");
+  const countOf = (k: KindFilter) => (k === "ALL" ? pending.length : pending.filter((r) => r.status === k).length);
+  const shown = kindFilter === "ALL" ? pending : pending.filter((r) => r.status === kindFilter);
+  // 서버가 결재가 들어온 때 최신순으로 준다(취소 요청은 취소를 요청한 때)
+  const { sorted, sort, toggle } = useTableSort(shown, {
+    // 구분: 종류 이름 순, 같은 종류에서는 신청 → 취소 요청
+    kind: (r) => `${r.leaveTypeName} ${r.status === "CANCEL_REQUESTED" ? 1 : 0}`,
     employee: (r) => r.employeeName,
     department: (r) => r.departmentName,
-    type: (r) => r.leaveTypeName,
     period: (r) => `${r.startDate} ${r.endDate}`,
     days: (r) => r.days,
     reason: (r) => (r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason),
@@ -142,6 +165,21 @@ export default function ApprovalsPage() {
         <TabsContent value="pending" className="space-y-3">
           {/* 실패를 "대기 중인 결재가 없습니다"로 보이면 결재할 건이 없다고 오해한다 */}
           {isError && <QueryError error={error} onRetry={() => void refetch()} />}
+          <div className="space-y-1">
+            <Label htmlFor="approval-kind" className="text-xs text-muted-foreground">구분</Label>
+            <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as KindFilter)}>
+              <SelectTrigger id="approval-kind" className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {KIND_FILTERS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label} ({countOf(f.value)})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Card>
             <CardContent className="p-0">
               <Table>
@@ -150,7 +188,6 @@ export default function ApprovalsPage() {
                     <SortableTableHead sortKey="kind" sort={sort} onSort={toggle}>구분</SortableTableHead>
                     <SortableTableHead sortKey="employee" sort={sort} onSort={toggle}>신청자</SortableTableHead>
                     <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
-                    <SortableTableHead sortKey="type" sort={sort} onSort={toggle}>종류</SortableTableHead>
                     <SortableTableHead sortKey="period" sort={sort} onSort={toggle}>기간</SortableTableHead>
                     <SortableTableHead sortKey="days" sort={sort} onSort={toggle}>일수</SortableTableHead>
                     <SortableTableHead sortKey="reason" sort={sort} onSort={toggle}>사유</SortableTableHead>
@@ -160,19 +197,29 @@ export default function ApprovalsPage() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                         불러오는 중…
                       </TableCell>
                     </TableRow>
-                  ) : pending.length > 0 ? (
+                  ) : shown.length > 0 ? (
                     sorted.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {r.status === "CANCEL_REQUESTED" ? (
-                              <Badge variant="destructive">취소요청</Badge>
-                            ) : (
-                              <Badge variant="secondary">신규</Badge>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            {isRecent(r) && (
+                              <Badge title="들어온 지 24시간이 안 된 요청입니다">최신</Badge>
+                            )}
+                            <span className="inline-flex items-center gap-2 whitespace-nowrap font-medium">
+                              <span
+                                className="inline-block h-3 w-3 shrink-0 rounded-full"
+                                style={{ backgroundColor: r.leaveTypeColor }}
+                              />
+                              <span className={r.status === "CANCEL_REQUESTED" ? "text-destructive" : undefined}>
+                                {kindLabel(r)}
+                              </span>
+                            </span>
+                            {r.specialRuleName && (
+                              <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
                             )}
                             {r.ownRequest && (
                               <Badge variant="warning" title="결재자 본인의 신청입니다(자가 승인)">
@@ -180,24 +227,12 @@ export default function ApprovalsPage() {
                               </Badge>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{r.employeeName}</TableCell>
-                        <TableCell>{r.departmentName ?? "-"}</TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-2">
-                            <span
-                              className="inline-block h-3 w-3 rounded-full"
-                              style={{ backgroundColor: r.leaveTypeColor }}
-                            />
-                            {r.leaveTypeName}
-                            {r.specialRuleName && (
-                              <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
-                            )}
-                          </span>
                           {r.approvalWarning && (
                             <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
                           )}
                         </TableCell>
+                        <TableCell className="font-medium">{r.employeeName}</TableCell>
+                        <TableCell>{r.departmentName ?? "-"}</TableCell>
                         <TableCell>
                           {r.startDate}
                           {r.startDate !== r.endDate && ` ~ ${r.endDate}`}
@@ -259,13 +294,15 @@ export default function ApprovalsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                         {isError ? (
                           "결재 목록을 불러오지 못했습니다."
                         ) : (
                           <>
                             <Inbox className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                            대기 중인 결재가 없습니다.
+                            {kindFilter === "ALL"
+                              ? "대기 중인 결재가 없습니다."
+                              : `대기 중인 ${KIND_FILTERS.find((f) => f.value === kindFilter)?.label}이 없습니다.`}
                           </>
                         )}
                       </TableCell>

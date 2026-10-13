@@ -198,6 +198,8 @@ public final class LeaveRequestDtos {
             String rejectReason,
             String cancelReason,
             Instant createdAt,
+            /** 결재가 들어온 때: 취소 요청 중이면 취소를 요청한 때, 아니면 신청한 때 */
+            Instant requestedAt,
             /** 결재함에서만: 결재자 본인의 신청인지(자가 승인 건) */
             Boolean ownRequest,
             /** 결재함에서만: 결재자에게 보여 줄 경고(예: 경조사가 팀 동시 부재 한도 초과) */
@@ -209,14 +211,14 @@ public final class LeaveRequestDtos {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
                     leaveTypeColor, startDate, endDate, days, portion, hours, halfDayPart, forfeitedDays,
                     currentPeriodDays, nextPeriodDays, specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
-                    cancelReason, createdAt, own, warning, requestWarning);
+                    cancelReason, createdAt, requestedAt, own, warning, requestWarning);
         }
 
         public Response withRequestWarning(String warning) {
             return new Response(id, employeeId, employeeName, departmentName, leaveTypeId, leaveTypeName,
                     leaveTypeColor, startDate, endDate, days, portion, hours, halfDayPart, forfeitedDays,
                     currentPeriodDays, nextPeriodDays, specialRuleName, specialRuleDays, status, reason, approverName, approvedAt, rejectReason,
-                    cancelReason, createdAt, ownRequest, approvalWarning, warning);
+                    cancelReason, createdAt, requestedAt, ownRequest, approvalWarning, warning);
         }
 
         public static Response from(LeaveRequest r) {
@@ -248,6 +250,7 @@ public final class LeaveRequestDtos {
                     r.getRejectReason(),
                     r.getCancelReason(),
                     r.getCreatedAt(),
+                    r.requestedAt(),
                     null,
                     null,
                     null);

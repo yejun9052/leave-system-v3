@@ -420,12 +420,12 @@ public class LeaveRequestService {
 
     @Transactional(readOnly = true)
     public Page<LeaveRequestDtos.Response> myRequests(Long employeeId, Pageable pageable) {
-        return requestRepository.findByEmployeeIdOrderByStartDateDesc(employeeId, pageable)
+        return requestRepository.findByEmployeeIdOrderByCreatedAtDescIdDesc(employeeId, pageable)
                 .map(LeaveRequestDtos.Response::from);
     }
 
     /**
-     * 결재함 "휴가 목록": 캘린더에서만 보이던 휴가를 목록으로 찾는다(휴가 시작일 최신순).
+     * 결재함 "휴가 목록": 캘린더에서만 보이던 휴가를 목록으로 찾는다(신청한 때 최신순).
      * 인사관리자·시스템 관리자는 전 직원, 팀장은 맡은 부서(하위 포함) 소속 직원만. 맡은 부서가 없으면 빈 목록.
      * 검색 조건은 {@link LeaveRequestSearch}.
      */
@@ -436,7 +436,7 @@ public class LeaveRequestService {
         Employee caller = employeeService.getEntity(callerId);
         Set<Long> scope = isHrApprover(caller) ? null : subordinateDeptIds(caller);
         PageRequest pageable = PageRequest.of(page, size,
-                Sort.by(Sort.Order.desc("startDate"), Sort.Order.desc("id")));
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
         if (scope != null && scope.isEmpty()) {
             return Page.empty(pageable);
         }
@@ -456,15 +456,16 @@ public class LeaveRequestService {
      *   <li>인사관리자·시스템 관리자: 전 직원(본인 포함)</li>
      *   <li>팀장: 맡은 부서(하위 포함) 직원의 신청. 본인 신청은 최상위 부서 팀장일 때만(자가 승인)</li>
      * </ul>
-     * 둘 다인 사람은 합쳐서(중복 없이) 본다.
+     * 둘 다인 사람은 합쳐서(중복 없이) 본다. 결재가 들어온 때({@link LeaveRequest#requestedAt}) 최신순.
      */
     @Transactional(readOnly = true)
     public List<LeaveRequestDtos.Response> pendingForApprover(Long approverId) {
         Employee approver = employeeService.getEntity(approverId);
         LeavePolicy policy = policyService.getActivePolicy();
         return approvalQueue(approver).stream()
-                .sorted(java.util.Comparator.comparing(LeaveRequest::getCreatedAt,
-                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .sorted(java.util.Comparator.comparing(LeaveRequest::requestedAt,
+                                java.util.Comparator.nullsLast(java.util.Comparator.<Instant>reverseOrder()))
+                        .thenComparing(LeaveRequest::getId, java.util.Comparator.reverseOrder()))
                 .map(r -> LeaveRequestDtos.Response.from(r)
                         .withInbox(r.getEmployee().getId().equals(approverId), teamLimitWarning(r, policy)))
                 .toList();

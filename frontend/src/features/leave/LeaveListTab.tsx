@@ -88,7 +88,7 @@ export default function LeaveListTab() {
     onPrev: page > 0 ? () => setPage((p) => p - 1) : null,
     onNext: data && page + 1 < data.totalPages ? () => setPage((p) => p + 1) : null,
   });
-  // 서버가 휴가 시작일 최신순으로 페이지를 나눠 주므로 열 정렬은 지금 페이지 안에서만 한다
+  // 서버가 신청한 때 최신순으로 페이지를 나눠 주므로 열 정렬은 지금 페이지 안에서만 한다
   const { sorted, sort, toggle } = useTableSort(data?.content ?? [], {
     employee: (r) => r.employeeName,
     department: (r) => r.departmentName,

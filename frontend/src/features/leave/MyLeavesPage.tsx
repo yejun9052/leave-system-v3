@@ -61,7 +61,7 @@ export default function MyLeavesPage() {
   const today = todayString();
 
   const balanceQuery = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
-  // 서버가 시작일 최신순으로 20건씩 나눠 준다. 지난 신청(반려·취소 포함)도 볼 수 있게 페이지를 넘긴다
+  // 서버가 신청한 때 최신순으로 20건씩 나눠 준다. 지난 신청(반려·취소 포함)도 볼 수 있게 페이지를 넘긴다
   const [page, setPage] = useState(0);
   const requestsQuery = useQuery({
     queryKey: ["myRequests", { page }],
