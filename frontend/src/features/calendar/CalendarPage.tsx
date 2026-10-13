@@ -6,46 +6,24 @@ import interactionPlugin from "@fullcalendar/interaction";
 import type { DatesSetArg, EventClickArg, EventInput } from "@fullcalendar/core";
 import type { DateClickArg } from "@fullcalendar/interaction";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, X } from "lucide-react";
-import {
-  calendarApi,
-  type CalendarEventDto,
-  type CalendarEventInput,
-  type EventScopeOption,
-} from "@/api/calendar";
+import { Search, X } from "lucide-react";
+import { calendarApi, type CalendarEventDto } from "@/api/calendar";
 import { departmentApi } from "@/api/departments";
 import { leaveApi } from "@/api/leave";
 import { policyRulesApi } from "@/api/policy";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTreeItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { cn } from "@/lib/utils";
-import { flattenDepartments } from "@/lib/departmentTree";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import LeaveEntryPanel from "./LeaveEntryPanel";
 import { BlackoutEntryPanel, RegisterEntryPanel } from "./AdminEntryPanels";
+import { EventDialog, EventEntryPanel } from "./EventForm";
 import DayContextMenu, { type DayMenuTarget } from "./DayContextMenu";
 import DayDetailDialog from "./DayDetailDialog";
 import MobileDaySummary from "./MobileDaySummary";
@@ -65,13 +43,19 @@ import {
 
 type ViewScope = "ALL" | "SCHEDULE" | "DEPARTMENT" | "PERSONAL";
 
-/** 날짜를 눌러 할 일. 강제 등록(휴가 직접 등록)·블랙아웃은 인사관리자·시스템 관리자만 */
-type EntryMode = "LEAVE" | "REGISTER" | "BLACKOUT";
+/** 날짜를 눌러 할 일. 일정 추가는 팀장 이상, 강제 등록(휴가 직접 등록)·블랙아웃은 인사관리자·시스템 관리자만 */
+type EntryMode = "LEAVE" | "EVENT" | "REGISTER" | "BLACKOUT";
 const ENTRY_MODES: { key: EntryMode; label: string; menuLabel: string }[] = [
   { key: "LEAVE", label: "휴가 신청", menuLabel: "이 날짜로 신청하기" },
+  { key: "EVENT", label: "일정 추가", menuLabel: "이 날짜로 일정 추가하기" },
   { key: "REGISTER", label: "강제 등록", menuLabel: "이 날짜로 강제 등록하기" },
   { key: "BLACKOUT", label: "블랙아웃 등록", menuLabel: "이 날짜부터 블랙아웃 등록하기" },
 ];
+
+/** 휴가(신청·강제 등록)는 시작일이 근무일이어야 한다. 일정·블랙아웃은 아무 날이나 */
+function needsWorkdayStart(mode: EntryMode): boolean {
+  return mode === "LEAVE" || mode === "REGISTER";
+}
 
 /** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
 const HOLIDAY_COLOR = "#ef4444";
@@ -79,10 +63,6 @@ const HOLIDAY_COLOR = "#ef4444";
 /** 내 연차 기간 시작일·사용 기한 표시 색(휴가 종류 색과 겹치지 않게) */
 const PERIOD_COLOR = "#0f766e";
 
-/** 일정 범위 선택지의 Select 값: "COMPANY" 또는 "DEPARTMENT:3" */
-function scopeKey(scope: string, departmentId: number | null | undefined): string {
-  return scope === "DEPARTMENT" ? `DEPARTMENT:${departmentId ?? ""}` : scope;
-}
 
 const VIEW_TABS: { key: ViewScope; label: string }[] = [
   { key: "ALL", label: "전체" },
@@ -177,7 +157,6 @@ export default function CalendarPage() {
   const setView = (v: ViewScope) =>
     setParams(v === "ALL" ? {} : { view: v.toLowerCase() }, { replace: true });
   const [editing, setEditing] = useState<CalendarEventDto | null>(null);
-  const [creating, setCreating] = useState(false);
 
   const { data: events = [] } = useQuery({
     queryKey: ["calendarEvents", range],
@@ -243,12 +222,18 @@ export default function CalendarPage() {
   );
   const isWorkday = useCallback((date: string) => !isWeekend(date) && !holidays.has(date), [holidays]);
   const notify = useCallback((message: string) => toast({ title: message }), [toast]);
-  // 날짜를 눌러 할 일: 휴가 신청(모두), 휴가 직접 등록·연차 제한 등록(인사관리자·시스템 관리자)
+  // 날짜를 눌러 할 일: 휴가 신청(모두), 일정 추가(팀장 이상), 강제 등록·블랙아웃 등록(인사관리자·시스템 관리자)
   const isAdmin = useAuthStore((s) => s.hasAnyRole("HR_ADMIN", "SYSTEM_ADMIN"));
+  const entryModes = ENTRY_MODES.filter(
+    (m) => m.key === "LEAVE" || (m.key === "EVENT" ? canManage : isAdmin),
+  );
   const [entryMode, setEntryModeState] = useState<EntryMode>("LEAVE");
-  const mode: EntryMode = isAdmin ? entryMode : "LEAVE";
-  // 연차 제한 기간은 주말·공휴일부터 시작해도 된다. 휴가(신청·직접 등록)는 시작일이 근무일이어야 한다
-  const canStartOn = useCallback((date: string) => mode === "BLACKOUT" || isWorkday(date), [mode, isWorkday]);
+  const mode: EntryMode = entryModes.some((m) => m.key === entryMode) ? entryMode : "LEAVE";
+  // 블랙아웃·일정은 주말·공휴일부터 시작해도 된다. 휴가(신청·강제 등록)는 시작일이 근무일이어야 한다
+  const canStartOn = useCallback(
+    (date: string) => !needsWorkdayStart(mode) || isWorkday(date),
+    [mode, isWorkday],
+  );
   const selector = useDateSelection(canStartOn, notify);
   const { selection } = selector;
   const [panelOpen, setPanelOpen] = useState(false);
@@ -393,26 +378,26 @@ export default function CalendarPage() {
 
   /**
    * 패널 제목의 드롭다운으로 할 일을 바꾼다. 고른 날짜는 그대로 두고 입력 칸만 바뀐다.
-   * 블랙아웃에서 주말·공휴일부터 고른 기간은 휴가(신청·강제 등록)로 쓸 수 없어 선택을 지운다.
+   * 블랙아웃·일정에서 주말·공휴일부터 고른 기간은 휴가(신청·강제 등록)로 쓸 수 없어 선택을 지운다.
    */
   const setEntryMode = (next: EntryMode) => {
     if (next === mode) return;
     setPartial(false); // 휴가 쪽 패널은 열리면서 반차·시간차 여부를 다시 알려 준다
-    if (next !== "BLACKOUT" && selection && !isWorkday(selection.start)) {
+    if (needsWorkdayStart(next) && selection && !isWorkday(selection.start)) {
       notify("시작일이 근무일이 아니라 날짜를 다시 골라 주세요.");
       closePanel();
     }
     setEntryModeState(next);
   };
 
-  // 관리자: 패널 제목 자리에 할 일 드롭다운(기본 휴가 신청)
-  const modeSelect = isAdmin ? (
+  // 팀장 이상: 패널 제목 자리에 할 일 드롭다운(기본 휴가 신청). 고를 것이 휴가 신청뿐이면 그냥 제목
+  const modeSelect = entryModes.length > 1 ? (
     <Select value={mode} onValueChange={(v) => setEntryMode(v as EntryMode)}>
       <SelectTrigger aria-label="할 일" className="h-8 w-[150px] font-semibold">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {ENTRY_MODES.map((m) => (
+        {entryModes.map((m) => (
           <SelectItem key={m.key} value={m.key}>
             {m.label}
           </SelectItem>
@@ -649,16 +634,12 @@ export default function CalendarPage() {
         </>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold">캘린더</h1>
-              <p className="text-sm text-muted-foreground">전사 휴가 현황과 일정을 확인합니다.</p>
-            </div>
-            {canManage && (
-              <Button onClick={() => setCreating(true)}>
-                <Plus className="h-4 w-4" /> 일정 추가
-              </Button>
-            )}
+          <div>
+            <h1 className="text-2xl font-bold">캘린더</h1>
+            <p className="text-sm text-muted-foreground">
+              전사 휴가 현황과 일정을 확인합니다.
+              {canManage && " 일정 추가는 날짜를 누른 뒤 창 제목에서 \"일정 추가\"를 고르세요."}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -782,6 +763,20 @@ export default function CalendarPage() {
           onSaved={closePanel}
         />
       )}
+      {panelOpen && selection && mode === "EVENT" && (
+        <EventEntryPanel
+          selection={selection}
+          heading={modeSelect}
+          variant={isMobile ? "sheet" : "floating"}
+          hidden={picking}
+          onChangeDates={isMobile ? startPicking : undefined}
+          onClose={closePanel}
+          onSaved={() => {
+            closePanel();
+            invalidate();
+          }}
+        />
+      )}
 
       {picking && selection && (
         <div className="fixed inset-x-0 bottom-0 z-40 space-y-2 border-t bg-background p-4 shadow-xl">
@@ -807,194 +802,17 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {(creating || editing) && (
+      {editing && (
         <EventDialog
           event={editing}
-          onClose={() => {
-            setCreating(false);
-            setEditing(null);
-          }}
+          onClose={() => setEditing(null)}
           onSaved={() => {
-            setCreating(false);
             setEditing(null);
             invalidate();
           }}
-          onDelete={editing ? () => remove.mutate(Number(editing.id.slice(1))) : undefined}
+          onDelete={() => remove.mutate(Number(editing.id.slice(1)))}
         />
       )}
     </div>
-  );
-}
-
-function EventDialog({
-  event,
-  onClose,
-  onSaved,
-  onDelete,
-}: {
-  event: CalendarEventDto | null;
-  onClose: () => void;
-  onSaved: () => void;
-  onDelete?: () => void;
-}) {
-  const { toast } = useToast();
-  const confirm = useConfirm();
-  const isEdit = !!event;
-  const [form, setForm] = useState<CalendarEventInput>({
-    title: event?.title ?? "",
-    startDate: event?.start ?? todayString(),
-    // stored end is exclusive for allDay; convert back to inclusive for editing
-    endDate:
-      event && event.allDay
-        ? new Date(new Date(event.end).getTime() - 86400000).toISOString().slice(0, 10)
-        : event?.end ?? todayString(),
-    allDay: event?.allDay ?? true,
-    scope: (event?.scope as "COMPANY" | "DEPARTMENT") ?? "COMPANY",
-    departmentId: event?.departmentId ?? null,
-    colorHex: event?.colorHex ?? "#4f46e5",
-  });
-  const set = <K extends keyof CalendarEventInput>(k: K, v: CalendarEventInput[K]) =>
-    setForm((f) => ({ ...f, [k]: v }));
-
-  // 범위는 드롭다운 하나로 고른다(관리자: 전체 일정 + 모든 팀, 팀장: 맡은 팀). 기본값은 "선택"(미선택),
-  // 수정이면 그 일정의 범위가 선택된 상태. 선택지에 없는 기존 범위(개인 일정 등)는 다시 고르게 한다.
-  const { data: scopeOptions, isLoading: scopesLoading } = useQuery({
-    queryKey: ["eventScopes"],
-    queryFn: calendarApi.eventScopes,
-  });
-  const [selectedKey, setSelectedKey] = useState(() => (event ? scopeKey(event.scope, event.departmentId) : ""));
-  const selectedScope: EventScopeOption | undefined = scopeOptions?.find(
-    (o) => scopeKey(o.scope, o.departmentId) === selectedKey,
-  );
-  const previousScopeMissing = isEdit && !!scopeOptions && !selectedScope;
-  // 부서 선택지는 서버가 트리 순서로 준다. 부서 트리로 깊이를 붙여 하위 부서를 들여쓴다
-  // (팀장은 맡은 부서부터 보이므로 선택지 중 가장 얕은 부서를 0단계로 맞춘다)
-  const { data: departmentTree = [] } = useQuery({
-    queryKey: ["departments", "tree"],
-    queryFn: departmentApi.tree,
-  });
-  const scopeDepth = useMemo(() => {
-    const depthById = new Map(flattenDepartments(departmentTree).map((d) => [d.id, d.depth]));
-    const depths = (scopeOptions ?? [])
-      .filter((o) => o.departmentId != null)
-      .map((o) => depthById.get(o.departmentId!) ?? 0);
-    const base = depths.length > 0 ? Math.min(...depths) : 0;
-    return (o: EventScopeOption) =>
-      o.departmentId != null ? (depthById.get(o.departmentId) ?? base) - base : 0;
-  }, [departmentTree, scopeOptions]);
-  const onScopeChange = (key: string) => {
-    const option = scopeOptions?.find((o) => scopeKey(o.scope, o.departmentId) === key);
-    if (!option) return;
-    setSelectedKey(key);
-    setForm((f) => ({ ...f, scope: option.scope, departmentId: option.departmentId }));
-  };
-
-  const save = useMutation({
-    mutationFn: () =>
-      isEdit && event
-        ? calendarApi.update(Number(event.id.slice(1)), form)
-        : calendarApi.create(form),
-    onSuccess: () => {
-      toast({ title: "저장되었습니다.", variant: "success" });
-      onSaved();
-    },
-    onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
-  });
-
-  const onSave = async () => {
-    const ok = await confirm({
-      title: isEdit ? "일정을 수정할까요?" : "일정을 추가할까요?",
-      description: `${form.title.trim()} (${form.startDate}${form.endDate !== form.startDate ? ` ~ ${form.endDate}` : ""}, ${selectedScope?.label ?? ""})`,
-      confirmText: isEdit ? "수정" : "추가",
-    });
-    if (ok) save.mutate();
-  };
-
-  const onDeleteClick = async () => {
-    const ok = await confirm({
-      title: "일정을 삭제할까요?",
-      description: form.title.trim(),
-      confirmText: "삭제",
-      destructive: true,
-    });
-    if (ok) onDelete?.();
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "일정 수정" : "일정 추가"}</DialogTitle>
-          <DialogDescription className="sr-only">제목·기간·범위·색상을 정해 캘린더 일정을 저장합니다.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="event-title">제목</Label>
-            <Input id="event-title" value={form.title} onChange={(e) => set("title", e.target.value)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="event-start">시작일</Label>
-              <Input id="event-start" type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="event-end">종료일</Label>
-              <Input id="event-end" type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="event-scope">범위</Label>
-              <Select
-                value={selectedScope ? selectedKey : ""}
-                onValueChange={onScopeChange}
-                disabled={scopesLoading || scopeOptions?.length === 0}
-              >
-                <SelectTrigger id="event-scope">
-                  <SelectValue placeholder="선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {scopeOptions?.map((o) => {
-                    const key = scopeKey(o.scope, o.departmentId);
-                    return (
-                      <SelectTreeItem key={key} value={key} depth={scopeDepth(o)}>
-                        {o.label}
-                      </SelectTreeItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              {scopeOptions?.length === 0 && (
-                <p className="text-xs text-destructive">등록할 수 있는 범위가 없습니다.</p>
-              )}
-              {previousScopeMissing && (scopeOptions?.length ?? 0) > 0 && (
-                <p className="text-xs text-muted-foreground">기존 범위는 고를 수 없는 범위입니다. 다시 선택해 주세요.</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="event-color">색상</Label>
-              <Input id="event-color" type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="sm:justify-between">
-          {onDelete ? (
-            <Button variant="destructive" onClick={onDeleteClick}>
-              삭제
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>
-              취소
-            </Button>
-            <Button onClick={onSave} disabled={!form.title.trim() || !selectedScope || save.isPending}>
-              저장
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
