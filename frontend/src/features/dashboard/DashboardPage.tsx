@@ -138,7 +138,7 @@ function PersonalSection() {
         <Kpi icon={CalendarCheck2} label="잔여 연차" value={`${formatDays(b?.remaining)}일`} accent
           sub={`이번 기간 부여 ${formatDays(granted)}일`} />
         <Kpi icon={Inbox} label="결재 대기" value={`${pending}건`}
-          sub={pending > 0 ? <><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" />내 신청 승인 대기</> : "대기 중인 신청이 없어요"} />
+          sub={pending > 0 ? <><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" />내 새 신청 승인 대기</> : "대기 중인 새 신청이 없어요"} />
         <Kpi icon={CalendarClock} label="기산일 D-DAY" valueClassName="text-primary"
           value={dDayLabel(dDay)}
           sub={nextStart ? `다음 기산일 ${monthDay(nextStart)}` : "연차 기간 정보 없음"} />
@@ -208,9 +208,10 @@ const STATUS_PILL: Record<LeaveRequestStatus, string> = {
 const STATUS_SHORT: Partial<Record<LeaveRequestStatus, string>> = { PENDING: "대기" };
 
 type RecentTab = "ALL" | "PENDING" | "APPROVED";
+// "결재 대기"는 위 결재 대기 KPI 와 같은 기준(새 신청만). 취소 요청 중인 건은 "전체"에서 "취소대기"로 보인다
 const RECENT_TABS: { key: RecentTab; label: string }[] = [
   { key: "ALL", label: "전체" },
-  { key: "PENDING", label: "대기" },
+  { key: "PENDING", label: "결재 대기" },
   { key: "APPROVED", label: "승인" },
 ];
 
@@ -228,7 +229,7 @@ function RecentRequests({ className }: { className?: string }) {
   });
   const rows = [...(data?.content ?? [])]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .filter((r) => tab === "ALL" || (tab === "PENDING" ? r.status === "PENDING" || r.status === "CANCEL_REQUESTED" : r.status === tab))
+    .filter((r) => tab === "ALL" || r.status === tab)
     .slice(0, 5);
 
   return (
