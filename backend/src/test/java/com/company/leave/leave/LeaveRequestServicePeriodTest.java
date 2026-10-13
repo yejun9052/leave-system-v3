@@ -166,6 +166,26 @@ class LeaveRequestServicePeriodTest {
     }
 
     @Test
+    void 병가는_다음_기간_날짜여도_그_기간에_부여될_연차가_1일_이상이면_신청할_수_없다() {
+        LeaveType 병가 = new LeaveType("SICK", "병가", BigDecimal.ZERO, false,
+                com.company.leave.leave.domain.DayPortion.FULL,
+                com.company.leave.leave.domain.AnnualDeductionMode.EXHAUST_FIRST, "#ef4444", 5);
+        ReflectionTestUtils.setField(병가, "id", 6L);
+        lenient().when(leaveTypeService.getEntity(6L)).thenReturn(병가);
+        잔액(지금_기간).addUsed(new BigDecimal("15")); // 지금 기간은 다 썼다
+
+        // 지금 기간 날짜는 잔여 0이라 신청된다
+        LeaveRequestDtos.Response now = service.create(10L, new LeaveRequestDtos.Create(6L, 금, 금, "아픔"));
+        assertThat(now.status()).isEqualTo(LeaveRequestStatus.PENDING);
+
+        // 다음 기간 날짜: 그 기간에 부여될 연차(15일 이상)가 남아 있어 지금 기간과 똑같이 막는다
+        assertThatThrownBy(() -> service.create(10L, new LeaveRequestDtos.Create(6L, 화.plusDays(1), 화.plusDays(1), "아픔")))
+                .isInstanceOfSatisfying(BusinessException.class, ex ->
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_ANNUAL_NOT_EXHAUSTED));
+        assertThat(balances).as("미래 기간 잔액 행을 만들지 않는다").doesNotContainKey(지금_기간 + 1);
+    }
+
+    @Test
     void 기산일을_걸친_휴가도_지금_기간_몫이_잔여를_넘으면_신청할_수_없다() {
         잔액(지금_기간).addUsed(new BigDecimal("15"));
 

@@ -1149,7 +1149,13 @@ public class LeaveRequestService {
      * @return 승인 시 소멸될 남은 연차(0 이상 1 미만)
      */
     private BigDecimal requireAnnualExhausted(Long employeeId, int year, LeaveType type, boolean approving) {
-        BigDecimal remaining = balanceService.getOrCreate(employeeId, year).remaining();
+        // 아직 시작 전인 다음 기간 날짜면 그 기간에 부여될 연차(예상)로 따진다. 미래 잔액 행(부여 0)만 보면
+        // 잔여 0 으로 보여 "1일 미만" 조건을 피해 갔다 — 다음 기간 날짜의 병가도 지금 기간과 똑같이 막는다
+        Employee employee = employeeService.getEntity(employeeId);
+        LeavePolicy policy = policyService.getActivePolicy();
+        BigDecimal remaining = isFuturePeriod(employee, year, policy)
+                ? available(employee, year, policy)
+                : balanceService.getOrCreate(employeeId, year).remaining();
         if (remaining.compareTo(BigDecimal.ONE) >= 0) {
             throw new BusinessException(ErrorCode.LEAVE_ANNUAL_NOT_EXHAUSTED,
                     (approving ? "신청자의 " : "") + "잔여 연차가 " + plain(remaining) + "일 남아 있습니다. "
