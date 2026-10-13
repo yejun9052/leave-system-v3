@@ -801,7 +801,7 @@ public class LeaveRequestService {
             String reason = blackoutReason(r, name, start, end);
             restoreAndClearCalendar(r);
             r.forceCancel(reason);
-            messenger.forceCancelled(r, actor, reason, informedLead(r, actor));
+            messenger.blackoutCancelled(r, actor, start + " ~ " + end, reason, informedLead(r, actor));
             auditAfterCommit("blackout_cancel", r, "금지 기간 자동 취소: " + summary(r) + " / " + name);
         }
         return plan;

@@ -138,7 +138,12 @@ class LeaveMailTemplatesTest {
 
         assertThat(rejected.body()).contains("김팀장님이 휴가 신청을 반려했습니다").contains("반려 사유: 마감 주간");
         assertThat(noReason.body()).contains("반려 사유: 미기재");
-        assertThat(forced.body()).contains("이인사님이 홍길동님의 승인된 휴가를 취소했습니다").contains("취소 사유: 근태 정정");
+        assertThat(forced.body()).contains("홍길동님의 휴가가 이인사님에 의해 강제 취소되었습니다.").contains("취소 사유: 근태 정정")
+                .contains("문제가 있을 시 담당자에게 문의하세요.");
+        Mail blackout = LeaveMailTemplates.blackoutCancelled(info, DOMAIN, BASE, 인사, "2026-12-24 ~ 2026-12-31",
+                "연차 사용 금지 기간 지정 (결산, 2026-12-24 ~ 2026-12-31)");
+        assertThat(blackout.body()).contains("연차 사용 금지 기간(2026-12-24 ~ 2026-12-31) 등록으로 인해 연차 사용이 자동 취소되었습니다.")
+                .contains("문제가 있을 시 담당자에게 문의하세요.").contains("취소 사유: 연차 사용 금지 기간 지정 (결산");
     }
 
     @Test
