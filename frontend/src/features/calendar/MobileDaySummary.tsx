@@ -36,12 +36,15 @@ export default function MobileDaySummary({
   query,
   blackoutNames,
   periodNames,
+  applyLabel = "휴가 신청",
   onApply,
   onOpenItem,
   filter = null,
 }: {
   date: string;
   canApply: boolean;
+  /** 버튼 이름. 관리자가 직접 등록·연차 제한 등록을 고르면 바뀐다 */
+  applyLabel?: string;
   query: string;
   /** 그날 걸린 블랙아웃(연차 사용 제한) 이름 */
   blackoutNames: string[];
@@ -106,7 +109,7 @@ export default function MobileDaySummary({
             onClick={() => onApply(date)}
             className="rounded-full border border-primary px-3 py-1.5 text-xs font-semibold text-primary"
           >
-            + 휴가 신청
+            + {applyLabel}
           </button>
         )}
       </div>
@@ -140,7 +143,7 @@ export default function MobileDaySummary({
           className="flex h-14 w-full items-center justify-between rounded-full bg-secondary px-6 text-secondary-foreground"
         >
           <span className="font-semibold">
-            {m}월 {d}일 휴가 신청
+            {m}월 {d}일 {applyLabel}
           </span>
           <Plus className="h-6 w-6" aria-hidden />
         </button>

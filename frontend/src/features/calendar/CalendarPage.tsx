@@ -44,6 +44,7 @@ import { flattenDepartments } from "@/lib/departmentTree";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import LeaveEntryPanel from "./LeaveEntryPanel";
+import { BlackoutEntryPanel, RegisterEntryPanel } from "./AdminEntryPanels";
 import DayContextMenu, { type DayMenuTarget } from "./DayContextMenu";
 import DayDetailDialog from "./DayDetailDialog";
 import MobileDaySummary from "./MobileDaySummary";
@@ -62,6 +63,14 @@ import {
 } from "./useDateSelection";
 
 type ViewScope = "ALL" | "SCHEDULE" | "DEPARTMENT" | "PERSONAL";
+
+/** 날짜를 눌러 할 일. 직접 등록·연차 제한은 인사관리자·시스템 관리자만 */
+type EntryMode = "LEAVE" | "REGISTER" | "BLACKOUT";
+const ENTRY_MODES: { key: EntryMode; label: string; menuLabel: string }[] = [
+  { key: "LEAVE", label: "휴가 신청", menuLabel: "이 날짜로 신청하기" },
+  { key: "REGISTER", label: "휴가 직접 등록", menuLabel: "이 날짜로 직접 등록하기" },
+  { key: "BLACKOUT", label: "연차 제한 등록", menuLabel: "이 날짜부터 연차 제한 등록하기" },
+];
 
 /** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
 const HOLIDAY_COLOR = "#ef4444";
@@ -227,7 +236,13 @@ export default function CalendarPage() {
   );
   const isWorkday = useCallback((date: string) => !isWeekend(date) && !holidays.has(date), [holidays]);
   const notify = useCallback((message: string) => toast({ title: message }), [toast]);
-  const selector = useDateSelection(isWorkday, notify);
+  // 날짜를 눌러 할 일: 휴가 신청(모두), 휴가 직접 등록·연차 제한 등록(인사관리자·시스템 관리자)
+  const isAdmin = useAuthStore((s) => s.hasAnyRole("HR_ADMIN", "SYSTEM_ADMIN"));
+  const [entryMode, setEntryModeState] = useState<EntryMode>("LEAVE");
+  const mode: EntryMode = isAdmin ? entryMode : "LEAVE";
+  // 연차 제한 기간은 주말·공휴일부터 시작해도 된다. 휴가(신청·직접 등록)는 시작일이 근무일이어야 한다
+  const canStartOn = useCallback((date: string) => mode === "BLACKOUT" || isWorkday(date), [mode, isWorkday]);
+  const selector = useDateSelection(canStartOn, notify);
   const { selection } = selector;
   const [panelOpen, setPanelOpen] = useState(false);
   // 패널에서 반차·시간차를 고른 상태면 누를 때마다 그 하루만 선택한다
@@ -359,6 +374,13 @@ export default function CalendarPage() {
   // 다시 불러오기는 신청 폼(invalidateLeaveData)이 맡는다
   const onLeaveSaved = () => closePanel();
 
+  /** 할 일을 바꾸면 고르던 날짜와 열린 패널을 닫는다(시작일 규칙과 입력이 다르다) */
+  const setEntryMode = (next: EntryMode) => {
+    if (next === mode) return;
+    closePanel();
+    setEntryModeState(next);
+  };
+
   // 이름(제목) 검색은 휴가·일정만 거른다(공휴일·연차 제한·연차 기간 표시는 그대로). 모바일 돋보기와 같은 규칙
   const q = query.trim();
   const calendarEvents: EventInput[] = filtered
@@ -410,7 +432,7 @@ export default function CalendarPage() {
       end: addDays(selection.end ?? selection.start, 1),
       allDay: true,
       display: "background",
-      backgroundColor: "#4f46e5",
+      backgroundColor: mode === "BLACKOUT" ? HOLIDAY_COLOR : "#4f46e5",
     });
   }
 
@@ -528,6 +550,28 @@ export default function CalendarPage() {
       ))}
     </div>
   );
+  // 관리자만: 날짜를 누르면 무엇을 할지
+  const modePicker = isAdmin && (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted-foreground">날짜를 누르면</span>
+      <div className="flex w-fit gap-1 rounded-lg bg-muted p-1" role="group" aria-label="날짜를 누르면">
+        {ENTRY_MODES.map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            aria-pressed={mode === m.key}
+            onClick={() => setEntryMode(m.key)}
+            className={cn(
+              "rounded-md px-3 py-1.5 font-medium transition-colors",
+              mode === m.key ? "bg-background shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
   const deptPicker =
     view === "DEPARTMENT" && deptChain.length > 0 && (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="group" aria-label="볼 부서">
@@ -554,6 +598,7 @@ export default function CalendarPage() {
           <div className="space-y-2">
             {viewTabs}
             {deptPicker}
+            {modePicker}
           </div>
           <MobileMonthView
             month={viewMonth}
@@ -577,6 +622,7 @@ export default function CalendarPage() {
             date={focused}
             filter={summaryFilter}
             canApply={canApply}
+            applyLabel={ENTRY_MODES.find((m) => m.key === mode)?.label}
             query={query}
             blackoutNames={focusedBlackouts}
             periodNames={focusedPeriodMarks}
@@ -591,11 +637,14 @@ export default function CalendarPage() {
               <h1 className="text-2xl font-bold">캘린더</h1>
               <p className="text-sm text-muted-foreground">전사 휴가 현황과 일정을 확인합니다.</p>
             </div>
-            {canManage && (
-              <Button onClick={() => setCreating(true)}>
-                <Plus className="h-4 w-4" /> 일정 추가
-              </Button>
-            )}
+            <div className="flex flex-wrap items-center gap-3">
+              {modePicker}
+              {canManage && (
+                <Button onClick={() => setCreating(true)}>
+                  <Plus className="h-4 w-4" /> 일정 추가
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -659,6 +708,7 @@ export default function CalendarPage() {
           key={`${menu.date}-${menu.x}-${menu.y}`}
           target={menu}
           canApply={canApply}
+          applyLabel={ENTRY_MODES.find((m) => m.key === mode)?.menuLabel}
           onApply={applyFrom}
           onDetail={(date) => {
             setMenu(null);
@@ -677,7 +727,7 @@ export default function CalendarPage() {
         />
       )}
 
-      {panelOpen && selection && (
+      {panelOpen && selection && mode === "LEAVE" && (
         <LeaveEntryPanel
           selection={selection}
           variant={isMobile ? "sheet" : "floating"}
@@ -686,6 +736,27 @@ export default function CalendarPage() {
           onClose={closePanel}
           onSaved={onLeaveSaved}
           onPartialChange={onPartialChange}
+        />
+      )}
+      {panelOpen && selection && mode === "REGISTER" && (
+        <RegisterEntryPanel
+          selection={selection}
+          variant={isMobile ? "sheet" : "floating"}
+          hidden={picking}
+          onChangeDates={isMobile ? startPicking : undefined}
+          onClose={closePanel}
+          onSaved={onLeaveSaved}
+          onPartialChange={onPartialChange}
+        />
+      )}
+      {panelOpen && selection && mode === "BLACKOUT" && (
+        <BlackoutEntryPanel
+          selection={selection}
+          variant={isMobile ? "sheet" : "floating"}
+          hidden={picking}
+          onChangeDates={isMobile ? startPicking : undefined}
+          onClose={closePanel}
+          onSaved={closePanel}
         />
       )}
 
