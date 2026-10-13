@@ -81,6 +81,15 @@ export default function PolicyPage() {
   const requested = params.get("tab");
   const tab = requested && TABS.includes(requested) ? requested : "policy";
   const changeTab = (v: string) => setParams(v === "policy" ? {} : { tab: v }, { replace: true });
+  // 한 번 연 탭은 다른 탭으로 옮겨도 숨기기만 하고 그대로 둔다: 저장하지 않은 입력이 탭을 옮기는 순간 사라졌다
+  const [visited, setVisited] = useState<Set<string>>(() => new Set([tab]));
+  if (!visited.has(tab)) setVisited(new Set(visited).add(tab));
+  const panel = (value: string, content: React.ReactNode) =>
+    visited.has(value) && (
+      <TabsContent value={value} forceMount className="data-[state=inactive]:hidden">
+        {content}
+      </TabsContent>
+    );
   return (
     <div className="space-y-6">
       <div>
@@ -98,30 +107,14 @@ export default function PolicyPage() {
           <TabsTrigger value="automation">자동화</TabsTrigger>
           <TabsTrigger value="backup">백업</TabsTrigger>
         </TabsList>
-        <TabsContent value="policy">
-          <PolicyTab />
-        </TabsContent>
-        <TabsContent value="types">
-          <LeaveTypeTab />
-        </TabsContent>
-        <TabsContent value="rules">
-          <RulesTab />
-        </TabsContent>
-        <TabsContent value="blackout">
-          <BlackoutTab />
-        </TabsContent>
-        <TabsContent value="holidays">
-          <HolidayTab />
-        </TabsContent>
-        <TabsContent value="promotion">
-          <PromotionTab />
-        </TabsContent>
-        <TabsContent value="automation">
-          <AutomationTab />
-        </TabsContent>
-        <TabsContent value="backup">
-          <BackupTab />
-        </TabsContent>
+        {panel("policy", <PolicyTab />)}
+        {panel("types", <LeaveTypeTab />)}
+        {panel("rules", <RulesTab />)}
+        {panel("blackout", <BlackoutTab />)}
+        {panel("holidays", <HolidayTab />)}
+        {panel("promotion", <PromotionTab />)}
+        {panel("automation", <AutomationTab />)}
+        {panel("backup", <BackupTab />)}
       </Tabs>
     </div>
   );
