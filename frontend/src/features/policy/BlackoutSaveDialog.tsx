@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, CalendarRange, Loader2 } from "lucide-react";
+import DateRangePickerDialog from "@/features/calendar/DateRangePickerDialog";
 import {
   BLACKOUT_CONFLICT_LABEL,
   policyRulesApi,
@@ -61,6 +62,7 @@ export default function BlackoutSaveDialog({
   const [name, setName] = useState(editing?.name ?? initial?.name ?? "");
   const [impact, setImpact] = useState<BlackoutImpact | null>(null);
   const [checking, setChecking] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   const check = async (s = startDate, e = endDate) => {
     if (!s || !e) {
@@ -136,11 +138,30 @@ export default function BlackoutSaveDialog({
                 <Label htmlFor="blackout-dialog-end" className="text-xs">종료</Label>
                 <Input id="blackout-dialog-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
+              <div className="flex items-end">
+                <Button type="button" variant="outline" onClick={() => setPicking(true)}>
+                  <CalendarRange className="h-4 w-4" /> 달력에서 고르기
+                </Button>
+              </div>
               <div className="min-w-[200px] flex-1 space-y-1">
                 <Label htmlFor="blackout-dialog-name" className="text-xs">명칭</Label>
                 <Input id="blackout-dialog-name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
             </div>
+            {picking && (
+              <DateRangePickerDialog
+                title="금지 기간 고르기"
+                initialStart={startDate || undefined}
+                initialEnd={endDate || undefined}
+                excludeBlackoutId={editing?.id}
+                onPick={(s, e) => {
+                  setStartDate(s);
+                  setEndDate(e);
+                  setPicking(false);
+                }}
+                onClose={() => setPicking(false)}
+              />
+            )}
             {checking && (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> 겹치는 휴가를 확인하는 중…

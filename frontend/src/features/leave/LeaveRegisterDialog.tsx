@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
-import { Loader2, Search, X } from "lucide-react";
+import { CalendarRange, Loader2, Search, X } from "lucide-react";
 import { employeeApi } from "@/api/employees";
 import { leaveApi } from "@/api/leave";
 import { extractErrorCode, extractErrorMessage } from "@/api/client";
@@ -27,13 +27,14 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { formatDays } from "@/lib/leaveFormat";
 import { HALF_DAY_LABEL, type Employee, type HalfDayPart } from "@/types";
+import DateRangePickerDialog from "@/features/calendar/DateRangePickerDialog";
 import { HalfDayPartSelect } from "./LeaveRequestForm";
 
 /**
- * 인사관리자·시스템 관리자의 휴가 직접 등록: 다른 직원의 휴가를 바로 승인 상태로 등록한다.
- * 지난 날짜도 가능하지만 시작일은 근무일이어야 하고, 블랙아웃·사전 신청 기한은 적용하지 않는다(서버 검사).
+ * 휴가 직접 등록 입력과 등록. 기간(start, end)은 부르는 쪽이 정한다(등록 창의 날짜 칸, 캘린더 선택).
+ * 반차·시간차·반일 규정이면 isPartial 이 켜지고 종료일은 시작일과 같게 보낸다.
  */
-export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }) {
+export function useLeaveRegisterForm({ start, end, onDone }: { start: string; end: string; onDone: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -44,8 +45,6 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
   const [typeId, setTypeId] = useState("");
   const [specialRuleId, setSpecialRuleId] = useState("");
   const [halfDayPart, setHalfDayPart] = useState<HalfDayPart | "">("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
   const [hours, setHours] = useState("");
   const [reason, setReason] = useState("");
 
@@ -99,7 +98,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
     onSuccess: () => {
       toast({ title: "휴가를 등록했습니다. 바로 승인 상태입니다.", variant: "success" });
       invalidateLeaveData(qc);
-      onClose();
+      onDone();
     },
     onError: async (e) => {
       // 경조사 규정의 연간 사용 횟수(예: 생일 반차 연 1회)를 넘으면 막지 않고 경고를 확인받아 다시 보낸다
@@ -129,7 +128,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
     (!halfDayRule || !!halfDayPart) &&
     !register.isPending;
 
-  const onSubmit = async () => {
+  const submit = async () => {
     if (!employee || !selectedType) return;
     const period = start === endDate ? start : `${start} ~ ${endDate}`;
     const rule = needsRule ? specialRules.find((r) => String(r.id) === specialRuleId)?.name : null;
@@ -145,6 +144,215 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
     if (ok) register.mutate(false);
   };
 
+  return {
+    employee,
+    setEmployee,
+    keyword,
+    setKeyword,
+    search,
+    setSearch,
+    searching,
+    candidates,
+    usableTypes,
+    typeId,
+    setTypeId,
+    needsRule,
+    specialRules,
+    specialRuleId,
+    setSpecialRuleId,
+    halfDayRule,
+    halfDayPart,
+    setHalfDayPart,
+    isPartial,
+    isHourly,
+    endDate,
+    hours,
+    setHours,
+    reason,
+    setReason,
+    canSubmit,
+    pending: register.isPending,
+    submit,
+  };
+}
+
+export type LeaveRegisterFormState = ReturnType<typeof useLeaveRegisterForm>;
+
+/** 직원·종류·규정·시간·사유 입력. 기간 칸은 dates 로 받아 종류 아래에 둔다 */
+export function LeaveRegisterFields({ form, dates }: { form: LeaveRegisterFormState; dates: React.ReactNode }) {
+  const {
+    employee,
+    setEmployee,
+    keyword,
+    setKeyword,
+    search,
+    setSearch,
+    searching,
+    candidates,
+    usableTypes,
+    typeId,
+    setTypeId,
+    needsRule,
+    specialRules,
+    specialRuleId,
+    setSpecialRuleId,
+    halfDayRule,
+    halfDayPart,
+    setHalfDayPart,
+    isHourly,
+    hours,
+    setHours,
+    reason,
+    setReason,
+  } = form;
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor={employee ? undefined : "leave-register-employee"}>직원</Label>
+        {employee ? (
+          <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+            <span>
+              <span className="font-medium">{employee.name}</span>
+              <span className="ml-2 text-xs text-muted-foreground">
+                {employee.departmentName ?? "부서 없음"} · {employee.email}
+              </span>
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label="직원 다시 고르기"
+              onClick={() => {
+                setEmployee(null);
+                setKeyword("");
+                setSearch("");
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="leave-register-employee"
+                className="pl-9"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="이름 또는 이메일로 검색"
+                autoFocus
+              />
+            </div>
+            {search && (
+              <ul className="max-h-48 divide-y overflow-y-auto rounded-md border">
+                {searching && candidates.length === 0 ? (
+                  <li className="flex justify-center py-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </li>
+                ) : candidates.length === 0 ? (
+                  <li className="px-3 py-2 text-sm text-muted-foreground">검색 결과가 없습니다.</li>
+                ) : (
+                  candidates.map((e) => (
+                    <li key={e.id}>
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                        onClick={() => setEmployee(e)}
+                      >
+                        <span className="font-medium">{e.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {e.departmentName ?? "부서 없음"} · {e.email}
+                        </span>
+                      </button>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="leave-register-type">휴가 종류</Label>
+        <Select value={typeId} onValueChange={setTypeId}>
+          <SelectTrigger id="leave-register-type">
+            <SelectValue placeholder="종류 선택" />
+          </SelectTrigger>
+          <SelectContent>
+            {usableTypes.map((t) => (
+              <SelectItem key={t.id} value={String(t.id)}>
+                {t.name} ({formatDays(t.deductDays)}일 차감)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {needsRule && (
+        <div className="space-y-2">
+          <Label htmlFor="leave-register-rule">사유(규정)</Label>
+          <Select value={specialRuleId} onValueChange={setSpecialRuleId}>
+            <SelectTrigger id="leave-register-rule">
+              <SelectValue placeholder="규정 선택" />
+            </SelectTrigger>
+            <SelectContent>
+              {specialRules.map((r) => (
+                <SelectItem key={r.id} value={String(r.id)}>
+                  {r.name} (최대 {formatDays(r.days)}일)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {halfDayRule && <HalfDayPartSelect value={halfDayPart} onChange={setHalfDayPart} />}
+
+      {dates}
+
+      {isHourly && (
+        <div className="space-y-2">
+          <Label htmlFor="leave-register-hours">시간</Label>
+          <Select value={hours} onValueChange={setHours}>
+            <SelectTrigger id="leave-register-hours">
+              <SelectValue placeholder="시간 선택 (1~3시간)" />
+            </SelectTrigger>
+            <SelectContent>
+              {[1, 2, 3].map((h) => (
+                <SelectItem key={h} value={String(h)}>
+                  {h}시간
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="leave-register-reason">사유 (선택)</Label>
+        <Input
+          id="leave-register-reason"
+          value={reason}
+          maxLength={500}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="예: 구두 신청분 사후 등록"
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 인사관리자·시스템 관리자의 휴가 직접 등록: 다른 직원의 휴가를 바로 승인 상태로 등록한다.
+ * 지난 날짜도 가능하지만 시작일은 근무일이어야 하고, 블랙아웃·사전 신청 기한은 적용하지 않는다(서버 검사).
+ * 날짜는 직접 입력하거나 일정만 보이는 달력에서 고른다. 캘린더 화면에서는 날짜를 눌러 등록하는 패널을 쓴다.
+ */
+export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }) {
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [picking, setPicking] = useState(false);
+  const form = useLeaveRegisterForm({ start, end, onDone: onClose });
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
@@ -155,165 +363,58 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor={employee ? undefined : "leave-register-employee"}>직원</Label>
-            {employee ? (
-              <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
-                <span>
-                  <span className="font-medium">{employee.name}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {employee.departmentName ?? "부서 없음"} · {employee.email}
-                  </span>
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label="직원 다시 고르기"
-                  onClick={() => {
-                    setEmployee(null);
-                    setKeyword("");
-                    setSearch("");
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <LeaveRegisterFields
+          form={form}
+          dates={
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="leave-register-start">{form.isPartial ? "날짜" : "시작일"}</Label>
+                  <Input id="leave-register-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="leave-register-end">종료일</Label>
                   <Input
-                    id="leave-register-employee"
-                    className="pl-9"
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                    placeholder="이름 또는 이메일로 검색"
-                    autoFocus
+                    id="leave-register-end"
+                    type="date"
+                    value={form.endDate}
+                    min={start || undefined}
+                    disabled={form.isPartial}
+                    onChange={(e) => setEnd(e.target.value)}
                   />
                 </div>
-                {search && (
-                  <ul className="max-h-48 divide-y overflow-y-auto rounded-md border">
-                    {searching && candidates.length === 0 ? (
-                      <li className="flex justify-center py-3">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </li>
-                    ) : candidates.length === 0 ? (
-                      <li className="px-3 py-2 text-sm text-muted-foreground">검색 결과가 없습니다.</li>
-                    ) : (
-                      candidates.map((e) => (
-                        <li key={e.id}>
-                          <button
-                            type="button"
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
-                            onClick={() => setEmployee(e)}
-                          >
-                            <span className="font-medium">{e.name}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {e.departmentName ?? "부서 없음"} · {e.email}
-                            </span>
-                          </button>
-                        </li>
-                      ))
-                    )}
-                  </ul>
-                )}
               </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="leave-register-type">휴가 종류</Label>
-            <Select value={typeId} onValueChange={setTypeId}>
-              <SelectTrigger id="leave-register-type">
-                <SelectValue placeholder="종류 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                {usableTypes.map((t) => (
-                  <SelectItem key={t.id} value={String(t.id)}>
-                    {t.name} ({formatDays(t.deductDays)}일 차감)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {needsRule && (
-            <div className="space-y-2">
-              <Label htmlFor="leave-register-rule">사유(규정)</Label>
-              <Select value={specialRuleId} onValueChange={setSpecialRuleId}>
-                <SelectTrigger id="leave-register-rule">
-                  <SelectValue placeholder="규정 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  {specialRules.map((r) => (
-                    <SelectItem key={r.id} value={String(r.id)}>
-                      {r.name} (최대 {formatDays(r.days)}일)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>
+                <CalendarRange className="h-4 w-4" /> 달력에서 고르기
+              </Button>
             </div>
-          )}
-          {halfDayRule && <HalfDayPartSelect value={halfDayPart} onChange={setHalfDayPart} />}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="leave-register-start">{isPartial ? "날짜" : "시작일"}</Label>
-              <Input id="leave-register-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="leave-register-end">종료일</Label>
-              <Input
-                id="leave-register-end"
-                type="date"
-                value={endDate}
-                min={start || undefined}
-                disabled={isPartial}
-                onChange={(e) => setEnd(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {isHourly && (
-            <div className="space-y-2">
-              <Label htmlFor="leave-register-hours">시간</Label>
-              <Select value={hours} onValueChange={setHours}>
-                <SelectTrigger id="leave-register-hours">
-                  <SelectValue placeholder="시간 선택 (1~3시간)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[1, 2, 3].map((h) => (
-                    <SelectItem key={h} value={String(h)}>
-                      {h}시간
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="leave-register-reason">사유 (선택)</Label>
-            <Input
-              id="leave-register-reason"
-              value={reason}
-              maxLength={500}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="예: 구두 신청분 사후 등록"
-            />
-          </div>
-        </div>
+          }
+        />
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             닫기
           </Button>
-          <Button onClick={onSubmit} disabled={!canSubmit}>
-            {register.isPending && <Loader2 className="h-4 w-4 animate-spin" />} 등록
+          <Button onClick={form.submit} disabled={!form.canSubmit}>
+            {form.pending && <Loader2 className="h-4 w-4 animate-spin" />} 등록
           </Button>
         </DialogFooter>
       </DialogContent>
+      {picking && (
+        <DateRangePickerDialog
+          title={form.isPartial ? "등록할 날짜 고르기" : "등록할 기간 고르기"}
+          initialStart={start || undefined}
+          initialEnd={form.endDate || undefined}
+          single={form.isPartial}
+          workdayStart
+          onPick={(s, e) => {
+            setStart(s);
+            setEnd(e);
+            setPicking(false);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
     </Dialog>
   );
 }

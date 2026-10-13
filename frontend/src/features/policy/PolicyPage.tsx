@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
-import { Pencil, Plus, Save, Trash2, PlayCircle } from "lucide-react";
+import { CalendarRange, Pencil, Plus, Save, Trash2, PlayCircle } from "lucide-react";
 import {
   policyApi,
   leaveTypeApi,
@@ -57,6 +57,7 @@ import HolidayTab from "./HolidayTab";
 import PromotionTab from "./PromotionTab";
 import SpecialRuleEditDialog from "./SpecialRuleEditDialog";
 import BlackoutSaveDialog from "./BlackoutSaveDialog";
+import DateRangePickerDialog from "@/features/calendar/DateRangePickerDialog";
 import AutomationTab from "./AutomationTab";
 import BackupTab from "./BackupTab";
 
@@ -173,210 +174,191 @@ function PolicyTab() {
     return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
   }
 
+  // 한 상자 안에 분류(부여 기준 · 사용 규칙 · 근속 가산 · 사용 통제)를 위에서 아래로 늘어놓고 가로줄로 나눈다
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      {changedElsewhere && (
-        <div className="lg:col-span-2">
-          <ChangedElsewhereNotice onReload={reload} />
-        </div>
-      )}
+    <div className="max-w-3xl space-y-4">
+      {changedElsewhere && <ChangedElsewhereNotice onReload={reload} />}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">부여 기준</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="policy-grant-basis">연차 부여 기준</Label>
-            <Select value={form.grantBasis} onValueChange={(v) => set("grantBasis", v as GrantBasis)}>
-              <SelectTrigger id="policy-grant-basis">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="HIRE_DATE">입사일 기준 (근로기준법 원칙)</SelectItem>
-                <SelectItem value="FISCAL_YEAR">회계연도 기준 (일괄 부여)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {form.grantBasis === "FISCAL_YEAR" && (
+        <CardContent className="pt-6">
+          <PolicySection title="부여 기준" first>
+            <div className="space-y-2">
+              <Label htmlFor="policy-grant-basis">연차 부여 기준</Label>
+              <Select value={form.grantBasis} onValueChange={(v) => set("grantBasis", v as GrantBasis)}>
+                <SelectTrigger id="policy-grant-basis">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="HIRE_DATE">입사일 기준 (근로기준법 원칙)</SelectItem>
+                  <SelectItem value="FISCAL_YEAR">회계연도 기준 (일괄 부여)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.grantBasis === "FISCAL_YEAR" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="policy-fiscal-month">회계 시작 월</Label>
+                  <Input
+                    id="policy-fiscal-month"
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={form.fiscalStartMonth}
+                    onChange={(e) => set("fiscalStartMonth", Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="policy-fiscal-day">회계 시작 일</Label>
+                  <Input
+                    id="policy-fiscal-day"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={form.fiscalStartDay}
+                    onChange={(e) => set("fiscalStartDay", Number(e.target.value))}
+                  />
+                </div>
+              </div>
+            )}
+          </PolicySection>
+
+          <PolicySection title="사용 규칙">
+            <ToggleRow
+              label="반차 사용 허용"
+              checked={form.halfDayEnabled}
+              onChange={(v) => set("halfDayEnabled", v)}
+            />
+            <ToggleRow
+              label="시간차 사용"
+              desc="1시간(0.125일) 단위, 한 건 1~3시간, 기본 꺼짐"
+              checked={form.hourlyEnabled}
+              onChange={(v) => set("hourlyEnabled", v)}
+            />
+            <ToggleRow
+              label="마이너스 연차 허용"
+              desc="잔여 연차를 초과해 신청 가능"
+              checked={form.allowNegative}
+              onChange={(v) => set("allowNegative", v)}
+            />
+            <ToggleRow
+              label="다음 연차 기간 예약 허용"
+              desc="다음 기산일 이후 날짜도 신청(그 기간 예상 부여 일수 안에서, 다음 기간 끝까지)"
+              checked={form.nextPeriodReservationEnabled}
+              onChange={(v) => set("nextPeriodReservationEnabled", v)}
+            />
+            <ToggleRow
+              label="미사용 연차 이월"
+              checked={form.carryOverEnabled}
+              onChange={(v) => set("carryOverEnabled", v)}
+            />
+            {form.carryOverEnabled && (
+              <div className="space-y-2">
+                <Label htmlFor="policy-max-carry-over">최대 이월 일수</Label>
+                <Input
+                  id="policy-max-carry-over"
+                  type="number"
+                  step="0.5"
+                  value={form.maxCarryOverDays}
+                  onChange={(e) => set("maxCarryOverDays", Number(e.target.value))}
+                />
+              </div>
+            )}
+          </PolicySection>
+
+          <PolicySection title="근속 가산 연차">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="policy-fiscal-month">회계 시작 월</Label>
-                <Input
-                  id="policy-fiscal-month"
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={form.fiscalStartMonth}
-                  onChange={(e) => set("fiscalStartMonth", Number(e.target.value))}
-                />
+                <Label htmlFor="policy-base-annual">기본 연차(1년 이상)</Label>
+                <Input id="policy-base-annual" type="number" step="0.5" value={form.baseAnnualDays}
+                  onChange={(e) => set("baseAnnualDays", Number(e.target.value))} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="policy-fiscal-day">회계 시작 일</Label>
-                <Input
-                  id="policy-fiscal-day"
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={form.fiscalStartDay}
-                  onChange={(e) => set("fiscalStartDay", Number(e.target.value))}
-                />
+                <Label htmlFor="policy-max-annual">상한(최대 연차)</Label>
+                <Input id="policy-max-annual" type="number" step="0.5" value={form.maxAnnualDays}
+                  onChange={(e) => set("maxAnnualDays", Number(e.target.value))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="policy-seniority-step">가산 주기(년)</Label>
+                <Input id="policy-seniority-step" type="number" min={1} value={form.seniorityStepYears}
+                  onChange={(e) => set("seniorityStepYears", Number(e.target.value))} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="policy-seniority-increment">가산량(일)</Label>
+                <Input id="policy-seniority-increment" type="number" step="0.5" value={form.seniorityIncrementDays}
+                  onChange={(e) => set("seniorityIncrementDays", Number(e.target.value))} />
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">사용 규칙</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ToggleRow
-            label="반차 사용 허용"
-            checked={form.halfDayEnabled}
-            onChange={(v) => set("halfDayEnabled", v)}
-          />
-          <ToggleRow
-            label="시간차 사용"
-            desc="1시간(0.125일) 단위, 한 건 1~3시간, 기본 꺼짐"
-            checked={form.hourlyEnabled}
-            onChange={(v) => set("hourlyEnabled", v)}
-          />
-          <ToggleRow
-            label="마이너스 연차 허용"
-            desc="잔여 연차를 초과해 신청 가능"
-            checked={form.allowNegative}
-            onChange={(v) => set("allowNegative", v)}
-          />
-          <ToggleRow
-            label="다음 연차 기간 예약 허용"
-            desc="다음 기산일 이후 날짜도 신청(그 기간 예상 부여 일수 안에서, 다음 기간 끝까지)"
-            checked={form.nextPeriodReservationEnabled}
-            onChange={(v) => set("nextPeriodReservationEnabled", v)}
-          />
-          <ToggleRow
-            label="미사용 연차 이월"
-            checked={form.carryOverEnabled}
-            onChange={(v) => set("carryOverEnabled", v)}
-          />
-          {form.carryOverEnabled && (
-            <div className="space-y-2">
-              <Label htmlFor="policy-max-carry-over">최대 이월 일수</Label>
-              <Input
-                id="policy-max-carry-over"
-                type="number"
-                step="0.5"
-                value={form.maxCarryOverDays}
-                onChange={(e) => set("maxCarryOverDays", Number(e.target.value))}
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">근속 가산 연차</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="policy-base-annual">기본 연차(1년 이상)</Label>
-              <Input id="policy-base-annual" type="number" step="0.5" value={form.baseAnnualDays}
-                onChange={(e) => set("baseAnnualDays", Number(e.target.value))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="policy-max-annual">상한(최대 연차)</Label>
-              <Input id="policy-max-annual" type="number" step="0.5" value={form.maxAnnualDays}
-                onChange={(e) => set("maxAnnualDays", Number(e.target.value))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="policy-seniority-step">가산 주기(년)</Label>
-              <Input id="policy-seniority-step" type="number" min={1} value={form.seniorityStepYears}
-                onChange={(e) => set("seniorityStepYears", Number(e.target.value))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="policy-seniority-increment">가산량(일)</Label>
-              <Input id="policy-seniority-increment" type="number" step="0.5" value={form.seniorityIncrementDays}
-                onChange={(e) => set("seniorityIncrementDays", Number(e.target.value))} />
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            예) 기본 15 · 주기 2년 · 가산 1일 · 상한 25 → 3년차 16일, 5년차 17일 … (근로기준법 기본값)
-          </p>
-          <ToggleRow label="1년 미만 월차 부여" desc="1개월 개근 시 1일" checked={form.monthlyAccrualEnabled}
-            onChange={(v) => set("monthlyAccrualEnabled", v)} />
-          {form.monthlyAccrualEnabled && (
-            <div className="space-y-2">
-              <Label htmlFor="policy-monthly-max">월차 상한(일)</Label>
-              <Input id="policy-monthly-max" type="number" min={0} value={form.monthlyAccrualMax}
-                onChange={(e) => set("monthlyAccrualMax", Number(e.target.value))} />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">사용 통제</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="policy-max-concurrent">팀 동시 부재 최대 인원 (0 = 무제한, 넘어도 신청은 되고 결재할 때 경고)</Label>
-            <Input id="policy-max-concurrent" type="number" min={0} value={form.maxConcurrentAbsence}
-              onChange={(e) => set("maxConcurrentAbsence", Number(e.target.value))} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="policy-min-advance">최소 사전 신청 기한(일, 0 = 제한 없음)</Label>
-            <Input id="policy-min-advance" type="number" min={0} value={form.minAdvanceDays}
-              onChange={(e) => set("minAdvanceDays", Number(e.target.value))} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="policy-max-consecutive">최대 연속 사용일 (0 = 무제한)</Label>
-            <Input id="policy-max-consecutive" type="number" min={0} value={form.maxConsecutiveDays}
-              onChange={(e) => set("maxConsecutiveDays", Number(e.target.value))} />
-          </div>
-          <div className="space-y-2">
-            <Label id="policy-blackout-conflict">사용 금지 기간을 등록할 때 겹치는 기존 휴가</Label>
-            <div className="grid gap-2" role="radiogroup" aria-labelledby="policy-blackout-conflict">
-              {(Object.keys(BLACKOUT_CONFLICT_LABEL) as BlackoutConflictMode[]).map((mode) => (
-                <label
-                  key={mode}
-                  className={cn(
-                    "flex cursor-pointer gap-3 rounded-md border p-3 text-sm",
-                    form.blackoutConflictMode === mode && "border-primary bg-primary/5",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="blackoutConflictMode"
-                    className="mt-0.5"
-                    checked={form.blackoutConflictMode === mode}
-                    onChange={() => set("blackoutConflictMode", mode)}
-                  />
-                  <span>
-                    <span className="font-medium">
-                      {BLACKOUT_CONFLICT_LABEL[mode]}
-                      {mode === "KEEP_APPROVED" && " (기본)"}
-                    </span>
-                    <span className="block text-xs text-muted-foreground">
-                      {mode === "KEEP_APPROVED"
-                        ? "승인된 휴가(취소 요청 중 포함)는 그대로 두고, 결재 대기 휴가만 자동 반려합니다."
-                        : "승인된 휴가(취소 요청 중 포함)도 자동 취소하고 연차를 돌려주며, 결재 대기 휴가는 자동 반려합니다."}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
             <p className="text-xs text-muted-foreground">
-              경조사·공가처럼 금지 기간에도 신청할 수 있는 종류는 처리하지 않습니다. 처리된 휴가마다 당사자에게 메일과 알림이
-              갑니다. 정책을 바꿔도 이미 등록된 금지 기간의 휴가는 다시 처리하지 않습니다.
+              예) 기본 15 · 주기 2년 · 가산 1일 · 상한 25 → 3년차 16일, 5년차 17일 … (근로기준법 기본값)
             </p>
-          </div>
+            <ToggleRow label="1년 미만 월차 부여" desc="1개월 개근 시 1일" checked={form.monthlyAccrualEnabled}
+              onChange={(v) => set("monthlyAccrualEnabled", v)} />
+            {form.monthlyAccrualEnabled && (
+              <div className="space-y-2">
+                <Label htmlFor="policy-monthly-max">월차 상한(일)</Label>
+                <Input id="policy-monthly-max" type="number" min={0} value={form.monthlyAccrualMax}
+                  onChange={(e) => set("monthlyAccrualMax", Number(e.target.value))} />
+              </div>
+            )}
+          </PolicySection>
+
+          <PolicySection title="사용 통제">
+            <div className="space-y-2">
+              <Label htmlFor="policy-max-concurrent">팀 동시 부재 최대 인원 (0 = 무제한, 넘어도 신청은 되고 결재할 때 경고)</Label>
+              <Input id="policy-max-concurrent" type="number" min={0} value={form.maxConcurrentAbsence}
+                onChange={(e) => set("maxConcurrentAbsence", Number(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="policy-min-advance">최소 사전 신청 기한(일, 0 = 제한 없음)</Label>
+              <Input id="policy-min-advance" type="number" min={0} value={form.minAdvanceDays}
+                onChange={(e) => set("minAdvanceDays", Number(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="policy-max-consecutive">최대 연속 사용일 (0 = 무제한)</Label>
+              <Input id="policy-max-consecutive" type="number" min={0} value={form.maxConsecutiveDays}
+                onChange={(e) => set("maxConsecutiveDays", Number(e.target.value))} />
+            </div>
+            <div className="space-y-2">
+              <Label id="policy-blackout-conflict">사용 금지 기간을 등록할 때 겹치는 기존 휴가</Label>
+              <div className="grid gap-2" role="radiogroup" aria-labelledby="policy-blackout-conflict">
+                {(Object.keys(BLACKOUT_CONFLICT_LABEL) as BlackoutConflictMode[]).map((mode) => (
+                  <label
+                    key={mode}
+                    className={cn(
+                      "flex cursor-pointer gap-3 rounded-md border p-3 text-sm",
+                      form.blackoutConflictMode === mode && "border-primary bg-primary/5",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="blackoutConflictMode"
+                      className="mt-0.5"
+                      checked={form.blackoutConflictMode === mode}
+                      onChange={() => set("blackoutConflictMode", mode)}
+                    />
+                    <span>
+                      <span className="font-medium">
+                        {BLACKOUT_CONFLICT_LABEL[mode]}
+                        {mode === "KEEP_APPROVED" && " (기본)"}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {mode === "KEEP_APPROVED"
+                          ? "승인된 휴가(취소 요청 중 포함)는 그대로 두고, 결재 대기 휴가만 자동 반려합니다."
+                          : "승인된 휴가(취소 요청 중 포함)도 자동 취소하고 연차를 돌려주며, 결재 대기 휴가는 자동 반려합니다."}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                경조사·공가처럼 금지 기간에도 신청할 수 있는 종류는 처리하지 않습니다. 처리된 휴가마다 당사자에게 메일과 알림이
+                갑니다. 정책을 바꿔도 이미 등록된 금지 기간의 휴가는 다시 처리하지 않습니다.
+              </p>
+            </div>
+          </PolicySection>
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap gap-2 lg:col-span-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           onClick={async () => {
             const ok = await confirm({
@@ -406,6 +388,16 @@ function PolicyTab() {
         </Button>
       </div>
     </div>
+  );
+}
+
+/** 연차 정책 상자 안의 한 분류. 첫 분류가 아니면 위에 가로줄을 긋는다 */
+function PolicySection({ title, first, children }: { title: string; first?: boolean; children: React.ReactNode }) {
+  return (
+    <section className={cn("space-y-4", !first && "mt-6 border-t pt-6")} aria-label={title}>
+      <h2 className="text-base font-semibold">{title}</h2>
+      {children}
+    </section>
   );
 }
 
@@ -871,6 +863,8 @@ function BlackoutTab() {
   const [start, setStart] = useState(today);
   const [end, setEnd] = useState(today);
   const [name, setName] = useState("");
+  /** 일정만 보이는 달력에서 기간 고르기 */
+  const [picking, setPicking] = useState(false);
   /** 추가·수정 확인 창: 저장 전에 겹치는 휴가와 처리 결과를 보여 준다 */
   const [saving, setSaving] = useState<{ editing?: Blackout; initial?: Omit<Blackout, "id"> } | null>(null);
   const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
@@ -890,6 +884,9 @@ function BlackoutTab() {
             <Input id="blackout-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
           <div className="space-y-1"><Label htmlFor="blackout-end" className="text-xs">종료</Label>
             <Input id="blackout-end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+          <Button size="sm" variant="outline" onClick={() => setPicking(true)}>
+            <CalendarRange className="h-4 w-4" /> 달력에서 고르기
+          </Button>
           <div className="space-y-1 flex-1"><Label htmlFor="blackout-name" className="text-xs">명칭</Label>
             <Input id="blackout-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
           <Button
@@ -913,6 +910,19 @@ function BlackoutTab() {
             if (ok) del.mutate(id);
           }} />
       </CardContent>
+      {picking && (
+        <DateRangePickerDialog
+          title="금지 기간 고르기"
+          initialStart={start || undefined}
+          initialEnd={end || undefined}
+          onPick={(s, e) => {
+            setStart(s);
+            setEnd(e);
+            setPicking(false);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
       {saving && (
         <BlackoutSaveDialog
           editing={saving.editing}

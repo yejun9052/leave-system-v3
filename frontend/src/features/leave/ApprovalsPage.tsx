@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import QueryError from "@/components/QueryError";
 import axios from "axios";
-import { CalendarPlus, Check, X, Inbox } from "lucide-react";
+import { AlertTriangle, CalendarPlus, Check, X, Inbox } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -443,7 +443,16 @@ function RequestDetails({ r }: { r: LeaveRequest }) {
           </>
         )}
       </dl>
-      {r.approvalWarning && <p className="text-xs text-amber-700">⚠ {r.approvalWarning}</p>}
+      {/* 결재 경고(팀 동시 부재 등)는 확인창과 같은 노란 상자로 눈에 띄게 */}
+      {r.approvalWarning && (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <span className="whitespace-pre-line">{r.approvalWarning}</span>
+        </p>
+      )}
     </div>
   );
 }
