@@ -983,11 +983,14 @@ public class LeaveRequestService {
                 .filter(r -> departmentId.equals(r.getEmployee().getDepartmentId()))
                 .filter(r -> !r.getEmployee().getId().equals(applicant.getId()))
                 .toList();
+        // 주말·공휴일은 근무일이 아니라 부재로 세지 않는다
+        Set<LocalDate> holidays = holidaysBetween(request.getStartDate(), request.getEndDate());
         LocalDate worstDay = null;
         Set<Long> worstApproved = Set.of();
         Set<Long> worstPending = Set.of();
         for (LocalDate day = request.getStartDate(); !day.isAfter(request.getEndDate()); day = day.plusDays(1)) {
-            if (day.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || day.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            if (day.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || day.getDayOfWeek() == java.time.DayOfWeek.SUNDAY
+                    || holidays.contains(day)) {
                 continue;
             }
             LocalDate d = day;

@@ -985,6 +985,20 @@ class LeaveRequestServiceSickAndPartialTest {
         }
 
         @Test
+        void 공휴일은_부재로_세지_않는다() {
+            // 화~목 신청인데 수요일이 공휴일: 수요일에 동료 2명이 쉬어도 근무일이 아니라 경고하지 않는다
+            java.time.LocalDate wed = TUE.plusDays(1);
+            같은_부서_동료_휴가(2, 동료_휴가(11L, wed, wed, LeaveRequestStatus.APPROVED),
+                    동료_휴가(12L, wed, wed, LeaveRequestStatus.PENDING));
+            lenient().when(holidayRepository.findByDateBetweenOrderByDateAsc(any(), any()))
+                    .thenReturn(List.of(new com.company.leave.calendar.domain.Holiday(wed, "임시공휴일")));
+            LeaveRequestDtos.Response r = service.create(EMP,
+                    new LeaveRequestDtos.Create(연차.getId(), TUE, TUE.plusDays(2), "사유"));
+
+            assertThat(결재함_경고(saved.get(r.id()))).isNull();
+        }
+
+        @Test
         void 다른_부서와_반려_취소된_휴가는_세지_않는다() {
             Employee 다른_부서 = Employee.builder().email("other@company.com").passwordHash("h").name("타부서")
                     .department(new com.company.leave.department.domain.Department("영업팀", null, 0)).build();
