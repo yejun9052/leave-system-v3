@@ -3,18 +3,8 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { todayString } from "@/lib/dateFormat";
 import QueryError from "@/components/QueryError";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import Kpi from "@/components/Kpi";
+import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import {
   ArrowRight,
   CalendarCheck2,
@@ -24,8 +14,6 @@ import {
   Inbox,
   Plus,
   Sun,
-  TrendingUp,
-  UserMinus,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -69,8 +57,7 @@ function period(start: string, end: string): string {
 }
 
 export default function DashboardPage() {
-  const { user, isManager } = useAuthStore();
-  const manager = isManager();
+  const { user } = useAuthStore();
   const [applying, setApplying] = useState(false);
   const now = new Date();
 
@@ -89,9 +76,8 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 개인 연차·휴가 카드를 보여 준다 */}
+      {/* 관리 전용 계정도 테스트용으로 휴가를 쓸 수 있어 개인 연차·휴가 카드를 보여 준다. 회사 현황은 리포트 › 회사 현황 */}
       <PersonalSection />
-      {manager && <AdminSection />}
 
       {applying && (
         <LeaveRequestDialog
@@ -169,31 +155,6 @@ function emptyText(loading: boolean, empty: string): string {
 function dDayLabel(dDay: number | null): string {
   if (dDay == null) return "-";
   return dDay <= 0 ? "D-DAY" : `D-${dDay}`;
-}
-
-function Kpi({ icon: Icon, label, value, sub, accent, valueClassName }: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  sub: React.ReactNode;
-  accent?: boolean;
-  valueClassName?: string;
-}) {
-  return (
-    <Card className={cn(accent && "border-primary/40 bg-primary/5")}>
-      <CardContent className="flex items-center gap-4 p-5">
-        <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
-          accent ? "bg-primary/10 text-primary" : "bg-muted text-foreground/70")}>
-          <Icon className="h-6 w-6" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className={cn("text-2xl font-bold", accent && "text-primary", valueClassName)}>{value}</p>
-          <p className="flex items-center truncate text-sm text-muted-foreground">{sub}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 const STATUS_PILL: Record<LeaveRequestStatus, string> = {
@@ -497,78 +458,5 @@ function TeamSchedule({ className, leaves, loaded }: { className?: string; leave
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function AdminSection() {
-  const { data, isError, error, refetch } = useQuery({ queryKey: ["dashboard", "admin"], queryFn: dashboardApi.admin });
-  const palette = ["#6366f1", "#8b5cf6", "#ec4899", "#14b8a6", "#f59e0b", "#3b82f6", "#10b981"];
-
-  const heading = (
-    <div>
-      <h2 className="text-xl font-bold">회사 현황</h2>
-      <p className="text-sm text-muted-foreground">인사관리자·시스템 관리자에게만 보입니다.</p>
-    </div>
-  );
-  if (isError) {
-    return (
-      <div className="space-y-4 pt-2">
-        {heading}
-        <QueryError error={error} onRetry={() => void refetch()} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4 pt-2">
-      {heading}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi icon={Users} label="재직 인원" value={`${data?.totalEmployees ?? 0}명`} sub="재직 중인 직원" />
-        {/* 서버 값은 오늘에 걸린 승인 휴가 신청 건수(사람 수 아님: 한 사람이 오전·오후 반차를 따로 내면 2건) */}
-        <Kpi icon={UserMinus} label="오늘 휴가(승인)" value={`${data?.onLeaveToday ?? 0}건`} sub="오늘 승인된 휴가 신청" />
-        <Kpi icon={Inbox} label="결재 대기 (전체)" value={`${data?.pendingApprovals ?? 0}건`} sub="신청·취소 요청" />
-        <Kpi icon={TrendingUp} label="연차 사용률" value={`${data?.usageRate ?? 0}%`} accent
-          sub={`사용 ${formatDays(data?.totalUsed)}일 / 부여 ${formatDays(data?.totalGranted)}일`
-            + (data?.totalCarriedOver ? ` + 이월 ${formatDays(data.totalCarriedOver)}일` : "")} />
-      </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">월별 휴가 사용 (올해)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.monthlyUsage ?? []}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tickFormatter={(m) => `${m}월`} fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip formatter={(v) => [`${v}일`, "사용"]} labelFormatter={(m) => `${m}월`} />
-                <Bar dataKey="days" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">부서별 사용 일수</CardTitle>
-          </CardHeader>
-          <CardContent className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={(data?.departmentUsage ?? []).slice(0, 7)} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" fontSize={12} />
-                <YAxis type="category" dataKey="departmentName" width={90} fontSize={12} />
-                <Tooltip formatter={(v) => [`${v}일`, "사용"]} />
-                <Bar dataKey="days" radius={[0, 4, 4, 0]}>
-                  {(data?.departmentUsage ?? []).slice(0, 7).map((d, i) => (
-                    <Cell key={d.departmentName} fill={palette[i % palette.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
   );
 }

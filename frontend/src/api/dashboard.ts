@@ -32,9 +32,25 @@ export interface AdminDashboard {
   departmentUsage: { departmentName: string; days: number }[];
 }
 
+/** 리포트 › 회사 현황의 직원별 사용: 직원마다 지금 연차 기간의 잔액(회사 사용률과 같은 기준) */
+export interface EmployeeUsage {
+  employeeId: number;
+  name: string;
+  departmentName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  granted: number;
+  carriedOver: number;
+  used: number;
+  remaining: number;
+  /** 사용 ÷ (부여 + 이월) × 100, 소수 첫째 자리 */
+  usageRate: number;
+}
+
 export const dashboardApi = {
   personal: () => unwrap<PersonalDashboard>(api.get("/dashboard/me")),
   admin: () => unwrap<AdminDashboard>(api.get("/dashboard/admin")),
+  employeeUsage: () => unwrap<EmployeeUsage[]>(api.get("/dashboard/admin/employees")),
 };
 
 export const reportApi = {

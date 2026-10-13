@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/components/ui/toast";
 import { extractErrorMessage } from "@/api/client";
 import { cn } from "@/lib/utils";
+import { CALENDAR_VIEWS } from "@/lib/pageSections";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import LeaveEntryPanel from "./LeaveEntryPanel";
@@ -63,13 +64,11 @@ const HOLIDAY_COLOR = "#ef4444";
 /** 내 연차 기간 시작일·사용 기한 표시 색(휴가 종류 색과 겹치지 않게) */
 const PERIOD_COLOR = "#0f766e";
 
-
-const VIEW_TABS: { key: ViewScope; label: string }[] = [
-  { key: "ALL", label: "전체" },
-  { key: "SCHEDULE", label: "일정" },
-  { key: "DEPARTMENT", label: "부서" },
-  { key: "PERSONAL", label: "개인" },
-];
+/** 보기 탭(이름은 상단 위치 표시와 같이 쓴다) */
+const VIEW_TABS: { key: ViewScope; label: string }[] = CALENDAR_VIEWS.map((v) => ({
+  key: v.value.toUpperCase() as ViewScope,
+  label: v.label,
+}));
 
 /**
  * 보기 탭에 들어갈 일정인지. 공휴일은 모든 탭에 보이고, 블랙아웃 기간은 탭과 관계없이 따로 그린다.

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
@@ -25,6 +25,14 @@ import { dashboardApi } from "@/api/dashboard";
 import { formatDays } from "@/lib/leaveFormat";
 import { ROLE_LABEL, type Role } from "@/types";
 import { cn } from "@/lib/utils";
+import {
+  APPROVAL_TABS,
+  CALENDAR_VIEWS,
+  POLICY_TABS,
+  REPORT_TABS,
+  sectionOf,
+  type PageSection,
+} from "@/lib/pageSections";
 import { Button } from "@/components/ui/button";
 import NotificationBell, { useUnreadNotifications } from "@/components/NotificationBell";
 import LicenseBanner from "@/features/license/LicenseBanner";
@@ -124,6 +132,7 @@ export default function AppLayout() {
           >
             <Menu className="h-5 w-5" />
           </Button>
+          <Breadcrumb />
           {/* 빈 곳을 채우고 알림 안내는 오른쪽 끝(벨 바로 옆)에 붙인다. 좁으면 안내 글자가 줄어든다 */}
           <div className="flex min-w-0 flex-1 items-center justify-end">
             <UnreadNotice onOpen={() => setBellOpen(true)} />
@@ -219,6 +228,47 @@ function SidebarSummary({ onNavigate }: { onNavigate: () => void }) {
         </div>
       </Link>
     </div>
+  );
+}
+
+/** 탭(보기)이 있는 화면: 주소의 어떤 검색어로 탭을 고르는지 */
+const PAGE_SECTIONS: Record<string, { param: string; sections: PageSection[] }> = {
+  "/admin/policy": { param: "tab", sections: POLICY_TABS },
+  "/approvals": { param: "tab", sections: APPROVAL_TABS },
+  "/calendar": { param: "view", sections: CALENDAR_VIEWS },
+  "/admin/reports": { param: "tab", sections: REPORT_TABS },
+};
+
+/**
+ * 상단 왼쪽의 현재 위치: "정책 · 휴가종류 > 연차 정책". 메뉴 이름 다음에 탭이 있는 화면이면 지금 탭을 붙인다.
+ * 좁은 화면(휴대폰)에서는 메뉴 버튼과 알림 자리를 위해 숨긴다.
+ */
+function Breadcrumb() {
+  const { pathname } = useLocation();
+  const [params] = useSearchParams();
+  const item = NAV.find((n) => (n.end ? pathname === n.to : pathname === n.to || pathname.startsWith(`${n.to}/`)));
+  if (!item) return null;
+  const page = PAGE_SECTIONS[item.to];
+  const section = page ? sectionOf(page.sections, params.get(page.param)) : null;
+  return (
+    <nav aria-label="현재 위치" className="hidden min-w-0 shrink items-center gap-1.5 text-sm sm:flex">
+      <item.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      {section ? (
+        <>
+          <Link to={item.to} className="truncate text-muted-foreground hover:text-foreground hover:underline">
+            {item.label}
+          </Link>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate font-medium" aria-current="page">
+            {section.label}
+          </span>
+        </>
+      ) : (
+        <span className="truncate font-medium" aria-current="page">
+          {item.label}
+        </span>
+      )}
+    </nav>
   );
 }
 

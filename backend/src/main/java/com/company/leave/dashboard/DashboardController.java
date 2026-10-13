@@ -4,6 +4,7 @@ import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.dashboard.dto.DashboardDtos;
 import com.company.leave.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
+import java.util.List;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,5 +33,13 @@ public class DashboardController {
     @GetMapping("/admin")
     public ApiResponse<DashboardDtos.AdminDashboard> admin() {
         return ApiResponse.ok(dashboardService.admin());
+    }
+
+    @Operation(summary = "직원별 연차 사용 (리포트 › 회사 현황)",
+            description = "재직 중인 직원마다 지금 연차 기간의 부여·이월·사용·남은 연차와 사용률")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
+    @GetMapping("/admin/employees")
+    public ApiResponse<List<DashboardDtos.EmployeeUsage>> employeeUsage() {
+        return ApiResponse.ok(dashboardService.employeeUsage());
     }
 }

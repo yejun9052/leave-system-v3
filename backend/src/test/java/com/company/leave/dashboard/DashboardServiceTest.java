@@ -110,6 +110,28 @@ class DashboardServiceTest {
     }
 
     @Test
+    void 직원별_사용은_지금_연차_기간의_부여_이월_사용_남은_연차와_사용률이고_부서_이름_순이다() {
+        LeaveBalanceService.PeriodBalance qa = 기간_잔액(직원(2L, QA팀, "나QA"), "15", "6");
+        qa.balance().setCarriedOver(new BigDecimal("5"));
+        LeaveBalanceService.PeriodBalance dev = 기간_잔액(직원(1L, 개발팀, "가개발"), "16", "4");
+        LeaveBalanceService.PeriodBalance none = 기간_잔액(직원(3L, null, "다무소속"), "0", "0");
+        when(balanceService.balancesAsOf(TODAY, true, true)).thenReturn(List.of(none, qa, dev));
+
+        List<DashboardDtos.EmployeeUsage> rows = service.employeeUsage();
+
+        // 부서 이름 글자 순("QA팀" < "개발팀"), 부서 없는 직원은 맨 뒤
+        assertThat(rows).extracting(DashboardDtos.EmployeeUsage::name).containsExactly("나QA", "가개발", "다무소속");
+        DashboardDtos.EmployeeUsage q = rows.get(0);
+        assertThat(q.departmentName()).isEqualTo("QA팀");
+        assertThat(q.carriedOver()).isEqualByComparingTo("5");
+        assertThat(q.remaining()).isEqualByComparingTo("14"); // 15 + 5 - 6
+        assertThat(q.usageRate()).isEqualTo(30.0); // 6 / (15 + 5)
+        assertThat(rows.get(1).usageRate()).isEqualTo(25.0); // 4 / 16
+        assertThat(rows.get(2).usageRate()).isZero(); // 쓸 수 있던 연차가 없음
+        assertThat(rows.get(2).departmentName()).isNull();
+    }
+
+    @Test
     void 부여된_연차가_없으면_소진율은_0이다() {
         when(balanceService.balancesAsOf(TODAY, true, true)).thenReturn(List.of(기간_잔액("0", "0")));
 
@@ -336,11 +358,21 @@ class DashboardServiceTest {
     }
 
     private static LeaveBalanceService.PeriodBalance 기간_잔액(String granted, String used) {
-        LeaveBalance b = new LeaveBalance(1L, YEAR);
+        return 기간_잔액(직원(1L, null), granted, used);
+    }
+
+    private static LeaveBalanceService.PeriodBalance 기간_잔액(Employee employee, String granted, String used) {
+        LeaveBalance b = new LeaveBalance(employee.getId(), YEAR);
         b.setGranted(new BigDecimal(granted));
         b.addUsed(new BigDecimal(used));
-        return new LeaveBalanceService.PeriodBalance(직원(1L, null),
+        return new LeaveBalanceService.PeriodBalance(employee,
                 new LeavePeriodCalculator.Period(YEAR, LocalDate.of(YEAR, 1, 1), LocalDate.of(YEAR, 12, 31)), b);
+    }
+
+    private static Employee 직원(Long id, Department department, String name) {
+        Employee e = 직원(id, department);
+        ReflectionTestUtils.setField(e, "name", name);
+        return e;
     }
 
     private static LeaveBalanceResponse 잔액_응답(int year) {

@@ -22,6 +22,7 @@ import { formatDays } from "@/lib/leaveFormat";
 import { useTableSort, type SortValue } from "@/lib/useTableSort";
 import { todayString } from "@/lib/dateFormat";
 import { useServerForm } from "@/lib/useServerForm";
+import { POLICY_TABS, sectionOf } from "@/lib/pageSections";
 import { useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
@@ -75,13 +76,10 @@ const DEDUCTION_MODE_DESC: Record<AnnualDeductionMode, string> = {
   NONE: "연차와 상관없이 신청하고 연차에서 빼지 않습니다. 예: 경조사·공가",
 };
 
-const TABS = ["policy", "types", "rules", "blackout", "holidays", "promotion", "automation", "backup"];
-
 export default function PolicyPage() {
-  // ?tab=backup 처럼 주소로 탭을 열 수 있다(알림의 "백업 확인하기")
+  // ?tab=backup 처럼 주소로 탭을 열 수 있다(알림의 "백업 확인하기"). 탭 이름은 상단 위치 표시와 같이 쓴다
   const [params, setParams] = useSearchParams();
-  const requested = params.get("tab");
-  const tab = requested && TABS.includes(requested) ? requested : "policy";
+  const tab = sectionOf(POLICY_TABS, params.get("tab")).value;
   const changeTab = (v: string) => setParams(v === "policy" ? {} : { tab: v }, { replace: true });
   // 한 번 연 탭은 다른 탭으로 옮겨도 숨기기만 하고 그대로 둔다: 저장하지 않은 입력이 탭을 옮기는 순간 사라졌다
   const [visited, setVisited] = useState<Set<string>>(() => new Set([tab]));
@@ -100,14 +98,11 @@ export default function PolicyPage() {
       </div>
       <Tabs value={tab} onValueChange={changeTab}>
         <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="policy">연차 정책</TabsTrigger>
-          <TabsTrigger value="types">휴가 종류</TabsTrigger>
-          <TabsTrigger value="rules">포상 · 경조사 · 공가</TabsTrigger>
-          <TabsTrigger value="blackout">블랙아웃</TabsTrigger>
-          <TabsTrigger value="holidays">공휴일</TabsTrigger>
-          <TabsTrigger value="promotion">촉진 · 미사용</TabsTrigger>
-          <TabsTrigger value="automation">자동화</TabsTrigger>
-          <TabsTrigger value="backup">백업</TabsTrigger>
+          {POLICY_TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>
+              {t.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
         {panel("policy", <PolicyTab />)}
         {panel("types", <LeaveTypeTab />)}

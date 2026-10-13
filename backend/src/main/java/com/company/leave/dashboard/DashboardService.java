@@ -97,6 +97,30 @@ public class DashboardService {
                 totalGranted, totalUsed, totalCarried, round1(usageRate), monthly, byDept);
     }
 
+    /**
+     * 직원별 사용(리포트 › 회사 현황): 재직 중인 직원마다 지금 연차 기간의 부여·이월·사용·남은 연차와 사용률.
+     * 관리자 대시보드의 사용률과 같은 잔액을 쓰므로 합계가 맞는다. 부서 이름 → 이름 순(부서 없으면 맨 뒤).
+     */
+    @Transactional(readOnly = true)
+    public List<DashboardDtos.EmployeeUsage> employeeUsage() {
+        return balanceService.balancesAsOf(LocalDate.now(), true, true).stream()
+                .map(pb -> {
+                    Employee e = pb.employee();
+                    LeaveBalance b = pb.balance();
+                    BigDecimal usable = b.getGranted().add(b.getCarriedOver());
+                    double rate = usable.signum() > 0
+                            ? b.getUsed().divide(usable, 4, RoundingMode.HALF_UP).doubleValue() * 100 : 0;
+                    return new DashboardDtos.EmployeeUsage(e.getId(), e.getName(),
+                            e.getDepartment() != null ? e.getDepartment().getName() : null,
+                            pb.period().start(), pb.period().end(),
+                            b.getGranted(), b.getCarriedOver(), b.getUsed(), b.remaining(), round1(rate));
+                })
+                .sorted(Comparator.comparing(DashboardDtos.EmployeeUsage::departmentName,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(DashboardDtos.EmployeeUsage::name))
+                .toList();
+    }
+
     @Transactional
     public DashboardDtos.PersonalDashboard personal(Long employeeId) {
         var balance = balanceService.getResponse(employeeId, balanceService.currentYear(employeeId));
