@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronRight } from "lucide-react";
+import { safeReturnPath } from "@/api/client";
 import { notificationApi } from "@/api/leave";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/dateFormat";
@@ -37,22 +38,23 @@ function titleColor(type: string): string {
 /** 알림을 눌렀을 때 갈 곳과 버튼 이름. 결재 요청·취소 요청은 눈에 띄게 보여 준다. */
 function actionOf(n: AppNotification): { to: string; label: string; primary?: boolean } | null {
   // 서버가 정한 앱 안의 주소만 따라간다
-  if (!n.link || !n.link.startsWith("/") || n.link.startsWith("//")) return null;
+  const to = safeReturnPath(n.link);
+  if (!to) return null;
   if (n.type === "LEAVE_REQUESTED" || n.type === "LEAVE_CANCEL_REQUESTED") {
-    return { to: n.link, label: "결재하러 가기", primary: true };
+    return { to, label: "결재하러 가기", primary: true };
   }
   if (n.type.startsWith("BACKUP_")) return { to: "/admin/policy?tab=backup", label: "백업 확인하기" };
-  switch (n.link) {
+  switch (to) {
     case "/approvals":
-      return { to: n.link, label: "결재함 보기" };
+      return { to, label: "결재함 보기" };
     case "/my-leaves":
-      return { to: n.link, label: "내 휴가 확인하기" };
+      return { to, label: "내 휴가 확인하기" };
     case "/calendar":
-      return { to: n.link, label: "캘린더에서 보기" };
+      return { to, label: "캘린더에서 보기" };
     case "/admin/policy":
-      return { to: n.link, label: "정책 보기" };
+      return { to, label: "정책 보기" };
     default:
-      return { to: n.link, label: "열기" };
+      return { to, label: "열기" };
   }
 }
 

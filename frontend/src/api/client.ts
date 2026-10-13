@@ -53,10 +53,20 @@ export function loginUrlReturningHere(): string {
   return here === "/" || here.startsWith("/login") ? "/login" : `/login?${new URLSearchParams({ from: here })}`;
 }
 
-/** 로그인 뒤 돌아갈 주소로 써도 되는지: 이 사이트 안의 경로만("//다른사이트"·"https://…" 막음) */
+/**
+ * 이동해도 되는 이 사이트 안의 경로인지(로그인 뒤 돌아갈 곳, 알림 링크). 아니면 null.
+ * 브라우저는 주소의 탭·줄바꿈을 지우고 "\"를 "/"로 읽으므로 "/\t/evil.com"·"/\evil.com"도 다른 사이트가 된다:
+ * 그런 문자는 아예 받지 않고, 실제로 풀어 본 주소가 같은 사이트일 때만 경로를 돌려준다.
+ */
 export function safeReturnPath(path: string | null | undefined): string | null {
-  if (!path || !path.startsWith("/") || path.startsWith("//") || path.startsWith("/\\")) return null;
-  return path;
+  // eslint-disable-next-line no-control-regex
+  if (!path || !path.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(path)) return null;
+  try {
+    const url = new URL(path, window.location.origin);
+    return url.origin === window.location.origin ? url.pathname + url.search + url.hash : null;
+  } catch {
+    return null;
+  }
 }
 
 api.interceptors.response.use(
