@@ -26,14 +26,27 @@ function processedLabel(status: LeaveRequestStatus): string {
 }
 
 /**
- * 휴가 한 건의 상세(내 휴가 목록에서 줄을 누르면): 종류·기간·일수, 상태, 처리자, 사유와 반려·취소 사유.
+ * 휴가 한 건의 상세(내 휴가·결재함 휴가 목록에서 줄을 누르면): 종류·기간·일수, 상태, 처리자, 사유와 반려·취소 사유.
  * 목록에는 한 줄로 들어가는 것만 두고 길어질 수 있는 사유는 여기서 본다.
+ *
+ * @param showEmployee 다른 사람의 휴가(결재함 휴가 목록)면 맨 위에 신청자·부서 줄을 넣는다
  */
-export default function LeaveDetailDialog({ leave, onClose }: { leave: LeaveRequest; onClose: () => void }) {
+export default function LeaveDetailDialog({
+  leave,
+  showEmployee = false,
+  onClose,
+}: {
+  leave: LeaveRequest;
+  showEmployee?: boolean;
+  onClose: () => void;
+}) {
   const period = leave.startDate === leave.endDate ? leave.startDate : `${leave.startDate} ~ ${leave.endDate}`;
   const split = formatPeriodSplit(leave);
   const processed = leave.approverName != null && leave.status !== "PENDING";
   const rows: { label: string; value: React.ReactNode }[] = [
+    ...(showEmployee
+      ? [{ label: "신청자", value: `${leave.employeeName}${leave.departmentName ? ` (${leave.departmentName})` : ""}` }]
+      : []),
     {
       label: "종류",
       value: (
@@ -84,6 +97,7 @@ export default function LeaveDetailDialog({ leave, onClose }: { leave: LeaveRequ
         <DialogHeader>
           <DialogTitle>휴가 상세</DialogTitle>
           <DialogDescription>
+            {showEmployee && `${leave.employeeName} · `}
             {leave.leaveTypeName} · {period}
           </DialogDescription>
         </DialogHeader>

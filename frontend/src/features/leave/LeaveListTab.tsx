@@ -25,6 +25,7 @@ import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { useAuthStore } from "@/store/auth";
 import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
 import ForceCancelDialog from "./ForceCancelDialog";
+import LeaveDetailDialog from "./LeaveDetailDialog";
 import StatusReason from "./StatusReason";
 
 const PAGE_SIZE = 20;
@@ -69,6 +70,8 @@ export default function LeaveListTab() {
   const [page, setPage] = useState(0);
   const [departmentIds, setDepartmentIds] = useState<Set<number>>(new Set());
   const [forceCancelling, setForceCancelling] = useState<LeaveRequest | null>(null);
+  /** 줄을 눌러 여는 휴가 상세 */
+  const [detail, setDetail] = useState<LeaveRequest | null>(null);
 
   const statuses = STATUS_FILTERS.find((f) => f.value === statusFilter)?.statuses ?? [];
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -208,7 +211,20 @@ export default function LeaveListTab() {
                 </TableRow>
               ) : sorted.length > 0 ? (
                 sorted.map((r) => (
-                  <TableRow key={r.id}>
+                  // 줄을 누르면(Enter·Space도) 내 휴가와 같은 휴가 상세 창
+                  <TableRow
+                    key={r.id}
+                    tabIndex={0}
+                    aria-label={`${r.employeeName} ${r.leaveTypeName} ${r.startDate} 상세 보기`}
+                    className="cursor-pointer"
+                    onClick={() => setDetail(r)}
+                    onKeyDown={(e) => {
+                      if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        setDetail(r);
+                      }
+                    }}
+                  >
                     <TableCell className="font-medium">{r.employeeName}</TableCell>
                     <TableCell>{r.departmentName ?? "-"}</TableCell>
                     <TableCell>
@@ -239,7 +255,8 @@ export default function LeaveListTab() {
                     </TableCell>
                     <TableCell>{r.approverName ?? "-"}</TableCell>
                     {canForceCancel && (
-                      <TableCell className="text-right">
+                      // 강제 취소 버튼을 눌러도 상세 창이 열리지 않게
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         {r.status === "APPROVED" && r.employeeId !== myId && (
                           <Button
                             size="sm"
@@ -289,6 +306,7 @@ export default function LeaveListTab() {
       </div>
 
       {forceCancelling && <ForceCancelDialog leave={forceCancelling} onClose={() => setForceCancelling(null)} />}
+      {detail && <LeaveDetailDialog leave={detail} showEmployee onClose={() => setDetail(null)} />}
     </div>
   );
 }
