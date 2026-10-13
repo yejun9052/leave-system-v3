@@ -317,9 +317,31 @@ class LeaveRequestServiceApprovalTest {
 
         List<LeaveRequestDtos.Response> inbox = service.pendingForApprover(개발팀장.getId());
 
-        assertThat(inbox).extracting(LeaveRequestDtos.Response::id).containsExactly(본인.getId(), 팀원.getId());
-        assertThat(inbox).extracting(LeaveRequestDtos.Response::ownRequest).containsExactly(true, false);
+        assertThat(inbox).extracting(LeaveRequestDtos.Response::id).containsExactly(팀원.getId(), 본인.getId());
+        assertThat(inbox).extracting(LeaveRequestDtos.Response::ownRequest).containsExactly(false, true);
         assertThat(service.approvalRoute(개발팀장.getId()).approverKind()).isEqualTo(ApproverKind.SELF);
+    }
+
+    @Test
+    void 결재함은_결재가_들어온_때_최신순이고_취소_요청은_취소를_요청한_때로_본다() {
+        Instant 아침 = Instant.parse("2026-10-13T00:00:00Z");
+        LeaveRequest 먼저_신청 = 대기_신청(파트원);
+        ReflectionTestUtils.setField(먼저_신청, "createdAt", 아침);
+        LeaveRequest 나중_신청 = 대기_신청(개발팀원);
+        ReflectionTestUtils.setField(나중_신청, "createdAt", 아침.plusSeconds(3600));
+        LeaveRequest 취소요청 = 대기_신청(개발팀장);
+        취소요청.approve(인사관리자, 아침);
+        취소요청.requestCancel("변경");
+        ReflectionTestUtils.setField(취소요청, "createdAt", 아침.minusSeconds(86400 * 10));
+        ReflectionTestUtils.setField(취소요청, "updatedAt", 아침.plusSeconds(1800));
+        when(employeeService.allEmployeeIds()).thenReturn(List.of(2L, 6L, 13L));
+        when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(먼저_신청, 취소요청, 나중_신청));
+
+        List<LeaveRequestDtos.Response> inbox = service.pendingForApprover(인사관리자.getId());
+
+        assertThat(inbox).extracting(LeaveRequestDtos.Response::id)
+                .containsExactly(나중_신청.getId(), 취소요청.getId(), 먼저_신청.getId());
+        assertThat(inbox.get(1).requestedAt()).isEqualTo(아침.plusSeconds(1800));
     }
 
     @Test
@@ -627,7 +649,7 @@ class LeaveRequestServiceApprovalTest {
     // --- 휴가 목록 ---
 
     @Test
-    void 휴가_목록은_휴가_시작일_최신순으로_찾고_검색어가_없으면_부서를_읽지_않는다() {
+    void 휴가_목록은_신청한_때_최신순으로_찾고_검색어가_없으면_부서를_읽지_않는다() {
         when(requestRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(Page.empty());
 
         service.search(인사관리자.getId(), null, Set.of(LeaveRequestStatus.APPROVED), null, null, List.of(), 0, 20);
@@ -635,7 +657,7 @@ class LeaveRequestServiceApprovalTest {
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(requestRepository).findAll(any(Specification.class), pageable.capture());
         assertThat(pageable.getValue().getSort())
-                .containsExactly(Sort.Order.desc("startDate"), Sort.Order.desc("id"));
+                .containsExactly(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
         verify(departmentRepository, never()).findAll();
     }
 

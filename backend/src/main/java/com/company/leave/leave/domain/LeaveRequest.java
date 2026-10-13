@@ -230,6 +230,14 @@ public class LeaveRequest extends BaseTimeEntity {
         return status == LeaveRequestStatus.CANCEL_REQUESTED;
     }
 
+    /**
+     * 결재가 들어온 때: 취소 요청 중이면 취소를 요청한 때, 아니면 신청한 때.
+     * 취소 요청 시각 열이 따로 없어 마지막 수정 시각을 쓴다(취소 요청 중에는 공휴일 반영으로 일수가 바뀔 때만 다시 바뀜).
+     */
+    public Instant requestedAt() {
+        return isCancelRequested() && getUpdatedAt() != null ? getUpdatedAt() : getCreatedAt();
+    }
+
     /** applied_year 기간에서 빼는 몫. */
     public BigDecimal getCurrentPeriodDeductedDays() {
         return deductedDays.subtract(nextPeriodDeductedDays);

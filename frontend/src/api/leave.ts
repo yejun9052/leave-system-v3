@@ -110,7 +110,7 @@ export const leaveApi = {
 
   pending: () => unwrap<LeaveRequest[]>(api.get("/leave-requests/pending")),
 
-  /** 결재함 휴가 목록: 팀장은 맡은 부서(하위 포함)만, 인사관리자·시스템 관리자는 전체. 휴가 시작일 최신순 */
+  /** 결재함 휴가 목록: 팀장은 맡은 부서(하위 포함)만, 인사관리자·시스템 관리자는 전체. 신청한 때 최신순 */
   search: (params: LeaveSearchParams) =>
     unwrap<Page<LeaveRequest>>(
       api.get("/leave-requests", {

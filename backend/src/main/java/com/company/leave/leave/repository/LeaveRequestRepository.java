@@ -16,7 +16,8 @@ import org.springframework.data.repository.query.Param;
 public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long>,
         JpaSpecificationExecutor<LeaveRequest> {
 
-    Page<LeaveRequest> findByEmployeeIdOrderByStartDateDesc(Long employeeId, Pageable pageable);
+    /** 내 휴가: 신청한 때 최신순 */
+    Page<LeaveRequest> findByEmployeeIdOrderByCreatedAtDescIdDesc(Long employeeId, Pageable pageable);
 
     List<LeaveRequest> findByEmployeeIdAndStatusOrderByStartDateDesc(
             Long employeeId, LeaveRequestStatus status);

@@ -47,6 +47,18 @@ function summary(r: LeaveRequest): string {
   return `${r.employeeName} · ${r.leaveTypeName}${rule} ${period} (${formatLeaveAmount(r)})`;
 }
 
+/** 구분: "연차 신청", "공가 신청", "연차 취소 요청" */
+function kindLabel(r: LeaveRequest): string {
+  return `${r.leaveTypeName} ${r.status === "CANCEL_REQUESTED" ? "취소 요청" : "신청"}`;
+}
+
+const RECENT_MS = 24 * 60 * 60 * 1000;
+
+/** 결재가 들어온 지 24시간이 안 된 요청 */
+function isRecent(r: LeaveRequest): boolean {
+  return Date.now() - new Date(r.requestedAt).getTime() < RECENT_MS;
+}
+
 /** 다른 결재자가 먼저 처리한 신청(409): 목록을 새로 불러와야 한다. */
 function isAlreadyProcessed(e: unknown): boolean {
   return axios.isAxiosError(e) && e.response?.status === 409;
@@ -83,12 +95,12 @@ export default function ApprovalsPage() {
     queryKey: ["pendingApprovals"],
     queryFn: leaveApi.pending,
   });
+  // 서버가 결재가 들어온 때 최신순으로 준다(취소 요청은 취소를 요청한 때)
   const { sorted, sort, toggle } = useTableSort(pending, {
-    // 구분: 신규 → 취소요청, 같은 구분 안에서는 본인 신청 먼저
-    kind: (r) => (r.status === "CANCEL_REQUESTED" ? 2 : 0) + (r.ownRequest ? 0 : 1),
+    // 구분: 종류 이름 순, 같은 종류에서는 신청 → 취소 요청
+    kind: (r) => `${r.leaveTypeName} ${r.status === "CANCEL_REQUESTED" ? 1 : 0}`,
     employee: (r) => r.employeeName,
     department: (r) => r.departmentName,
-    type: (r) => r.leaveTypeName,
     period: (r) => `${r.startDate} ${r.endDate}`,
     days: (r) => r.days,
     reason: (r) => (r.status === "CANCEL_REQUESTED" ? r.cancelReason : r.reason),
@@ -150,7 +162,6 @@ export default function ApprovalsPage() {
                     <SortableTableHead sortKey="kind" sort={sort} onSort={toggle}>구분</SortableTableHead>
                     <SortableTableHead sortKey="employee" sort={sort} onSort={toggle}>신청자</SortableTableHead>
                     <SortableTableHead sortKey="department" sort={sort} onSort={toggle}>부서</SortableTableHead>
-                    <SortableTableHead sortKey="type" sort={sort} onSort={toggle}>종류</SortableTableHead>
                     <SortableTableHead sortKey="period" sort={sort} onSort={toggle}>기간</SortableTableHead>
                     <SortableTableHead sortKey="days" sort={sort} onSort={toggle}>일수</SortableTableHead>
                     <SortableTableHead sortKey="reason" sort={sort} onSort={toggle}>사유</SortableTableHead>
@@ -160,7 +171,7 @@ export default function ApprovalsPage() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                         불러오는 중…
                       </TableCell>
                     </TableRow>
@@ -168,11 +179,21 @@ export default function ApprovalsPage() {
                     sorted.map((r) => (
                       <TableRow key={r.id}>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {r.status === "CANCEL_REQUESTED" ? (
-                              <Badge variant="destructive">취소요청</Badge>
-                            ) : (
-                              <Badge variant="secondary">신규</Badge>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            {isRecent(r) && (
+                              <Badge title="들어온 지 24시간이 안 된 요청입니다">최신</Badge>
+                            )}
+                            <span className="inline-flex items-center gap-2 whitespace-nowrap font-medium">
+                              <span
+                                className="inline-block h-3 w-3 shrink-0 rounded-full"
+                                style={{ backgroundColor: r.leaveTypeColor }}
+                              />
+                              <span className={r.status === "CANCEL_REQUESTED" ? "text-destructive" : undefined}>
+                                {kindLabel(r)}
+                              </span>
+                            </span>
+                            {r.specialRuleName && (
+                              <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
                             )}
                             {r.ownRequest && (
                               <Badge variant="warning" title="결재자 본인의 신청입니다(자가 승인)">
@@ -180,24 +201,12 @@ export default function ApprovalsPage() {
                               </Badge>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{r.employeeName}</TableCell>
-                        <TableCell>{r.departmentName ?? "-"}</TableCell>
-                        <TableCell>
-                          <span className="inline-flex items-center gap-2">
-                            <span
-                              className="inline-block h-3 w-3 rounded-full"
-                              style={{ backgroundColor: r.leaveTypeColor }}
-                            />
-                            {r.leaveTypeName}
-                            {r.specialRuleName && (
-                              <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>
-                            )}
-                          </span>
                           {r.approvalWarning && (
                             <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
                           )}
                         </TableCell>
+                        <TableCell className="font-medium">{r.employeeName}</TableCell>
+                        <TableCell>{r.departmentName ?? "-"}</TableCell>
                         <TableCell>
                           {r.startDate}
                           {r.startDate !== r.endDate && ` ~ ${r.endDate}`}
@@ -259,7 +268,7 @@ export default function ApprovalsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                      <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                         {isError ? (
                           "결재 목록을 불러오지 못했습니다."
                         ) : (
