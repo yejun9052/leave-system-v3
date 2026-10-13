@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.poi.openxml4j.util.ZipSecureFile;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -56,6 +57,12 @@ public class EmployeeExcelService {
     static final String PATH_SEPARATOR = " › ";
     /** 사번 기능 삭제 전 양식: 3번째 열이 "사번". 이 열은 건너뛰고 읽는다. */
     private static final String LEGACY_EMPLOYEE_NO_HEADER = "사번";
+    /** 일괄 등록 한 번에 받는 최대 인원(빈 행 제외) */
+    static final int MAX_IMPORT_ROWS = 2000;
+    /** 파일 안 항목 하나를 풀었을 때 최대 크기. 2000행 시트도 수 MB 라 넉넉하다 */
+    private static final long MAX_ENTRY_BYTES = 20L * 1024 * 1024;
+    /** 압축 비율 하한(POI 기본값과 같음): 이보다 많이 줄어든 항목은 폭탄으로 본다 */
+    private static final double MIN_INFLATE_RATIO = 0.01;
 
     private final EmployeeService employeeService;
     private final DepartmentRepository departmentRepository;
@@ -118,14 +125,19 @@ public class EmployeeExcelService {
         int created = 0;
         int rowNum = 1;
         int shift = 0; // 예전 양식이면 1: 이름 뒤 열을 한 칸씩 밀어 읽는다
-        try (Workbook wb = new XSSFWorkbook(in)) {
+        try (Workbook wb = open(in)) {
             Sheet sheet = wb.getSheetAt(0);
             // 금지 권한은 파일 전체를 등록 전에 검사한다. 앞선 정상 행도 저장하지 않고 400으로 거부.
             Row header = sheet.getRow(0);
             int roleColumn = header != null && LEGACY_EMPLOYEE_NO_HEADER.equals(cell(header, 2)) ? 7 : 6;
+            int dataRows = 0;
             for (Row row : sheet) {
                 if (row.getRowNum() == 0 || !StringUtils.hasText(cell(row, 0))) {
                     continue;
+                }
+                if (++dataRows > MAX_IMPORT_ROWS) {
+                    throw new BusinessException(ErrorCode.INVALID_INPUT,
+                            "한 번에 " + MAX_IMPORT_ROWS + "명까지 등록할 수 있습니다. 파일을 나눠서 올려 주세요.");
                 }
                 String roles = cell(row, roleColumn);
                 if (StringUtils.hasText(roles) && Arrays.stream(roles.split(",")).map(String::trim)
@@ -169,6 +181,21 @@ public class EmployeeExcelService {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "엑셀 파일을 읽을 수 없습니다: " + ex.getMessage());
         }
         return new ImportResult(created, errors);
+    }
+
+    /**
+     * 올린 파일을 연다. xlsx 는 zip 이라 5MB 파일도 풀면 수백 MB 가 될 수 있어(압축 폭탄) 압축을 풀 때 크기를 막는다.
+     * POI 가 그런 파일이나 xlsx 가 아닌 파일을 만나면 런타임 예외를 던지므로 그것도 입력 오류로 알린다.
+     */
+    private static Workbook open(InputStream in) throws IOException {
+        ZipSecureFile.setMinInflateRatio(MIN_INFLATE_RATIO);
+        ZipSecureFile.setMaxEntrySize(MAX_ENTRY_BYTES);
+        try {
+            return new XSSFWorkbook(in);
+        } catch (RuntimeException ex) {
+            log.warn("엑셀 파일 열기 실패", ex);
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "엑셀 파일을 읽을 수 없습니다. .xlsx 파일인지 확인해 주세요.");
+        }
     }
 
     /**
