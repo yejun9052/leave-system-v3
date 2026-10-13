@@ -25,6 +25,12 @@ export const APPROVAL_TABS: PageSection[] = [
   { value: "list", label: "휴가 목록" },
 ];
 
+/** 리포트(/admin/reports?tab=) */
+export const REPORT_TABS: PageSection[] = [
+  { value: "status", label: "회사 현황" },
+  { value: "excel", label: "연차현황표" },
+];
+
 /** 캘린더 보기(/calendar?view=, 값은 소문자로 주소에 들어간다) */
 export const CALENDAR_VIEWS: PageSection[] = [
   { value: "all", label: "전체" },

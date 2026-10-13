@@ -1,4 +1,8 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { REPORT_TABS, sectionOf } from "@/lib/pageSections";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CompanyStatusTab from "./CompanyStatusTab";
 import { useQuery } from "@tanstack/react-query";
 import { Download, FileSpreadsheet, Search } from "lucide-react";
 import { reportApi } from "@/api/dashboard";
@@ -26,6 +30,8 @@ const ALL_EMPLOYEES = 1000;
 
 export default function ReportsPage() {
   const { toast } = useToast();
+  const [params, setParams] = useSearchParams();
+  const tab = sectionOf(REPORT_TABS, params.get("tab")).value;
   // 칸을 비우고 다시 쓸 수 있게 글자로 두고, 쓸 수 있는 연도일 때만 내려받는다(빈 칸이 0년이 되지 않게)
   const [yearText, setYearText] = useState(String(new Date().getFullYear()));
   const year = Number(yearText);
@@ -104,114 +110,130 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">리포트</h1>
-        <p className="text-sm text-muted-foreground">연차현황표를 엑셀로 내려받습니다.</p>
+        <p className="text-sm text-muted-foreground">회사 연차 사용 현황을 보고, 연차현황표를 엑셀로 내려받습니다.</p>
       </div>
 
-      <Card className="max-w-5xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileSpreadsheet className="h-5 w-5 text-primary" /> 연차현황표
-          </CardTitle>
-          <CardDescription>
-            선택한 연도의 연차현황표(부서별 직원, 부여·사용·남은 연차, 사용한 날짜)를 엑셀로 출력합니다. 부서나
-            사용자를 고르면 그 대상만, 아무것도 고르지 않으면 전체를 출력합니다.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="report-year">연도</Label>
-            <Input
-              id="report-year"
-              type="number"
-              value={yearText}
-              onChange={(e) => setYearText(e.target.value)}
-              aria-invalid={!yearValid}
-              className="max-w-[140px]"
-            />
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <section className="space-y-2">
-              {/* 높이 고정: "선택 해제" 버튼(h-7)이 나타나도 아래 목록이 밀리지 않게 */}
-              <div className="flex h-7 items-center justify-between">
-                <Label>부서</Label>
-                {departmentIds.size > 0 && (
-                  <Button variant="ghost" size="sm" className="h-7" onClick={() => changeDepartments(new Set())}>
-                    선택 해제
-                  </Button>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                상위 부서를 체크하면 하위 부서도 함께 체크됩니다. 하위 부서는 따로 해제할 수 있습니다. 체크한 부서의
-                사용자는 오른쪽 목록에서 함께 체크됩니다.
-              </p>
-              <div className="max-h-80 overflow-y-auto rounded-md border p-2">
-                <DepartmentTreeSelect tree={tree} selected={departmentIds} onChange={changeDepartments} />
-              </div>
-            </section>
-
-            <section className="space-y-2">
-              <div className="flex h-7 items-center justify-between">
-                <Label>사용자</Label>
-                {employeeIds.size > 0 && (
-                  <Button variant="ghost" size="sm" className="h-7" onClick={() => setEmployeeIds(new Set())}>
-                    선택 해제
-                  </Button>
-                )}
-              </div>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      {/* 탭은 주소(?tab=excel)와 맞춘다: 상단 위치 표시가 지금 탭을 보여 준다 */}
+      <Tabs value={tab} onValueChange={(v) => setParams(v === REPORT_TABS[0].value ? {} : { tab: v }, { replace: true })}>
+        <TabsList>
+          {REPORT_TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="status">
+          <CompanyStatusTab />
+        </TabsContent>
+        {/* 엑셀 탭은 다른 탭에 다녀와도 고른 부서·사용자가 남게 숨기기만 한다 */}
+        <TabsContent value="excel" forceMount className="data-[state=inactive]:hidden">
+          <Card className="max-w-5xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileSpreadsheet className="h-5 w-5 text-primary" /> 연차현황표
+              </CardTitle>
+              <CardDescription>
+                선택한 연도의 연차현황표(부서별 직원, 부여·사용·남은 연차, 사용한 날짜)를 엑셀로 출력합니다. 부서나
+                사용자를 고르면 그 대상만, 아무것도 고르지 않으면 전체를 출력합니다.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="report-year">연도</Label>
                 <Input
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="이름 · 부서 · 직급으로 찾기"
-                  aria-label="사용자를 이름 · 부서 · 직급으로 찾기"
-                  className="pl-8"
+                  id="report-year"
+                  type="number"
+                  value={yearText}
+                  onChange={(e) => setYearText(e.target.value)}
+                  aria-invalid={!yearValid}
+                  className="max-w-[140px]"
                 />
               </div>
-              <ul className="max-h-[17rem] divide-y overflow-y-auto rounded-md border">
-                {visible.length === 0 ? (
-                  <li className="px-3 py-6 text-center text-sm text-muted-foreground">맞는 사용자가 없습니다.</li>
-                ) : (
-                  visible.map((e) => (
-                    <li key={e.id}>
-                      <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent">
-                        <input
-                          type="checkbox"
-                          aria-label={`${e.name} 선택`}
-                          className="h-4 w-4"
-                          checked={employeeIds.has(e.id)}
-                          onChange={() => toggleEmployee(e.id)}
-                        />
-                        <span className="font-medium">{e.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{e.departmentName ?? "부서 없음"}</span>
-                        {e.status === "RESIGNED" && (
-                          <Badge variant="secondary" className="ml-auto px-1.5 py-0">
-                            퇴사
-                          </Badge>
-                        )}
-                      </label>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </section>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={download} disabled={loading || emptyDepartments || !yearValid}>
-              <Download className="h-4 w-4" /> 엑셀 다운로드
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              {nothingChosen
-                ? "전체 직원을 출력합니다."
-                : emptyDepartments
-                  ? "출력할 사용자가 없습니다. 사용자를 체크해 주세요."
-                  : `사용자 ${employeeIds.size}명을 출력합니다.`}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="grid gap-4 md:grid-cols-2">
+                <section className="space-y-2">
+                  {/* 높이 고정: "선택 해제" 버튼(h-7)이 나타나도 아래 목록이 밀리지 않게 */}
+                  <div className="flex h-7 items-center justify-between">
+                    <Label>부서</Label>
+                    {departmentIds.size > 0 && (
+                      <Button variant="ghost" size="sm" className="h-7" onClick={() => changeDepartments(new Set())}>
+                        선택 해제
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    상위 부서를 체크하면 하위 부서도 함께 체크됩니다. 하위 부서는 따로 해제할 수 있습니다. 체크한 부서의
+                    사용자는 오른쪽 목록에서 함께 체크됩니다.
+                  </p>
+                  <div className="max-h-80 overflow-y-auto rounded-md border p-2">
+                    <DepartmentTreeSelect tree={tree} selected={departmentIds} onChange={changeDepartments} />
+                  </div>
+                </section>
+
+                <section className="space-y-2">
+                  <div className="flex h-7 items-center justify-between">
+                    <Label>사용자</Label>
+                    {employeeIds.size > 0 && (
+                      <Button variant="ghost" size="sm" className="h-7" onClick={() => setEmployeeIds(new Set())}>
+                        선택 해제
+                      </Button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={keyword}
+                      onChange={(e) => setKeyword(e.target.value)}
+                      placeholder="이름 · 부서 · 직급으로 찾기"
+                      aria-label="사용자를 이름 · 부서 · 직급으로 찾기"
+                      className="pl-8"
+                    />
+                  </div>
+                  <ul className="max-h-[17rem] divide-y overflow-y-auto rounded-md border">
+                    {visible.length === 0 ? (
+                      <li className="px-3 py-6 text-center text-sm text-muted-foreground">맞는 사용자가 없습니다.</li>
+                    ) : (
+                      visible.map((e) => (
+                        <li key={e.id}>
+                          <label className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent">
+                            <input
+                              type="checkbox"
+                              aria-label={`${e.name} 선택`}
+                              className="h-4 w-4"
+                              checked={employeeIds.has(e.id)}
+                              onChange={() => toggleEmployee(e.id)}
+                            />
+                            <span className="font-medium">{e.name}</span>
+                            <span className="truncate text-xs text-muted-foreground">{e.departmentName ?? "부서 없음"}</span>
+                            {e.status === "RESIGNED" && (
+                              <Badge variant="secondary" className="ml-auto px-1.5 py-0">
+                                퇴사
+                              </Badge>
+                            )}
+                          </label>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </section>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={download} disabled={loading || emptyDepartments || !yearValid}>
+                  <Download className="h-4 w-4" /> 엑셀 다운로드
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  {nothingChosen
+                    ? "전체 직원을 출력합니다."
+                    : emptyDepartments
+                      ? "출력할 사용자가 없습니다. 사용자를 체크해 주세요."
+                      : `사용자 ${employeeIds.size}명을 출력합니다.`}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

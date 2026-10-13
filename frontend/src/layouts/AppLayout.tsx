@@ -25,7 +25,14 @@ import { dashboardApi } from "@/api/dashboard";
 import { formatDays } from "@/lib/leaveFormat";
 import { ROLE_LABEL, type Role } from "@/types";
 import { cn } from "@/lib/utils";
-import { APPROVAL_TABS, CALENDAR_VIEWS, POLICY_TABS, sectionOf, type PageSection } from "@/lib/pageSections";
+import {
+  APPROVAL_TABS,
+  CALENDAR_VIEWS,
+  POLICY_TABS,
+  REPORT_TABS,
+  sectionOf,
+  type PageSection,
+} from "@/lib/pageSections";
 import { Button } from "@/components/ui/button";
 import NotificationBell, { useUnreadNotifications } from "@/components/NotificationBell";
 import LicenseBanner from "@/features/license/LicenseBanner";
@@ -229,6 +236,7 @@ const PAGE_SECTIONS: Record<string, { param: string; sections: PageSection[] }> 
   "/admin/policy": { param: "tab", sections: POLICY_TABS },
   "/approvals": { param: "tab", sections: APPROVAL_TABS },
   "/calendar": { param: "view", sections: CALENDAR_VIEWS },
+  "/admin/reports": { param: "tab", sections: REPORT_TABS },
 };
 
 /**
