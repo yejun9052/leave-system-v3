@@ -7,6 +7,7 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.EmployeeStatus;
 import com.company.leave.employee.repository.EmployeeRepository;
 import com.company.leave.leave.LeaveBalanceService;
+import com.company.leave.leave.LeaveRequestService;
 import com.company.leave.leave.domain.LeaveBalance;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,22 +39,27 @@ public class DashboardService {
     private final LeaveBalanceService balanceService;
     /** 없으면(단위 테스트) 공휴일 없이 주말만 빼고 나눈다 */
     private final HolidayRepository holidayRepository;
+    /** 팀 일정에서 동료의 병가·경조사를 가릴지 판단({@link LeaveRequestService#leaveTypeVisibility}) */
+    private final LeaveRequestService leaveRequestService;
 
     public DashboardService(EmployeeRepository employeeRepository,
                             LeaveRequestRepository requestRepository,
-                            LeaveBalanceService balanceService) {
-        this(employeeRepository, requestRepository, balanceService, null);
+                            LeaveBalanceService balanceService,
+                            LeaveRequestService leaveRequestService) {
+        this(employeeRepository, requestRepository, balanceService, null, leaveRequestService);
     }
 
     @Autowired
     public DashboardService(EmployeeRepository employeeRepository,
                             LeaveRequestRepository requestRepository,
                             LeaveBalanceService balanceService,
-                            HolidayRepository holidayRepository) {
+                            HolidayRepository holidayRepository,
+                            LeaveRequestService leaveRequestService) {
         this.employeeRepository = employeeRepository;
         this.requestRepository = requestRepository;
         this.balanceService = balanceService;
         this.holidayRepository = holidayRepository;
+        this.leaveRequestService = leaveRequestService;
     }
 
     @Transactional(readOnly = true)
@@ -124,9 +131,13 @@ public class DashboardService {
                 .map(r -> r.getEmployee().getId())
                 .distinct()
                 .count();
+        // 동료의 병가·경조사는 "휴가"로만(팀장이면 맡은 팀원 것은 그대로)
+        Predicate<LeaveRequest> typeVisible = teamThisWeek.isEmpty()
+                ? r -> true : leaveRequestService.leaveTypeVisibility(employeeId);
         List<DashboardDtos.TeamLeave> teamLeaves = teamThisWeek.stream()
                 .map(r -> new DashboardDtos.TeamLeave(r.getEmployee().getId(), r.getEmployee().getName(),
-                        r.getLeaveType().getName(), r.getPortion(), r.getStartDate(), r.getEndDate()))
+                        typeVisible.test(r) ? r.getLeaveType().getName() : LeaveRequestDtos.HIDDEN_TYPE_NAME,
+                        r.getPortion(), r.getStartDate(), r.getEndDate()))
                 .toList();
 
         return new DashboardDtos.PersonalDashboard(balance, pendingCount, upcoming, teamOnLeave, teamLeaves);

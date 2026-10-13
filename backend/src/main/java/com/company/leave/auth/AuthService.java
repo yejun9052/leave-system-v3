@@ -14,6 +14,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.time.Clock;
 import java.util.List;
+import java.util.UUID;
+import org.springframework.security.authentication.AccountStatusException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -21,6 +23,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextHolderStrategy;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
@@ -43,6 +46,9 @@ public class AuthService {
     private final LoginAttemptService loginAttemptService;
     private final SecurityContextRepository securityContextRepository;
     private final SessionTerminator sessionTerminator;
+    private final PasswordEncoder passwordEncoder;
+    /** 응답 시간 맞추기용 비교 대상(아무 비밀번호와도 맞지 않음). {@link #equalizeTiming} */
+    private final String timingHash;
     private final SecurityContextHolderStrategy contextHolderStrategy =
             SecurityContextHolder.getContextHolderStrategy();
     /** 커스텀 JSON 로그인은 Spring 기본 로그인 필터를 거치지 않으므로 세션 고정 방지·CSRF 토큰 교체를 직접 적용. */
@@ -57,13 +63,16 @@ public class AuthService {
                        LoginAttemptService loginAttemptService,
                        SecurityContextRepository securityContextRepository,
                        CsrfTokenRepository csrfTokenRepository,
-                       SessionTerminator sessionTerminator) {
+                       SessionTerminator sessionTerminator,
+                       PasswordEncoder passwordEncoder) {
         this.authenticationManager = authenticationManager;
         this.employeeRepository = employeeRepository;
         this.auditService = auditService;
         this.loginAttemptService = loginAttemptService;
         this.securityContextRepository = securityContextRepository;
         this.sessionTerminator = sessionTerminator;
+        this.passwordEncoder = passwordEncoder;
+        this.timingHash = passwordEncoder.encode(UUID.randomUUID().toString());
         this.sessionAuthenticationStrategy = new CompositeSessionAuthenticationStrategy(List.of(
                 new ChangeSessionIdAuthenticationStrategy(),
                 new CsrfAuthenticationStrategy(csrfTokenRepository)));
@@ -89,6 +98,7 @@ public class AuthService {
             authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(request.email(), request.password()));
         } catch (AuthenticationException ex) {
+            equalizeTiming(ex, request.password());
             loginAttemptService.loginFailed(clientIp);
             String who = loginIdForLog(request.email());
             auditService.record(null, who, "LOGIN", "auth", null,
@@ -108,6 +118,16 @@ public class AuthService {
             RememberMeSessionFilter.start(httpRequest, clock);
         }
         return MeResponse.from(employee);
+    }
+
+    /**
+     * 퇴사 등 비활성 계정은 Spring 이 비밀번호를 비교하기 전에 실패시켜 응답이 눈에 띄게 빠르다. 그대로 두면
+     * 응답 시간만으로 "있었던 계정"을 가려낼 수 있으므로 같은 비용의 비교를 한 번 해서 다른 실패와 시간을 맞춘다.
+     */
+    private void equalizeTiming(AuthenticationException ex, String password) {
+        if (ex instanceof AccountStatusException) {
+            passwordEncoder.matches(password == null ? "" : password, timingHash);
+        }
     }
 
     /**

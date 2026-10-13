@@ -28,7 +28,8 @@ public class NotificationController {
     @GetMapping
     public ApiResponse<List<NotificationResponse>> list(
             @RequestParam(defaultValue = "20") int limit) {
-        return ApiResponse.ok(notificationService.list(SecurityUtils.currentEmployeeId(), limit));
+        return ApiResponse.ok(notificationService.list(SecurityUtils.currentEmployeeId(),
+                Math.min(Math.max(limit, 1), 100)));
     }
 
     @Operation(summary = "안 읽은 알림 수")

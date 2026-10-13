@@ -30,6 +30,7 @@ public class AuditController {
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "30") int size) {
-        return ApiResponse.ok(PageResponse.from(auditService.search(keyword, PageRequest.of(page, size))));
+        return ApiResponse.ok(PageResponse.from(auditService.search(keyword,
+                PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)))));
     }
 }

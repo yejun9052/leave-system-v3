@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import QueryError from "@/components/QueryError";
 import axios from "axios";
-import { CalendarPlus, Check, X, Inbox } from "lucide-react";
+import { AlertTriangle, CalendarPlus, Check, X, Inbox } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,10 +36,16 @@ import { extractErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import type { LeaveRequest } from "@/types";
 import { formatDays, formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
+import { formatDateTime } from "@/lib/dateFormat";
 import LeaveListTab from "./LeaveListTab";
 import LeaveRegisterDialog from "./LeaveRegisterDialog";
 
-type RejectTarget = { req: LeaveRequest; mode: "reject" | "cancelReject" };
+/** 결재 창: review = 신청 내용을 보고 승인(또는 반려로 넘어감), reject = 반려 사유 입력 */
+type DecisionTarget = { req: LeaveRequest; step: "review" | "reject" };
+
+function isCancelRequest(r: LeaveRequest): boolean {
+  return r.status === "CANCEL_REQUESTED";
+}
 
 /** 확인창용 요약: "홍길동 · 연차 2026-10-14 ~ 2026-10-15 (2일)" */
 function summary(r: LeaveRequest): string {
@@ -74,30 +80,10 @@ function isAlreadyProcessed(e: unknown): boolean {
 
 export default function ApprovalsPage() {
   const qc = useQueryClient();
-  const { toast } = useToast();
-  const confirm = useConfirm();
   const canRegister = useAuthStore((s) => s.hasAnyRole("HR_ADMIN", "SYSTEM_ADMIN"));
   const [registering, setRegistering] = useState(false);
 
-  const onApprove = async (r: LeaveRequest) => {
-    const ok = await confirm({
-      title: r.ownRequest ? "본인 신청을 자가 승인할까요?" : "휴가를 승인할까요?",
-      description: r.ownRequest ? `${summary(r)}\n자가 승인 기록이 이벤트 로그에 남습니다.` : summary(r),
-      warning: r.approvalWarning ?? undefined,
-      confirmText: "승인",
-    });
-    if (ok) approve.mutate(r.id);
-  };
-
-  const onApproveCancel = async (r: LeaveRequest) => {
-    const ok = await confirm({
-      title: "휴가 취소 요청을 승인할까요?",
-      description: `${summary(r)}\n승인하면 휴가가 취소되고 차감된 연차가 돌아갑니다.`,
-      confirmText: "취소 승인",
-    });
-    if (ok) approveCancel.mutate(r.id);
-  };
-  const [rejecting, setRejecting] = useState<RejectTarget | null>(null);
+  const [deciding, setDeciding] = useState<DecisionTarget | null>(null);
 
   const { data: pending = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ["pendingApprovals"],
@@ -118,28 +104,6 @@ export default function ApprovalsPage() {
   });
 
   const invalidate = () => invalidateLeaveData(qc);
-  const onError = (e: unknown) => {
-    toast({ title: extractErrorMessage(e), variant: "destructive" });
-    if (isAlreadyProcessed(e)) invalidate();
-  };
-
-  const approve = useMutation({
-    mutationFn: (id: number) => leaveApi.approve(id),
-    onSuccess: () => {
-      toast({ title: "승인되었습니다.", variant: "success" });
-      invalidate();
-    },
-    onError,
-  });
-
-  const approveCancel = useMutation({
-    mutationFn: (id: number) => leaveApi.approveCancel(id),
-    onSuccess: () => {
-      toast({ title: "취소 요청을 승인했습니다.", variant: "success" });
-      invalidate();
-    },
-    onError,
-  });
 
   return (
     <div className="space-y-6">
@@ -253,41 +217,16 @@ export default function ApprovalsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            {r.status === "CANCEL_REQUESTED" ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => onApproveCancel(r)}
-                                  disabled={approveCancel.isPending}
-                                >
-                                  <Check className="h-4 w-4" /> 취소 승인
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setRejecting({ req: r, mode: "cancelReject" })}
-                                >
-                                  <X className="h-4 w-4" /> 취소 반려
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() => onApprove(r)}
-                                  disabled={approve.isPending}
-                                >
-                                  <Check className="h-4 w-4" /> 승인
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => setRejecting({ req: r, mode: "reject" })}
-                                >
-                                  <X className="h-4 w-4" /> 반려
-                                </Button>
-                              </>
-                            )}
+                            <Button size="sm" onClick={() => setDeciding({ req: r, step: "review" })}>
+                              <Check className="h-4 w-4" /> {isCancelRequest(r) ? "취소 승인" : "승인"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setDeciding({ req: r, step: "reject" })}
+                            >
+                              <X className="h-4 w-4" /> {isCancelRequest(r) ? "취소 반려" : "반려"}
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -318,12 +257,14 @@ export default function ApprovalsPage() {
         </TabsContent>
       </Tabs>
 
-      {rejecting && (
-        <RejectDialog
-          target={rejecting}
-          onClose={() => setRejecting(null)}
+      {deciding && (
+        <DecisionDialog
+          key={deciding.req.id}
+          target={deciding}
+          onStep={(step) => setDeciding({ ...deciding, step })}
+          onClose={() => setDeciding(null)}
           onDone={() => {
-            setRejecting(null);
+            setDeciding(null);
             invalidate();
           }}
         />
@@ -334,65 +275,184 @@ export default function ApprovalsPage() {
   );
 }
 
-function RejectDialog({
+/**
+ * 결재 창. 승인 버튼은 신청 내용(취소 요청은 원래 신청 사유·처음 승인·취소 사유까지)을 보여 주고 이 창에서 승인하거나
+ * 반려로 넘어간다. 반려 버튼은 같은 내용 아래에 반려 사유를 받는다.
+ */
+function DecisionDialog({
   target,
+  onStep,
   onClose,
   onDone,
 }: {
-  target: RejectTarget;
+  target: DecisionTarget;
+  onStep: (step: DecisionTarget["step"]) => void;
   onClose: () => void;
   onDone: () => void;
 }) {
   const { toast } = useToast();
   const confirm = useConfirm();
   const [reason, setReason] = useState("");
-  const isCancel = target.mode === "cancelReject";
+  const r = target.req;
+  const isCancel = isCancelRequest(r);
+  const rejecting = target.step === "reject";
+
+  const onError = (e: unknown) => {
+    toast({ title: extractErrorMessage(e), variant: "destructive" });
+    // 다른 결재자가 먼저 처리했으면 창을 닫고 목록을 새로 불러온다
+    if (isAlreadyProcessed(e)) onDone();
+  };
+  const approve = useMutation({
+    mutationFn: () => (isCancel ? leaveApi.approveCancel(r.id) : leaveApi.approve(r.id)),
+    onSuccess: () => {
+      toast({ title: isCancel ? "취소 요청을 승인했습니다." : "승인되었습니다.", variant: "success" });
+      onDone();
+    },
+    onError,
+  });
+  const reject = useMutation({
+    mutationFn: () => (isCancel ? leaveApi.rejectCancel(r.id, reason) : leaveApi.reject(r.id, reason)),
+    onSuccess: () => {
+      toast({ title: "반려되었습니다.", variant: "success" });
+      onDone();
+    },
+    onError,
+  });
+  const busy = approve.isPending || reject.isPending;
+
   const onReject = async () => {
     const ok = await confirm({
       title: isCancel ? "휴가 취소 요청을 반려할까요?" : "휴가 신청을 반려할까요?",
-      description: `${summary(target.req)}\n사유: ${reason.trim() || "(미기재)"}`,
+      description: `${summary(r)}\n사유: ${reason.trim() || "(미기재)"}`,
       confirmText: "반려",
       destructive: true,
     });
     if (ok) reject.mutate();
   };
-  const reject = useMutation({
-    mutationFn: () =>
-      isCancel
-        ? leaveApi.rejectCancel(target.req.id, reason)
-        : leaveApi.reject(target.req.id, reason),
-    onSuccess: () => {
-      toast({ title: "반려되었습니다.", variant: "success" });
-      onDone();
-    },
-    onError: (e) => {
-      toast({ title: extractErrorMessage(e), variant: "destructive" });
-      // 다른 결재자가 먼저 처리했으면 창을 닫고 목록을 새로 불러온다
-      if (isAlreadyProcessed(e)) onDone();
-    },
-  });
+
+  const title = rejecting
+    ? `${r.employeeName} 님의 ${isCancel ? "취소 요청 반려" : "신청 반려"}`
+    : isCancel
+      ? "휴가 취소 요청 승인"
+      : r.ownRequest
+        ? "본인 신청 자가 승인"
+        : "휴가 승인";
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {target.req.employeeName} 님의 {isCancel ? "취소 요청 반려" : "신청 반려"}
-          </DialogTitle>
-          <DialogDescription>반려 사유는 신청자에게 알림과 메일로 전달됩니다.</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>
+            {rejecting
+              ? "반려 사유는 신청자에게 알림과 메일로 전달됩니다."
+              : isCancel
+                ? "승인하면 휴가가 취소되고 차감된 연차가 돌아갑니다."
+                : r.ownRequest
+                  ? "자가 승인 기록이 이벤트 로그에 남습니다."
+                  : "신청 내용을 확인하고 승인하거나 반려합니다."}
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="reject-reason">반려 사유</Label>
-          <Input id="reject-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="사유를 입력하세요" />
-        </div>
+        <RequestDetails r={r} />
+        {rejecting && (
+          <div className="space-y-2">
+            <Label htmlFor="reject-reason">반려 사유</Label>
+            <Input
+              id="reject-reason"
+              value={reason}
+              maxLength={500}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="사유를 입력하세요"
+              autoFocus
+            />
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            취소
+            닫기
           </Button>
-          <Button variant="destructive" onClick={onReject} disabled={reject.isPending}>
-            반려
-          </Button>
+          {rejecting ? (
+            <Button variant="destructive" onClick={onReject} disabled={busy}>
+              반려
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => onStep("reject")} disabled={busy}>
+                <X className="h-4 w-4" /> {isCancel ? "취소 반려" : "반려"}
+              </Button>
+              <Button onClick={() => approve.mutate()} disabled={busy}>
+                <Check className="h-4 w-4" /> {isCancel ? "취소 승인" : "승인"}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 결재 창의 신청 내용. 취소 요청은 원래 신청 사유와 처음 승인, 취소 사유를 함께 보여 준다. */
+function RequestDetails({ r }: { r: LeaveRequest }) {
+  const isCancel = isCancelRequest(r);
+  return (
+    <div className="space-y-2">
+      <dl className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-1.5 rounded-md bg-muted px-3 py-2 text-sm">
+        <dt className="text-muted-foreground">신청자</dt>
+        <dd className="flex flex-wrap items-center gap-x-2">
+          {r.employeeName}
+          {r.departmentName && <span className="text-muted-foreground">({r.departmentName})</span>}
+          {r.ownRequest && <Badge variant="warning">본인 신청</Badge>}
+        </dd>
+        <dt className="text-muted-foreground">휴가 구분</dt>
+        <dd className="flex flex-wrap items-center gap-x-2">
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: r.leaveTypeColor }} />
+            {r.leaveTypeName}
+          </span>
+          {r.specialRuleName && <span className="text-xs text-muted-foreground">{formatSpecialRule(r)}</span>}
+        </dd>
+        <dt className="text-muted-foreground">기간</dt>
+        <dd>{r.startDate === r.endDate ? r.startDate : `${r.startDate} ~ ${r.endDate}`}</dd>
+        <dt className="text-muted-foreground">일수</dt>
+        <dd>
+          {formatLeaveAmount(r)}
+          {r.forfeitedDays > 0 && (
+            <span className="ml-2 text-xs text-muted-foreground">연차 {formatDays(r.forfeitedDays)}일 소멸</span>
+          )}
+          {formatPeriodSplit(r) && <p className="text-xs text-muted-foreground">{formatPeriodSplit(r)}</p>}
+        </dd>
+        <dt className="text-muted-foreground">신청 사유</dt>
+        <dd className="whitespace-pre-wrap break-words">{r.reason?.trim() || "미기재"}</dd>
+        <dt className="text-muted-foreground">신청일</dt>
+        <dd>{formatDateTime(r.createdAt)}</dd>
+        {isCancel && (
+          <>
+            {r.approverName && (
+              <>
+                <dt className="text-muted-foreground">승인</dt>
+                <dd>
+                  {r.approverName}
+                  {r.approvedAt && <span className="text-muted-foreground"> · {formatDateTime(r.approvedAt)}</span>}
+                </dd>
+              </>
+            )}
+            <dt className="font-medium text-destructive">취소 사유</dt>
+            <dd className="whitespace-pre-wrap break-words">{r.cancelReason?.trim() || "미기재"}</dd>
+            <dt className="text-muted-foreground">취소 요청일</dt>
+            <dd>{formatDateTime(r.requestedAt)}</dd>
+          </>
+        )}
+      </dl>
+      {/* 결재 경고(팀 동시 부재 등)는 확인창과 같은 노란 상자로 눈에 띄게 */}
+      {r.approvalWarning && (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <span className="whitespace-pre-line">{r.approvalWarning}</span>
+        </p>
+      )}
+    </div>
   );
 }

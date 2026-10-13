@@ -271,6 +271,31 @@ class EmployeeExcelServiceTest {
         assertForbiddenRoles(file);
     }
 
+    @Test
+    void 한_번에_받는_인원을_넘으면_아무도_등록하지_않고_나눠_올리라고_한다() throws IOException {
+        String[][] rows = new String[EmployeeExcelService.MAX_IMPORT_ROWS + 1][];
+        for (int i = 0; i < rows.length; i++) {
+            rows[i] = new String[] {"u" + i + "@company.com", "직원", "", "", "", "2024-01-02", ""};
+        }
+        byte[] file = 엑셀(NEW_HEADERS, rows);
+
+        assertThatThrownBy(() -> excelService.importFrom(new ByteArrayInputStream(file)))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
+                    assertThat(ex.getMessage()).contains("2000명까지");
+                });
+        verify(employeeService, never()).create(any());
+    }
+
+    @Test
+    void 엑셀이_아닌_파일은_서버_오류가_아니라_입력_오류로_알린다() {
+        byte[] notExcel = "이메일,이름\nuser@company.com,홍길동".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> excelService.importFrom(new ByteArrayInputStream(notExcel)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT));
+    }
+
     private void assertForbiddenRoles(byte[] file) {
         assertThatThrownBy(() -> excelService.importFrom(new ByteArrayInputStream(file)))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> {

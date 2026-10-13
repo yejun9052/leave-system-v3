@@ -84,7 +84,7 @@ public class LeaveRequestController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.ok(PageResponse.from(leaveRequestService.myRequests(
-                SecurityUtils.currentEmployeeId(), PageRequest.of(page, size))));
+                SecurityUtils.currentEmployeeId(), PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)))));
     }
 
     @Operation(summary = "휴가 목록 (결재함): 상태·기간·검색어·부서로 찾기. 팀장은 맡은 부서(하위 포함)만",

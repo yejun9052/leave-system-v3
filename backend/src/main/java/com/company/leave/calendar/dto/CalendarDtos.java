@@ -49,6 +49,12 @@ public final class CalendarDtos {
                     editable);
         }
 
+        /** 휴가 종류(병가·경조사)를 가린 같은 일정. 제목은 "이름 - 휴가", 색은 중립 색. */
+        public EventResponse withHiddenType(String hiddenTitle) {
+            return new EventResponse(id, hiddenTitle, start, end, allDay, scope, source,
+                    LeaveRequestDtos.HIDDEN_TYPE_COLOR, departmentId, employeeId, editable);
+        }
+
         public static EventResponse holiday(Long id, String name, LocalDate date) {
             return new EventResponse(
                     "H" + id,

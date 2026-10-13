@@ -56,13 +56,20 @@ public class CalendarService {
         Set<Long> myDepts = visibleDeptIds(user, admin);
         List<CalendarDtos.EventResponse> result = new ArrayList<>();
 
-        for (CalendarEvent e : eventRepository.findBetween(start, end)) {
-            if (!isVisible(e, user, admin, myDepts)) {
-                continue;
-            }
+        List<CalendarEvent> visible = eventRepository.findBetween(start, end).stream()
+                .filter(e -> isVisible(e, user, admin, myDepts))
+                .toList();
+        // 동료의 병가·경조사는 종류를 가린다(본인·관리자·맡은 팀장은 그대로)
+        Map<Long, String> hiddenTitles = leaveRequestService.hiddenLeaveTitles(user.getId(), visible.stream()
+                .filter(e -> e.getSource() == CalendarEventSource.LEAVE_REQUEST && e.getLeaveRequestId() != null)
+                .map(CalendarEvent::getLeaveRequestId)
+                .toList());
+        for (CalendarEvent e : visible) {
             boolean editable = e.getSource() == CalendarEventSource.ADMIN_EVENT
                     && (admin || (e.getCreatedBy() != null && e.getCreatedBy().equals(user.getId())));
-            result.add(CalendarDtos.EventResponse.fromEvent(e, editable));
+            CalendarDtos.EventResponse event = CalendarDtos.EventResponse.fromEvent(e, editable);
+            String hiddenTitle = e.getLeaveRequestId() != null ? hiddenTitles.get(e.getLeaveRequestId()) : null;
+            result.add(hiddenTitle != null ? event.withHiddenType(hiddenTitle) : event);
         }
 
         holidayRepository.findByDateBetweenOrderByDateAsc(start, end).forEach(h ->

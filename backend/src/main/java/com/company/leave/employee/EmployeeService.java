@@ -228,6 +228,10 @@ public class EmployeeService {
             throw new BusinessException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }
         passwordAttempts.remove(employeeId);
+        // 화면에서도 막지만 API 를 직접 불러 같은 값으로 "변경"해 첫 로그인 변경 요구를 풀지 못하게
+        if (newPassword.equals(currentPassword)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "현재 비밀번호와 다른 비밀번호를 입력하세요.");
+        }
         employee.setOwnPassword(passwordEncoder.encode(newPassword));
     }
 

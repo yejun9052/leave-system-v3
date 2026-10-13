@@ -38,10 +38,12 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
@@ -77,6 +79,8 @@ class AuthServiceLoginTest {
     private SecurityContextRepository securityContextRepository;
     @Mock
     private SessionTerminator sessionTerminator;
+    @Mock
+    private PasswordEncoder passwordEncoder;
     /** 쿠키만 다루는 순수 객체라 목 대신 운영과 같은 설정의 실제 저장소 사용. */
     private final CsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
 
@@ -88,7 +92,7 @@ class AuthServiceLoginTest {
     void setUp() {
         authService = new AuthService(authenticationManager, employeeRepository, auditService,
                 loginAttemptService, securityContextRepository, csrfTokenRepository,
-                sessionTerminator);
+                sessionTerminator, passwordEncoder);
         request = new MockHttpServletRequest("POST", "/api/auth/login");
         request.setRemoteAddr(IP);
         response = new MockHttpServletResponse();
@@ -227,6 +231,30 @@ class AuthServiceLoginTest {
         assertThat(request.getSession(false)).isNull();
         verify(auditService).record(isNull(), eq(EMAIL), eq("LOGIN"), eq("auth"), isNull(),
                 anyString(), eq(false));
+    }
+
+    @Test
+    void 퇴사자_계정도_비밀번호_비교를_한_번_거쳐_다른_실패와_응답_시간이_같다() {
+        // Spring 은 비활성 계정을 비밀번호 비교 전에 DisabledException 으로 끝낸다
+        when(authenticationManager.authenticate(any())).thenThrow(new DisabledException("disabled"));
+        when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(직원(EmployeeStatus.RESIGNED)));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, "wrong!"), request, response))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+
+        verify(passwordEncoder).matches(eq("wrong!"), any());
+    }
+
+    @Test
+    void 비밀번호가_틀린_실패는_이미_비교를_거쳤으므로_다시_비교하지_않는다() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad"));
+        when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(직원(EmployeeStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, "wrong!"), request, response))
+                .isInstanceOf(BusinessException.class);
+
+        verify(passwordEncoder, never()).matches(any(), any());
     }
 
     @Test

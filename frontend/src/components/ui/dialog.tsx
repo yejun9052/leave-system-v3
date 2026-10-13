@@ -28,27 +28,48 @@ const DialogContent = React.forwardRef<
     /** true 면 우측 상단 닫기(X) 버튼을 숨긴다(닫을 수 없는 대화상자용) */
     hideClose?: boolean;
   }
->(({ className, children, hideClose, ...props }, ref) => (
-  <DialogPrimitive.Portal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg max-h-[90dvh] overflow-y-auto",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      {!hideClose && (
-        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
-          <X className="h-4 w-4" />
-          <span className="sr-only">닫기</span>
-        </DialogPrimitive.Close>
-      )}
-    </DialogPrimitive.Content>
-  </DialogPrimitive.Portal>
-));
+>(({ className, children, hideClose, onPointerDownOutside, ...props }, ref) => {
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      contentRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
+  return (
+    <DialogPrimitive.Portal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={setRefs}
+        className={cn(
+          "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg max-h-[90dvh] overflow-y-auto",
+          className,
+        )}
+        // 선택 상자 목록이 열려 있으면 대화상자는 잠시 클릭을 받지 않아서, 선택 상자를 다시 누른 클릭이 뒤의 어두운 배경에 닿아
+        // "바깥 클릭"으로 대화상자가 닫혔다. 대화상자 안쪽 자리를 누른 것은 바깥 클릭으로 치지 않는다.
+        onPointerDownOutside={(e) => {
+          const { clientX, clientY } = e.detail.originalEvent;
+          const box = contentRef.current?.getBoundingClientRect();
+          if (box && clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom) {
+            e.preventDefault();
+          }
+          onPointerDownOutside?.(e);
+        }}
+        {...props}
+      >
+        {children}
+        {!hideClose && (
+          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none">
+            <X className="h-4 w-4" />
+            <span className="sr-only">닫기</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
