@@ -156,6 +156,103 @@ class EmployeeExcelServiceTest {
         }
     }
 
+    @Test
+    void 이름이_같은_부서가_여럿이면_아무_데나_넣지_않고_경로로_적어_달라고_한다() throws IOException {
+        Department 연구소 = 부서(1L, "연구소", null);
+        Department 사업부 = 부서(5L, "사업부", null);
+        Department 연구소_개발팀 = 부서(2L, "개발팀", 연구소);
+        Department 사업부_개발팀 = 부서(6L, "개발팀", 사업부);
+        when(departmentRepository.findByName("개발팀")).thenReturn(List.of(연구소_개발팀, 사업부_개발팀));
+        when(departmentRepository.findAllByOrderBySortOrderAscNameAsc())
+                .thenReturn(List.of(연구소, 사업부, 연구소_개발팀, 사업부_개발팀));
+        byte[] file = 엑셀(NEW_HEADERS,
+                new String[] {"a@company.com", "가", "개발팀", "", "", "2024-01-02", ""},
+                new String[] {"b@company.com", "나", "사업부 › 개발팀", "", "", "2024-01-02", ""},
+                new String[] {"c@company.com", "다", "연구소>개발팀", "", "", "2024-01-02", ""});
+
+        EmployeeExcelService.ImportResult result = excelService.importFrom(new ByteArrayInputStream(file));
+
+        assertThat(result.errors()).singleElement().asString()
+                .startsWith("2행: 이름이 같은 부서가 여러 개입니다(")
+                .contains("연구소 › 개발팀").contains("사업부 › 개발팀");
+        assertThat(등록_요청들()).extracting(EmployeeRequests.Create::departmentId).containsExactly(6L, 2L);
+    }
+
+    @Test
+    void 내보내기의_부서는_경로로_쓴다() throws IOException {
+        Department 연구소 = 부서(1L, "연구소", null);
+        Department 개발팀 = 부서(2L, "개발팀", 연구소);
+        when(departmentRepository.findAllByOrderBySortOrderAscNameAsc()).thenReturn(List.of(연구소, 개발팀));
+        when(employeeService.search(any(), any())).thenReturn(new PageImpl<>(List.of(
+                new EmployeeResponse(1L, "kim@company.com", "김철수", 2L, "개발팀", "대리", null,
+                        LocalDate.of(2024, 3, 2), EmployeeStatus.ACTIVE, Role.EMPLOYEE, false))));
+
+        try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(excelService.export()))) {
+            assertThat(wb.getSheetAt(0).getRow(1).getCell(2).getStringCellValue()).isEqualTo("연구소 › 개발팀");
+        }
+    }
+
+    @Test
+    void 화면_등록과_같은_입력_검사를_하고_칸_이름으로_알린다() throws IOException {
+        byte[] file = 엑셀(NEW_HEADERS,
+                new String[] {"홍길동", "이메일아님", "", "", "", "2024-01-02", ""},
+                new String[] {"long@company.com", "직급초과", "", "가".repeat(51), "", "2024-01-02", ""},
+                new String[] {"date@company.com", "날짜틀림", "", "", "", "2024/01/02", ""});
+
+        EmployeeExcelService.ImportResult result = excelService.importFrom(new ByteArrayInputStream(file));
+
+        assertThat(result.created()).isZero();
+        assertThat(result.errors()).containsExactly(
+                "2행: 이메일 형식이 아닙니다.",
+                "3행: 직급은 50자까지입니다.",
+                "4행: 입사일 형식이 올바르지 않습니다(예: 2024-03-01): 2024/01/02");
+        verify(employeeService, never()).create(any());
+    }
+
+    @Test
+    void DB_오류_문구는_화면에_내보내지_않는다() throws IOException {
+        when(employeeService.create(any())).thenThrow(
+                new org.springframework.dao.DataIntegrityViolationException("insert into employees ... uq_employees_email"))
+                .thenThrow(new IllegalStateException("could not execute statement [insert into employees (...)]"));
+        byte[] file = 엑셀(NEW_HEADERS,
+                new String[] {"dup@company.com", "중복", "", "", "", "2024-01-02", ""},
+                new String[] {"err@company.com", "오류", "", "", "", "2024-01-02", ""});
+
+        EmployeeExcelService.ImportResult result = excelService.importFrom(new ByteArrayInputStream(file));
+
+        assertThat(result.errors()).containsExactly(
+                "2행: 이미 등록된 이메일이거나 값이 너무 깁니다.",
+                "3행: 등록하지 못했습니다. 입력 값을 확인해 주세요.");
+    }
+
+    @Test
+    void 엑셀_날짜_서식_칸의_입사일도_읽는다() throws IOException {
+        byte[] file;
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("사용자");
+            쓰기(sheet.createRow(0), NEW_HEADERS);
+            Row row = sheet.createRow(1);
+            쓰기(row, new String[] {"kim@company.com", "김철수", "", "", "", "", ""});
+            org.apache.poi.ss.usermodel.CellStyle dateStyle = wb.createCellStyle();
+            dateStyle.setDataFormat(wb.getCreationHelper().createDataFormat().getFormat("yyyy-mm-dd"));
+            row.getCell(5).setCellValue(LocalDate.of(2024, 3, 2));
+            row.getCell(5).setCellStyle(dateStyle);
+            wb.write(out);
+            file = out.toByteArray();
+        }
+
+        EmployeeExcelService.ImportResult result = excelService.importFrom(new ByteArrayInputStream(file));
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(등록_요청들().get(0).hireDate()).isEqualTo(LocalDate.of(2024, 3, 2));
+    }
+
+    private static Department 부서(Long id, String name, Department parent) {
+        Department d = new Department(name, parent, 0);
+        ReflectionTestUtils.setField(d, "id", id);
+        return d;
+    }
+
     // --- helpers ---
     @Test
     void 시스템_관리자_권한이_뒤쪽_행에_있어도_아무_직원도_등록하지_않고_400으로_거부한다() throws IOException {
