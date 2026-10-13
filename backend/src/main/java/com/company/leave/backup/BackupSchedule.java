@@ -54,6 +54,11 @@ public record BackupSchedule(String cron) {
         if (!f[0].matches("\\d{1,2}")) {
             return "초는 0처럼 숫자 하나로 정해 주세요(백업은 1시간보다 자주 실행할 수 없습니다).";
         }
+        // N개월마다는 12의 약수만: 5개월마다면 11월 다음이 이듬해 1월(2개월 뒤)이라 "5개월마다"가 사실이 아니게 된다
+        Matcher monthStep = MONTH_STEP.matcher(f[4]);
+        if (monthStep.matches() && 12 % Math.max(1, Integer.parseInt(monthStep.group(2))) != 0) {
+            return "개월마다는 1·2·3·4·6·12 중에서 골라 주세요(12를 나누어떨어지게 해야 해마다 같은 간격으로 돕니다).";
+        }
         LocalDateTime prev = expression.next(from);
         if (prev == null) {
             return "실행될 날짜가 없습니다(예: 2월 30일).";
