@@ -16,13 +16,15 @@ interface PanelProps {
   onChangeDates?: () => void;
   onClose: () => void;
   onSaved: () => void;
+  /** 제목 자리의 할 일 드롭다운(휴가 신청·강제 등록·블랙아웃 등록) */
+  heading?: React.ReactNode;
 }
 
 /**
  * 캘린더에서 고른 기간으로 연차 사용 금지 기간(블랙아웃) 등록(인사관리자·시스템 관리자).
  * "다음"을 누르면 정책 화면과 같은 확인 창에서 겹치는 휴가와 처리 결과를 보여 주고 저장한다.
  */
-export function BlackoutEntryPanel({ selection, variant = "floating", hidden, onChangeDates, onClose, onSaved }: PanelProps) {
+export function BlackoutEntryPanel({ selection, variant = "floating", hidden, onChangeDates, onClose, onSaved, heading }: PanelProps) {
   const [name, setName] = useState("");
   const [confirming, setConfirming] = useState(false);
   const end = selection.end ?? selection.start;
@@ -30,6 +32,7 @@ export function BlackoutEntryPanel({ selection, variant = "floating", hidden, on
     <>
       <EntryPanel
         title="블랙아웃(연차 사용 금지 기간) 등록"
+        heading={heading}
         variant={variant}
         hidden={hidden || confirming}
         onClose={onClose}
@@ -85,6 +88,7 @@ export function RegisterEntryPanel({
   onClose,
   onSaved,
   onPartialChange,
+  heading,
 }: PanelProps & { onPartialChange: (partial: boolean) => void }) {
   const form = useLeaveRegisterForm({
     start: selection.start,
@@ -101,6 +105,7 @@ export function RegisterEntryPanel({
   return (
     <EntryPanel
       title="휴가 강제 등록"
+      heading={heading}
       variant={variant}
       hidden={hidden}
       onClose={onClose}

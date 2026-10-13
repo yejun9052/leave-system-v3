@@ -29,13 +29,17 @@ function clampPosition(x: number, y: number) {
  */
 export default function EntryPanel({
   title,
+  heading,
   variant = "floating",
   hidden = false,
   onClose,
   footer,
   children,
 }: {
+  /** 창 이름(화면 낭독기). heading 이 없으면 제목줄에도 이 글자를 쓴다 */
   title: string;
+  /** 제목 대신 둘 것(관리자의 할 일 드롭다운). 제목줄을 끌어 옮기는 동작과 겹치지 않게 감싸서 넣는다 */
+  heading?: React.ReactNode;
   variant?: "floating" | "sheet";
   hidden?: boolean;
   onClose: () => void;
@@ -110,7 +114,15 @@ export default function EntryPanel({
         onPointerDown={sheet ? undefined : onPointerDown}
       >
         {!sheet && <GripHorizontal className="h-4 w-4 text-muted-foreground" />}
-        <h2 className="flex-1 font-semibold">{title}</h2>
+        {heading ? (
+          <>
+            <div onPointerDown={(e) => e.stopPropagation()}>{heading}</div>
+            {/* 남는 제목줄은 그대로 끌어 옮길 수 있다 */}
+            <div className="flex-1 self-stretch" />
+          </>
+        ) : (
+          <h2 className="flex-1 font-semibold">{title}</h2>
+        )}
         <Button
           variant="ghost"
           size="icon"

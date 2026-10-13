@@ -391,12 +391,35 @@ export default function CalendarPage() {
   // 다시 불러오기는 신청 폼(invalidateLeaveData)이 맡는다
   const onLeaveSaved = () => closePanel();
 
-  /** 할 일을 바꾸면 고르던 날짜와 열린 패널을 닫는다(시작일 규칙과 입력이 다르다) */
+  /**
+   * 패널 제목의 드롭다운으로 할 일을 바꾼다. 고른 날짜는 그대로 두고 입력 칸만 바뀐다.
+   * 블랙아웃에서 주말·공휴일부터 고른 기간은 휴가(신청·강제 등록)로 쓸 수 없어 선택을 지운다.
+   */
   const setEntryMode = (next: EntryMode) => {
     if (next === mode) return;
-    closePanel();
+    setPartial(false); // 휴가 쪽 패널은 열리면서 반차·시간차 여부를 다시 알려 준다
+    if (next !== "BLACKOUT" && selection && !isWorkday(selection.start)) {
+      notify("시작일이 근무일이 아니라 날짜를 다시 골라 주세요.");
+      closePanel();
+    }
     setEntryModeState(next);
   };
+
+  // 관리자: 패널 제목 자리에 할 일 드롭다운(기본 휴가 신청)
+  const modeSelect = isAdmin ? (
+    <Select value={mode} onValueChange={(v) => setEntryMode(v as EntryMode)}>
+      <SelectTrigger aria-label="할 일" className="h-8 w-[150px] font-semibold">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {ENTRY_MODES.map((m) => (
+          <SelectItem key={m.key} value={m.key}>
+            {m.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  ) : undefined;
 
   // 이름(제목) 검색은 휴가·일정만 거른다(공휴일·연차 제한·연차 기간 표시는 그대로). 모바일 돋보기와 같은 규칙
   const q = query.trim();
@@ -567,26 +590,6 @@ export default function CalendarPage() {
       ))}
     </div>
   );
-  // 관리자만: 날짜를 누르면 무엇을 할지(기본 휴가 신청)
-  const modePicker = isAdmin && (
-    <div className="flex items-center gap-2 text-sm">
-      <Label htmlFor="calendar-entry-mode" className="whitespace-nowrap font-normal text-muted-foreground">
-        날짜를 누르면
-      </Label>
-      <Select value={mode} onValueChange={(v) => setEntryMode(v as EntryMode)}>
-        <SelectTrigger id="calendar-entry-mode" className="w-[150px]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ENTRY_MODES.map((m) => (
-            <SelectItem key={m.key} value={m.key}>
-              {m.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
   const deptPicker =
     view === "DEPARTMENT" && deptChain.length > 0 && (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" role="group" aria-label="볼 부서">
@@ -613,7 +616,6 @@ export default function CalendarPage() {
           <div className="space-y-2">
             {viewTabs}
             {deptPicker}
-            {modePicker}
           </div>
           <MobileMonthView
             month={viewMonth}
@@ -652,14 +654,11 @@ export default function CalendarPage() {
               <h1 className="text-2xl font-bold">캘린더</h1>
               <p className="text-sm text-muted-foreground">전사 휴가 현황과 일정을 확인합니다.</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {modePicker}
-              {canManage && (
-                <Button onClick={() => setCreating(true)}>
-                  <Plus className="h-4 w-4" /> 일정 추가
-                </Button>
-              )}
-            </div>
+            {canManage && (
+              <Button onClick={() => setCreating(true)}>
+                <Plus className="h-4 w-4" /> 일정 추가
+              </Button>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -751,6 +750,7 @@ export default function CalendarPage() {
       {panelOpen && selection && mode === "LEAVE" && (
         <LeaveEntryPanel
           selection={selection}
+          heading={modeSelect}
           variant={isMobile ? "sheet" : "floating"}
           hidden={picking}
           onChangeDates={isMobile ? startPicking : undefined}
@@ -762,6 +762,7 @@ export default function CalendarPage() {
       {panelOpen && selection && mode === "REGISTER" && (
         <RegisterEntryPanel
           selection={selection}
+          heading={modeSelect}
           variant={isMobile ? "sheet" : "floating"}
           hidden={picking}
           onChangeDates={isMobile ? startPicking : undefined}
@@ -773,6 +774,7 @@ export default function CalendarPage() {
       {panelOpen && selection && mode === "BLACKOUT" && (
         <BlackoutEntryPanel
           selection={selection}
+          heading={modeSelect}
           variant={isMobile ? "sheet" : "floating"}
           hidden={picking}
           onChangeDates={isMobile ? startPicking : undefined}

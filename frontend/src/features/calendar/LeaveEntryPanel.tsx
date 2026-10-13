@@ -18,8 +18,11 @@ export default function LeaveEntryPanel({
   onClose,
   onSaved,
   onPartialChange,
+  heading,
 }: {
   selection: DateSelection;
+  /** 관리자: 제목 자리의 할 일 드롭다운(휴가 신청·강제 등록·블랙아웃 등록) */
+  heading?: React.ReactNode;
   variant?: "floating" | "sheet";
   hidden?: boolean;
   /** 모바일: 날짜 선택 모드로 들어가기 */
@@ -59,6 +62,7 @@ export default function LeaveEntryPanel({
   return (
     <EntryPanel
       title="휴가 신청"
+      heading={heading}
       variant={variant}
       hidden={hidden}
       onClose={onClose}
