@@ -73,6 +73,21 @@ class AnnouncementMessengerTest {
         lenient().when(employees.findByDepartmentId(4L)).thenReturn(List.of(개발1));
         lenient().when(departments.findById(3L)).thenReturn(Optional.of(QA팀));
         lenient().when(departments.findById(4L)).thenReturn(Optional.of(개발팀));
+        // 하위 부서 없음: 자기 부서만
+        lenient().when(departments.findSubtreeIds(3L)).thenReturn(List.of(3L));
+        lenient().when(departments.findSubtreeIds(4L)).thenReturn(List.of(4L));
+    }
+
+    @Test
+    void 부서_일정은_하위_부서_직원에게도_알린다() {
+        // QA팀(3) 아래에 개발팀(4)이 있다고 하면, QA팀 일정은 개발팀 직원도 캘린더에서 본다
+        when(departments.findSubtreeIds(3L)).thenReturn(List.of(3L, 4L));
+
+        messenger.event(Change.CREATED, new EventView("QA 회의", DAY, DAY, CalendarEventScope.DEPARTMENT, 3L), null, 1L);
+
+        verify(notifications).notify(eq(11L), anyString(), anyString(), anyString(), anyString());
+        verify(notifications).notify(eq(21L), anyString(), anyString(), anyString(), anyString());
+        assertThat(보낸_메일().bcc()).contains("qa1@company.com", "dev1@company.com");
     }
 
     @Test
@@ -105,7 +120,7 @@ class AnnouncementMessengerTest {
 
         AnnouncementMail mail = 보낸_메일();
         assertThat(mail.bcc()).containsExactlyInAnyOrder("qa1@company.com", "dev1@company.com");
-        assertThat(mail.text()).contains("수신자: 개발팀·QA팀 소속 직원")
+        assertThat(mail.text()).contains("수신자: 개발팀·QA팀(하위 부서 포함) 소속 직원")
                 .contains("범위: 개발팀 일정").contains("변경 전 범위: QA팀 일정");
     }
 

@@ -102,6 +102,18 @@ class CalendarServiceVisibilityTest {
         }
 
         @Test
+        void 팀장은_맡은_부서의_하위_부서_일정도_본다() {
+            when(events.findBetween(DAY, DAY)).thenReturn(List.of(내부서, 다른부서, 상위부서, 하위부서));
+            when(departments.findByLeadId(ME)).thenReturn(List.of(dept(MY_DEPT, dept(PARENT_DEPT, null))));
+            when(departments.findSubtreeIds(MY_DEPT)).thenReturn(List.of(MY_DEPT, CHILD_DEPT));
+
+            List<CalendarDtos.EventResponse> visible = service.getEvents(DAY, DAY, employee(ME, MY_DEPT, Role.TEAM_LEAD));
+
+            // 하위 부서(7)에 등록한 일정을 본인이 보고 고칠 수 있어야 한다. 형제 부서(5)는 여전히 안 보임
+            assertThat(visible).extracting(CalendarDtos.EventResponse::id).containsExactly("E2", "E6", "E7");
+        }
+
+        @Test
         void 관리자는_모든_부서와_개인_일정을_본다() {
             List<CalendarDtos.EventResponse> visible = service.getEvents(DAY, DAY, employee(10L, null, Role.HR_ADMIN));
 

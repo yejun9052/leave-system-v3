@@ -6,6 +6,8 @@ import com.company.leave.calendar.domain.CalendarEventSource;
 import com.company.leave.leave.dto.LeaveRequestDtos;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -101,12 +103,12 @@ public final class CalendarDtos {
     }
 
     public record CreateEvent(
-            @NotBlank String title,
+            @NotBlank @Size(max = 200) String title,
             @NotNull LocalDate startDate,
             @NotNull LocalDate endDate,
             boolean allDay,
             @NotNull CalendarEventScope scope,
             Long departmentId,
-            String colorHex) {
+            @Pattern(regexp = "^#[0-9a-fA-F]{6}$", message = "색은 #RRGGBB 형식이어야 합니다.") String colorHex) {
     }
 }
