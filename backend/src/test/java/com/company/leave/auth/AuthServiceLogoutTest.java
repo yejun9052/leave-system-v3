@@ -63,6 +63,8 @@ class AuthServiceLogoutTest {
     private LoginAttemptService loginAttemptService;
     @Mock
     private SecurityContextRepository securityContextRepository;
+    @Mock
+    private SessionTerminator sessionTerminator;
 
     private AuthService authService;
     private MockHttpServletRequest request;
@@ -71,7 +73,8 @@ class AuthServiceLogoutTest {
     @BeforeEach
     void setUp() {
         authService = new AuthService(authenticationManager, employeeRepository, auditService,
-                loginAttemptService, securityContextRepository, CookieCsrfTokenRepository.withHttpOnlyFalse());
+                loginAttemptService, securityContextRepository, CookieCsrfTokenRepository.withHttpOnlyFalse(),
+                sessionTerminator);
         request = new MockHttpServletRequest("POST", "/api/auth/logout");
         response = new MockHttpServletResponse();
     }
@@ -91,6 +94,15 @@ class AuthServiceLogoutTest {
 
         assertThat(session.isInvalid()).isTrue();
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    void 로그아웃하면_그_사람의_모든_기기_세션을_끊는다() {
+        로그인된_상태(직원(false));
+
+        authService.logout(request, response);
+
+        verify(sessionTerminator).terminateAll(EMPLOYEE_ID);
     }
 
     @Test
@@ -123,7 +135,7 @@ class AuthServiceLogoutTest {
         authService.logout(request, response);
 
         assertThat(session.isInvalid()).isTrue();
-        verifyNoInteractions(auditService);
+        verifyNoInteractions(auditService, sessionTerminator);
     }
 
     @Test

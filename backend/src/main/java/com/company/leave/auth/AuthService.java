@@ -42,6 +42,7 @@ public class AuthService {
     private final AuditService auditService;
     private final LoginAttemptService loginAttemptService;
     private final SecurityContextRepository securityContextRepository;
+    private final SessionTerminator sessionTerminator;
     private final SecurityContextHolderStrategy contextHolderStrategy =
             SecurityContextHolder.getContextHolderStrategy();
     /** 커스텀 JSON 로그인은 Spring 기본 로그인 필터를 거치지 않으므로 세션 고정 방지·CSRF 토큰 교체를 직접 적용. */
@@ -55,12 +56,14 @@ public class AuthService {
                        AuditService auditService,
                        LoginAttemptService loginAttemptService,
                        SecurityContextRepository securityContextRepository,
-                       CsrfTokenRepository csrfTokenRepository) {
+                       CsrfTokenRepository csrfTokenRepository,
+                       SessionTerminator sessionTerminator) {
         this.authenticationManager = authenticationManager;
         this.employeeRepository = employeeRepository;
         this.auditService = auditService;
         this.loginAttemptService = loginAttemptService;
         this.securityContextRepository = securityContextRepository;
+        this.sessionTerminator = sessionTerminator;
         this.sessionAuthenticationStrategy = new CompositeSessionAuthenticationStrategy(List.of(
                 new ChangeSessionIdAuthenticationStrategy(),
                 new CsrfAuthenticationStrategy(csrfTokenRepository)));
@@ -123,11 +126,16 @@ public class AuthService {
     }
 
     /** 현재 세션 삭제 + CSRF 토큰 폐기. */
+    /**
+     * 로그아웃: 이 브라우저뿐 아니라 그 사람의 모든 기기·브라우저 로그인(로그인 유지 포함)을 끊는다.
+     * 다른 기기의 열린 화면은 실시간 신호로 바로 로그인 화면으로 간다.
+     */
     public void logout(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
         Authentication authentication = contextHolderStrategy.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
+            sessionTerminator.terminateAll(principal.getId());
             auditService.record(principal.getId(), principal.getName(), "LOGOUT", "auth", null,
-                    "로그아웃", true);
+                    "로그아웃(모든 기기)", true);
         }
         csrfLogoutHandler.logout(httpRequest, httpResponse, authentication);
         securityContextLogoutHandler.logout(httpRequest, httpResponse, authentication);

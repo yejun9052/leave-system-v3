@@ -133,6 +133,19 @@ class RealtimeTest {
     }
 
     @Test
+    void 로그인이_끊기면_그_사람의_연결에만_signed_out_을_보내고_닫는다() throws Exception {
+        MvcResult mine = 연결(사원);
+        MvcResult lead = 연결(팀장);
+        기다림(() -> 내용(mine).contains("event:connected") && 내용(lead).contains("event:connected"));
+
+        hub.signOut(사원);
+
+        기다림(() -> 내용(mine).contains("event:signed-out"));
+        assertThat(내용(lead)).doesNotContain("signed-out");
+        assertThat(hub.connectionCount()).isEqualTo(1);
+    }
+
+    @Test
     void 서버를_끌_때는_열린_연결을_먼저_모두_닫는다() throws Exception {
         MvcResult mine = 연결(사원);
         기다림(() -> 내용(mine).contains("event:connected"));

@@ -91,6 +91,22 @@ public class RealtimeHub implements SmartLifecycle {
                 .forEach(e -> deliver(employeeId, e, change(data))));
     }
 
+    /**
+     * 이 직원의 로그인(세션)이 끊겼다: 그 직원의 모든 탭·기기에 "signed-out" 을 보내고 연결을 닫는다.
+     * 화면은 로그인 상태를 확인해, 끊겼으면 로그인 화면으로 가고 아직 살아 있으면(비밀번호를 바꾼 그 브라우저) 다시 연결한다.
+     */
+    public void signOut(Long employeeId) {
+        submit(() -> connections.getOrDefault(employeeId, Set.of()).forEach(e -> {
+            deliver(employeeId, e, SseEmitter.event().name("signed-out").data(""));
+            remove(employeeId, e);
+            try {
+                e.complete();
+            } catch (RuntimeException ignored) {
+                // 이미 끝난 연결
+            }
+        }));
+    }
+
     /** 지금 연결 수(점검·테스트용). */
     public int connectionCount() {
         return connections.values().stream().mapToInt(Set::size).sum();

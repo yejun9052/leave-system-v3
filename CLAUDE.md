@@ -65,6 +65,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 - `RealtimeHub` keeps SSE connections (`GET /api/realtime`). Signals carry no data, only the origin tab ID (`X-Client-Id`).
 - `RealtimeChangeInterceptor` broadcasts after every successful POST/PUT/PATCH/DELETE under `/api/**`. Personal ones (notifications, own password) go only to the actor. `JobRunRecorder.run` broadcasts after each scheduled job.
 - New endpoints need nothing extra. New background work that changes data outside a request or job should call `RealtimeHub.broadcast(null)`.
+- Deleting sessions goes through `auth/SessionTerminator`, which calls `RealtimeHub.signOut`; open tabs then re-check `/auth/me` and go to login if the session is gone. Logout ends **all** of that user's sessions.
 
 **Policy (`policy/`)**
 - One `leave_policy` row.

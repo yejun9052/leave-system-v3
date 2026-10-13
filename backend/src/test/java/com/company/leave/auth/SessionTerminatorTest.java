@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.company.leave.realtime.RealtimeHub;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.session.FindByIndexNameSessionRepository;
@@ -29,6 +30,26 @@ class SessionTerminatorTest {
 
     @Mock
     private FindByIndexNameSessionRepository<Session> sessionRepository;
+    @Mock
+    private RealtimeHub realtimeHub;
+
+    @Test
+    void 세션을_지우면_그_사람의_열린_화면에_로그인이_끊겼다고_알린다() {
+        when(sessionRepository.findByPrincipalName("9")).thenReturn(세션들("a"));
+
+        new SessionTerminator(sessionRepository, realtimeHub).terminateAll(EMPLOYEE_ID);
+
+        verify(realtimeHub).signOut(EMPLOYEE_ID);
+    }
+
+    @Test
+    void 지운_세션이_없으면_알리지_않는다() {
+        when(sessionRepository.findByPrincipalName("9")).thenReturn(세션들());
+
+        new SessionTerminator(sessionRepository, realtimeHub).terminateAll(EMPLOYEE_ID);
+
+        verify(realtimeHub, never()).signOut(EMPLOYEE_ID);
+    }
 
     @Test
     void 모두_종료하면_그_사용자의_세션을_전부_삭제한다() {

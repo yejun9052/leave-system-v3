@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { authApi } from "@/api/auth";
 import { CLIENT_ID } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
+import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
 /** 신호가 몰려 오면 한 번에 묶어 다시 불러온다 */
 const REFRESH_DELAY_MS = 400;
@@ -21,6 +22,8 @@ const HIDDEN_PING_MS = 20 * 60_000;
  *   대신 20분마다 로그인을 확인해 열어 둔 탭은 로그아웃되지 않게 하고, 다시 보이면 연결해 한 번 새로 불러온다.
  * - 연결이 끊겼다 붙으면(서버 재시작, 30분마다 다시 연결) 놓친 신호가 있을 수 있어 한 번 새로 불러온다.
  * - 로그인이 끊겨 연결이 거절되면 로그인 화면으로 보낸다.
+ * - 다른 곳에서 로그아웃(모든 기기)·비밀번호 변경·퇴사 처리로 로그인이 끊기면 서버가 "signed-out" 을 보낸다.
+ *   로그인 상태를 바로 확인해 끊겼으면 로그인 화면으로, 아직 살아 있으면(비밀번호를 바꾼 그 브라우저) 다시 연결한다.
  */
 export function useRealtime(enabled: boolean) {
   const qc = useQueryClient();
@@ -33,6 +36,8 @@ export function useRealtime(enabled: boolean) {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let pingTimer: ReturnType<typeof setInterval> | undefined;
+    /** 연달아 연결이 거절된 횟수. 첫 번째는 바로 확인(다른 곳에서 로그아웃된 탭을 다시 열었을 때 곧바로 로그인 화면으로) */
+    let refused = 0;
 
     const refresh = () => {
       clearTimeout(refreshTimer);
@@ -45,7 +50,7 @@ export function useRealtime(enabled: boolean) {
     };
 
     // 서버가 연결을 거절했다(로그아웃됨·점검 중 등): 로그인 상태를 확인하고 다시 연결
-    const retryLater = () => {
+    const retryLater = (delay = RETRY_MS) => {
       clearTimeout(retryTimer);
       retryTimer = setTimeout(async () => {
         if (stopped) return;
@@ -54,12 +59,14 @@ export function useRealtime(enabled: boolean) {
           open();
         } catch (err) {
           if (axios.isAxiosError(err) && err.response?.status === 401) {
+            // 로그인이 끊겨 저장할 수 없으니 "저장하시겠습니까?"는 묻지 않는다
+            useUnsavedChangesStore.getState().discardAll();
             useAuthStore.setState({ user: null }); // → 로그인 화면(돌아올 주소 기억)
           } else {
             retryLater();
           }
         }
-      }, RETRY_MS);
+      }, delay);
     };
 
     const open = () => {
@@ -67,6 +74,7 @@ export function useRealtime(enabled: boolean) {
       const es = new EventSource("/api/realtime");
       source = es;
       es.addEventListener("connected", () => {
+        refused = 0;
         if (missed) {
           missed = false;
           refresh();
@@ -81,12 +89,18 @@ export function useRealtime(enabled: boolean) {
         }
         if (origin !== CLIENT_ID) refresh();
       });
+      es.addEventListener("signed-out", () => {
+        es.close();
+        if (source === es) source = null;
+        missed = true;
+        retryLater(0);
+      });
       es.onerror = () => {
         missed = true;
         // 네트워크가 끊긴 경우는 브라우저가 알아서 다시 연결한다(CONNECTING). 응답 오류면 CLOSED
         if (es.readyState === EventSource.CLOSED && source === es) {
           source = null;
-          retryLater();
+          retryLater(refused++ === 0 ? 0 : RETRY_MS);
         }
       };
     };

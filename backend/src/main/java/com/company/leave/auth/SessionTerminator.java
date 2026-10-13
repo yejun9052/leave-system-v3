@@ -1,21 +1,34 @@
 package com.company.leave.auth;
 
+import com.company.leave.realtime.RealtimeHub;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.stereotype.Service;
 
 /**
- * 사용자별 서버 세션 강제 종료(퇴사·비밀번호 변경 등).
+ * 사용자별 서버 세션 강제 종료(로그아웃·퇴사·비밀번호 변경 등).
+ * 지운 뒤에는 그 사용자의 열린 화면에 실시간으로 알려 바로 로그인 화면으로 가게 한다({@link RealtimeHub#signOut}).
  * 세션의 principal 인덱스는 이메일(변경 가능) 대신 직원 ID 로 둔다 → {@link #principalName(Long)}.
  */
 @Service
 public class SessionTerminator {
 
     private final FindByIndexNameSessionRepository<? extends Session> sessionRepository;
+    /** 없으면(테스트) 알리지 않는다 */
+    private final RealtimeHub realtimeHub;
 
     public SessionTerminator(FindByIndexNameSessionRepository<? extends Session> sessionRepository) {
+        this(sessionRepository, null);
+    }
+
+    @Autowired
+    public SessionTerminator(FindByIndexNameSessionRepository<? extends Session> sessionRepository,
+                             RealtimeHub realtimeHub) {
         this.sessionRepository = sessionRepository;
+        this.realtimeHub = realtimeHub;
     }
 
     /** 세션 인덱스(PRINCIPAL_NAME)에 기록하는 값. 로그인 시 세션 속성으로 명시 저장한다. */
@@ -40,8 +53,12 @@ public class SessionTerminator {
 
     /** 해당 사용자의 세션 중 keepSessionId 를 제외하고 모두 삭제. */
     public void terminateAllExcept(Long employeeId, String keepSessionId) {
-        sessionRepository.findByPrincipalName(principalName(employeeId)).keySet().stream()
+        List<String> ids = sessionRepository.findByPrincipalName(principalName(employeeId)).keySet().stream()
                 .filter(id -> !id.equals(keepSessionId))
-                .forEach(sessionRepository::deleteById);
+                .toList();
+        ids.forEach(sessionRepository::deleteById);
+        if (!ids.isEmpty() && realtimeHub != null) {
+            realtimeHub.signOut(employeeId);
+        }
     }
 }

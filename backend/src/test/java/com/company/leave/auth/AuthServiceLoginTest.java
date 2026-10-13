@@ -75,6 +75,8 @@ class AuthServiceLoginTest {
     private LoginAttemptService loginAttemptService;
     @Mock
     private SecurityContextRepository securityContextRepository;
+    @Mock
+    private SessionTerminator sessionTerminator;
     /** 쿠키만 다루는 순수 객체라 목 대신 운영과 같은 설정의 실제 저장소 사용. */
     private final CsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
 
@@ -85,7 +87,8 @@ class AuthServiceLoginTest {
     @BeforeEach
     void setUp() {
         authService = new AuthService(authenticationManager, employeeRepository, auditService,
-                loginAttemptService, securityContextRepository, csrfTokenRepository);
+                loginAttemptService, securityContextRepository, csrfTokenRepository,
+                sessionTerminator);
         request = new MockHttpServletRequest("POST", "/api/auth/login");
         request.setRemoteAddr(IP);
         response = new MockHttpServletResponse();
