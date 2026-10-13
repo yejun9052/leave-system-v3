@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { APPROVAL_TABS, sectionOf } from "@/lib/pageSections";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import QueryError from "@/components/QueryError";
@@ -82,6 +84,8 @@ export default function ApprovalsPage() {
   const qc = useQueryClient();
   const canRegister = useAuthStore((s) => s.hasAnyRole("HR_ADMIN", "SYSTEM_ADMIN"));
   const [registering, setRegistering] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const tab = sectionOf(APPROVAL_TABS, params.get("tab")).value;
 
   const [deciding, setDeciding] = useState<DecisionTarget | null>(null);
 
@@ -121,10 +125,14 @@ export default function ApprovalsPage() {
         )}
       </div>
 
-      <Tabs defaultValue="pending">
+      {/* 탭은 주소(?tab=list)와 맞춘다: 상단 위치 표시가 지금 탭을 보여 준다 */}
+      <Tabs value={tab} onValueChange={(v) => setParams(v === "pending" ? {} : { tab: v }, { replace: true })}>
         <TabsList>
-          <TabsTrigger value="pending">결재 대기{pending.length > 0 && ` (${pending.length})`}</TabsTrigger>
-          <TabsTrigger value="list">휴가 목록</TabsTrigger>
+          <TabsTrigger value="pending">
+            {APPROVAL_TABS[0].label}
+            {pending.length > 0 && ` (${pending.length})`}
+          </TabsTrigger>
+          <TabsTrigger value="list">{APPROVAL_TABS[1].label}</TabsTrigger>
         </TabsList>
         <TabsContent value="pending" className="space-y-3">
           {/* 실패를 "대기 중인 결재가 없습니다"로 보이면 결재할 건이 없다고 오해한다 */}
