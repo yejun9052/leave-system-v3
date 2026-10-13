@@ -5,7 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * 실시간 갱신으로 서버 값이 바뀌었을 때
  * - 고치는 중이 아니면 새 값으로 바꾼다.
  * - 고치는 중이면 입력을 지우지 않고 changedElsewhere = true 로 알린다. reload() 로 새 값을 불러온다.
- * 저장에 성공하면 reset(저장된 값)으로 맞춘다(서버가 값을 다듬어 돌려줘도 남이 바꾼 것으로 보지 않게).
+ * 저장에 성공하면 reset(저장된 값, 보낸 입력)으로 맞춘다(서버가 값을 다듬어 돌려줘도 남이 바꾼 것으로 보지 않게,
+ * 저장 중에 더 고친 입력은 덮지 않게).
  *
  * @param server 서버 값을 화면 입력 모양으로 바꾼 것. 아직 없으면 undefined
  */
@@ -45,11 +46,18 @@ export function useServerForm<T>(server: T | undefined) {
     setChangedElsewhere(false);
   }, []);
 
-  /** 저장 성공: 저장된 값을 새 바탕으로 */
-  const reset = useCallback((value: T) => {
+  const formRef = useRef(form);
+  formRef.current = form;
+
+  /**
+   * 저장 성공: 저장된 값을 새 바탕으로.
+   * sent(저장 요청에 보낸 입력)를 주면, 저장이 끝나기 전에 더 고친 입력은 지우지 않고 바탕만 바꾼다(저장 안 된 변경으로 남음).
+   */
+  const reset = useCallback((value: T, sent?: T) => {
     base.current = JSON.stringify(value);
-    setForm(value);
     setChangedElsewhere(false);
+    if (sent !== undefined && JSON.stringify(formRef.current) !== JSON.stringify(sent)) return;
+    setForm(value);
   }, []);
 
   return { form, setForm, changedElsewhere, reload, reset };

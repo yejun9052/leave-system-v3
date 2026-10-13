@@ -97,9 +97,10 @@ function PromotionAutomation({
     setMonths((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m].sort((a, b) => b - a)));
 
   const save = useMutation({
-    mutationFn: () => automationApi.updatePromotion(enabled, sortedMonths),
-    onSuccess: (r) => {
-      reset({ enabled: r.promotionEnabled, months: r.promotionMonths });
+    mutationFn: (sent: { enabled: boolean; months: number[] }) =>
+      automationApi.updatePromotion(sent.enabled, [...sent.months].sort((a, b) => b - a)),
+    onSuccess: (r, sent) => {
+      reset({ enabled: r.promotionEnabled, months: r.promotionMonths }, sent);
       qc.setQueryData(["automation"], r);
       qc.invalidateQueries({ queryKey: ["policy"] });
       toast({ title: r.promotionEnabled ? "자동 발송을 켰습니다." : "자동 발송 설정을 저장했습니다.", variant: "success" });
@@ -116,7 +117,7 @@ function PromotionAutomation({
       });
       if (!ok) return;
     }
-    save.mutate();
+    save.mutate({ enabled, months });
   };
 
   return (

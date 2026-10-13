@@ -180,8 +180,8 @@ export default function BackupSettingsCard() {
 
   const save = useMutation({
     mutationFn: (f: BackupSettingsForm) => backupApi.updateSettings({ ...f, cron: normalize(f.cron) }),
-    onSuccess: (saved) => {
-      reset(toForm(saved));
+    onSuccess: (saved, sent) => {
+      reset(toForm(saved), sent);
       setRecent((list) => pushRecent(list, { cron: saved.cron, label: saved.scheduleLabel }));
       qc.setQueryData(["backupSettings"], saved);
       qc.invalidateQueries({ queryKey: ["automation"] });

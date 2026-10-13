@@ -151,9 +151,9 @@ function PolicyTab() {
     setForm((f) => (f ? { ...f, [k]: v } : f));
 
   const save = useMutation({
-    mutationFn: () => policyApi.update(form!),
-    onSuccess: (saved) => {
-      reset(policyForm(saved));
+    mutationFn: (sent: PolicyInput) => policyApi.update(sent),
+    onSuccess: (saved, sent) => {
+      reset(policyForm(saved), sent);
       toast({ title: "정책이 저장되었습니다.", variant: "success" });
       void qc.invalidateQueries({ queryKey: ["policy"] });
       // 반차·시간차 허용, 사전 신청 기한 등이 신청 미리보기와 잔여 연차에 바로 반영되게
@@ -387,7 +387,7 @@ function PolicyTab() {
               description: "저장하면 이후 연차 계산에 바로 적용됩니다.",
               confirmText: "저장",
             });
-            if (ok) save.mutate();
+            if (ok) save.mutate(form);
           }}
           disabled={save.isPending}
         >
