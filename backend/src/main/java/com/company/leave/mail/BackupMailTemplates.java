@@ -6,11 +6,14 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-/** 백업·복원 안내 메일(받는 사람: 시스템 관리자·인사관리자). */
+/** 백업·복원 안내 메일(받는 사람: 자동 백업 실패는 시스템 관리자·인사관리자, 복원 완료는 인사관리자, 복원 안내는 전 직원). */
 public final class BackupMailTemplates {
 
     private static final String PREFIX = "[연차관리] ";
     private static final String AUDIENCE = "시스템 관리자·인사관리자";
+    /** 복원은 시스템 관리자만 할 수 있어(본인은 화면에서 결과를 본다) 완료 안내는 인사관리자에게만 */
+    private static final String RESTORE_AUDIENCE = "인사관리자";
+    private static final String ALL_STAFF = "재직 중인 전 직원";
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private BackupMailTemplates() {
@@ -40,11 +43,33 @@ public final class BackupMailTemplates {
         String who = actorName + "님이 " + backupAt.format(TIME) + " 시점 백업으로 복원했습니다.";
         Content content = new Content("데이터 복원 완료",
                 List.of(who, "이 시점 이후의 변경 사항은 사라졌고, 모든 사용자는 다시 로그인해야 합니다.",
+                        "전 직원에게 신청한 휴가를 다시 확인하라는 안내를 보냈습니다.",
                         "되돌리려면 정책 › 백업 화면에서 복원 전 백업으로 다시 복원하세요."),
-                List.of(Row.of("수신자", AUDIENCE), Row.of("처리자", actorName)),
+                List.of(Row.of("수신자", RESTORE_AUDIENCE), Row.of("처리자", actorName)),
                 List.of(Row.of("복원 시각", at.format(TIME)), Row.strong("복원한 백업", fileName),
                         Row.of("백업 시점", backupAt.format(TIME)), Row.of("복원 전 백업", preRestoreFile)),
                 "백업 화면 열기", MailLayout.url(baseUrl, "/admin/policy"));
         return new Mail(PREFIX + "데이터 복원 완료 (" + backupAt.format(TIME) + " 시점)", content);
+    }
+
+    /**
+     * 복원 안내(재직 중인 전 직원): 그 시점 이후에 신청·결재한 휴가가 사라졌을 수 있으니 내 휴가를 다시 확인하라는 안내.
+     *
+     * @param backupAt 복원한 백업의 시점
+     */
+    public static Mail restoredNotice(LocalDateTime backupAt, String baseUrl) {
+        String when = backupAt.format(TIME);
+        Content content = new Content("데이터 복원 안내",
+                List.of("연차관리 데이터가 " + when + " 시점으로 복원되었습니다.",
+                        "이 시점 이후에 신청하거나 결재한 휴가는 사라졌을 수 있으니 내 휴가에서 다시 확인해 주세요."),
+                List.of(Row.of("수신자", ALL_STAFF)),
+                List.of(Row.strong("복원 시점", when)),
+                "내 휴가 확인하기", MailLayout.url(baseUrl, "/my-leaves"));
+        return new Mail(PREFIX + "데이터 복원 안내 (" + when + " 시점)", content);
+    }
+
+    /** 알림 문구용 시점 표기 "2026-10-01 04:00"(메일과 같다) */
+    public static String time(LocalDateTime at) {
+        return at.format(TIME);
     }
 }
