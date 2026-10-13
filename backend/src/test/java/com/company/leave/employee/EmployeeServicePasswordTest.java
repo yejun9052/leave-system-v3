@@ -20,6 +20,7 @@ import com.company.leave.employee.repository.EmployeeRepository;
 import com.company.leave.license.LicenseService;
 import com.company.leave.mail.AccountMailEvents;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,7 +73,7 @@ class EmployeeServicePasswordTest {
 
     @Test
     void 등록하면_임시_비밀번호로_저장하고_변경을_요구하며_그_비밀번호를_메일로만_보낸다() {
-        when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        when(employeeRepository.findAllByEmailIgnoreCase(EMAIL)).thenReturn(List.of());
         when(employeeRepository.save(any(Employee.class))).thenAnswer(inv -> {
             Employee e = inv.getArgument(0);
             ReflectionTestUtils.setField(e, "id", 10L);
@@ -99,7 +100,7 @@ class EmployeeServicePasswordTest {
 
     @Test
     void 등록_응답에는_임시_비밀번호가_들어가지_않는다() {
-        when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+        when(employeeRepository.findAllByEmailIgnoreCase(EMAIL)).thenReturn(List.of());
         when(employeeRepository.save(any(Employee.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var response = service.create(new EmployeeRequests.Create(EMAIL, "신입", null, null, null,
@@ -154,6 +155,35 @@ class EmployeeServicePasswordTest {
         assertThat(employee.getPasswordHash()).isEqualTo(before);
         assertThat(employee.isPasswordChangeRequired()).isTrue();
         verify(passwordResetService, never()).issue(any());
+    }
+
+    @Test
+    void 현재_비밀번호를_다섯_번_틀리면_맞혀도_잠시_막힌다() {
+        Employee employee = 직원(passwordEncoder.encode("Temp#Pass123"));
+        when(employeeRepository.findById(5L)).thenReturn(Optional.of(employee));
+        for (int i = 0; i < EmployeeService.PASSWORD_MAX_ATTEMPTS; i++) {
+            assertThatThrownBy(() -> service.changeMyPassword(5L, "wrong", "myNewPassword!"))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.CURRENT_PASSWORD_MISMATCH));
+        }
+
+        assertThatThrownBy(() -> service.changeMyPassword(5L, "Temp#Pass123", "myNewPassword!"))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS);
+                    assertThat(ex.getMessage()).contains("15분 후");
+                });
+        assertThat(passwordEncoder.matches("Temp#Pass123", employee.getPasswordHash())).isTrue();
+    }
+
+    @Test
+    void 대소문자만_다른_이메일은_같은_주소로_보고_등록하지_않는다() {
+        Employee 기존 = 직원("hash");
+        when(employeeRepository.findAllByEmailIgnoreCase("User@Company.com")).thenReturn(List.of(기존));
+
+        assertThatThrownBy(() -> service.create(new EmployeeRequests.Create("User@Company.com", "신입", null, null, null,
+                java.time.LocalDate.of(2026, 1, 2), null)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.EMAIL_DUPLICATED));
     }
 
     private Employee 직원(String passwordHash) {

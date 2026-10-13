@@ -13,6 +13,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long>, Emplo
 
     Optional<Employee> findByEmail(String email);
 
+    /** 대소문자를 가리지 않고 같은 이메일(중복 검사용). */
+    List<Employee> findAllByEmailIgnoreCase(String email);
+
     // 주의: Employee 에는 편의 getter getDepartmentId() 가 있어 파생 쿼리(findByDepartmentId)가
     // department.id 로 분해되지 않고 충돌한다. 따라서 명시적 JPQL 로 작성한다.
     @Query("select e from Employee e where e.department.id = :departmentId")

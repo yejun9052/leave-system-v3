@@ -18,10 +18,14 @@ import com.company.leave.license.LicenseService;
 import com.company.leave.mail.AccountMailEvents;
 import com.company.leave.security.SecurityUtils;
 import com.company.leave.security.UserPrincipal;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -209,11 +213,35 @@ public class EmployeeService {
     @Transactional
     public void changeMyPassword(Long employeeId, String currentPassword, String newPassword) {
         Employee employee = getEntity(employeeId);
+        Instant now = Instant.now();
+        PasswordAttempt attempt = passwordAttempts.get(employeeId);
+        if (attempt != null && attempt.lockedUntil() != null && now.isBefore(attempt.lockedUntil())) {
+            long minutes = Math.max(1, (Duration.between(now, attempt.lockedUntil()).toSeconds() + 59) / 60);
+            throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS,
+                    "현재 비밀번호를 여러 번 틀려 잠시 막혔습니다. " + minutes + "분 후 다시 시도하세요.");
+        }
         if (!passwordEncoder.matches(currentPassword, employee.getPasswordHash())) {
+            passwordAttempts.compute(employeeId, (id, prev) -> {
+                int count = (prev == null || prev.lockedUntil() != null ? 0 : prev.count()) + 1;
+                return new PasswordAttempt(count, count >= PASSWORD_MAX_ATTEMPTS ? now.plus(PASSWORD_LOCK) : null);
+            });
             throw new BusinessException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }
+        passwordAttempts.remove(employeeId);
         employee.setOwnPassword(passwordEncoder.encode(newPassword));
     }
+
+    /**
+     * 내 비밀번호 변경의 현재 비밀번호 확인 시도 제한(인메모리): 5번 틀리면 15분 동안 막는다.
+     * 로그인된 세션을 가로챈 사람이 현재 비밀번호를 끝없이 맞혀 보지 못하게. 맞히면 초기화.
+     */
+    static final int PASSWORD_MAX_ATTEMPTS = 5;
+    static final Duration PASSWORD_LOCK = Duration.ofMinutes(15);
+
+    private record PasswordAttempt(int count, Instant lockedUntil) {
+    }
+
+    private final Map<Long, PasswordAttempt> passwordAttempts = new ConcurrentHashMap<>();
 
     @Transactional
     public EmployeeResponse updateMyProfile(Long employeeId, EmployeeRequests.UpdateMyProfile req) {
@@ -262,12 +290,15 @@ public class EmployeeService {
         return role != null ? role : Role.EMPLOYEE;
     }
 
+    /** 이메일은 대소문자만 다른 것도 같은 주소로 본다(Hong@… 와 hong@… 를 따로 등록하지 않게). */
     private void validateEmailUnique(String email, Long selfId) {
-        employeeRepository.findByEmail(email).ifPresent(existing -> {
-            if (!existing.getId().equals(selfId)) {
-                throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
-            }
-        });
+        if (email == null) {
+            return;
+        }
+        if (employeeRepository.findAllByEmailIgnoreCase(email.trim()).stream()
+                .anyMatch(existing -> !existing.getId().equals(selfId))) {
+            throw new BusinessException(ErrorCode.EMAIL_DUPLICATED);
+        }
     }
 
     /** 신규 사용자 생성 이벤트 (연차 초기 부여 트리거). */
