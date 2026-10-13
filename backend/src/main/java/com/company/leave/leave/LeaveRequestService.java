@@ -528,6 +528,13 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_NOT_PENDING, "이미 처리된 신청입니다.");
         }
         requireApprover(approver, request);
+        // 동시에 같은 날을 두 번 신청하면(더블클릭·탭 두 개) 둘 다 결재 대기가 될 수 있다.
+        // 승인할 때 이미 승인된(취소 요청 중 포함) 휴가와 다시 겹침 규칙을 확인해 두 번 차감되지 않게 한다
+        validateNoOverlap(requestRepository.findActiveOverlapping(request.getEmployee().getId(),
+                        request.getStartDate(), request.getEndDate()).stream()
+                        .filter(r -> !r.getId().equals(request.getId()) && !r.isAwaitingApproval())
+                        .toList(),
+                request.getPortion(), request.halfSide(), request.getDays());
 
         if (request.getLeaveType().isDeductFromAnnual()) {
             LeavePolicy policy = policyService.getActivePolicy();
@@ -1089,7 +1096,12 @@ public class LeaveRequestService {
      */
     private void validateNoOverlap(Long employeeId, LocalDate start, LocalDate end, DayPortion portion,
                                    HalfDayPart halfSide, BigDecimal days) {
-        List<LeaveRequest> overlapping = requestRepository.findActiveOverlapping(employeeId, start, end);
+        validateNoOverlap(requestRepository.findActiveOverlapping(employeeId, start, end), portion, halfSide, days);
+    }
+
+    /** 같은 날 겹침 규칙(취소 요청 중이면 모두 막음, 반차는 오전+오후만, 반차·시간차 섞기 불가, 시간차 합계 1일). */
+    private void validateNoOverlap(List<LeaveRequest> overlapping, DayPortion portion, HalfDayPart halfSide,
+                                   BigDecimal days) {
         if (overlapping.isEmpty()) {
             return;
         }
