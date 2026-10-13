@@ -53,7 +53,7 @@ public class CalendarService {
     @Transactional(readOnly = true)
     public List<CalendarDtos.EventResponse> getEvents(LocalDate start, LocalDate end, UserPrincipal user) {
         boolean admin = isAdmin(user);
-        Set<Long> myDepts = selfAndAncestorDeptIds(user);
+        Set<Long> myDepts = visibleDeptIds(user, admin);
         List<CalendarDtos.EventResponse> result = new ArrayList<>();
 
         for (CalendarEvent e : eventRepository.findBetween(start, end)) {
@@ -77,7 +77,7 @@ public class CalendarService {
     @Transactional(readOnly = true)
     public CalendarDtos.DayDetail getDay(LocalDate date, UserPrincipal user) {
         boolean admin = isAdmin(user);
-        Set<Long> myDepts = selfAndAncestorDeptIds(user);
+        Set<Long> myDepts = visibleDeptIds(user, admin);
         List<CalendarDtos.DayEvent> events = eventRepository.findBetween(date, date).stream()
                 .filter(e -> e.getSource() == CalendarEventSource.ADMIN_EVENT && isVisible(e, user, admin, myDepts))
                 .map(CalendarDtos.DayEvent::from)
@@ -174,6 +174,9 @@ public class CalendarService {
         if (req.scope() == CalendarEventScope.DEPARTMENT && req.departmentId() == null) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "부서 일정은 부서를 지정해야 합니다.");
         }
+        if (req.endDate().isBefore(req.startDate())) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "종료일이 시작일보다 빠릅니다.");
+        }
         CalendarEvent event = getEditableAdminEvent(id, user);
         authorizeScope(user, req.scope(), req.departmentId());
         EventView before = view(event);
@@ -211,7 +214,19 @@ public class CalendarService {
         return new EventView(e.getTitle(), e.getStartDate(), e.getEndDate(), e.getScope(), e.getDepartmentId());
     }
 
-    /** 부서 일정은 내 부서와 그 위 상위 부서들의 것까지 보인다(예: 1팀 → 1팀·경영지원팀·회사). */
+    /**
+     * 부서 일정을 볼 수 있는 부서: 내 부서와 그 위 상위 부서들(예: 1팀 → 1팀·경영지원팀·회사).
+     * 팀장은 맡은 부서와 그 하위 부서도 본다: 하위 부서에 등록한 일정을 본인이 보고 고칠 수 있어야 한다.
+     */
+    private Set<Long> visibleDeptIds(UserPrincipal user, boolean admin) {
+        Set<Long> ids = selfAndAncestorDeptIds(user);
+        if (!admin) {
+            ids.addAll(ledDeptIds(user.getId()));
+        }
+        return ids;
+    }
+
+    /** 부서 일정은 {@link #visibleDeptIds} 의 부서 것만 보인다. */
     private boolean isVisible(CalendarEvent e, UserPrincipal user, boolean admin, Set<Long> myDepts) {
         return switch (e.getScope()) {
             case COMPANY -> true;

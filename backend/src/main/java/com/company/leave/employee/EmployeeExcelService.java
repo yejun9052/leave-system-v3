@@ -8,19 +8,34 @@ import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
 import com.company.leave.employee.dto.EmployeeRequests;
 import com.company.leave.employee.dto.EmployeeSearchCondition;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validation;
+import jakarta.validation.Validator;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,14 +47,21 @@ import org.springframework.util.StringUtils;
 @Service
 public class EmployeeExcelService {
 
+    private static final Logger log = LoggerFactory.getLogger(EmployeeExcelService.class);
+
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ISO_LOCAL_DATE;
     private static final String[] HEADERS =
             {"이메일", "이름", "부서명", "직급", "전화번호", "입사일(YYYY-MM-DD)", "권한"};
+    /** 부서 경로 구분(내보내기). 가져오기는 "›" 와 ">" 둘 다 받는다 */
+    static final String PATH_SEPARATOR = " › ";
     /** 사번 기능 삭제 전 양식: 3번째 열이 "사번". 이 열은 건너뛰고 읽는다. */
     private static final String LEGACY_EMPLOYEE_NO_HEADER = "사번";
 
     private final EmployeeService employeeService;
     private final DepartmentRepository departmentRepository;
+    /** 화면 등록과 같은 입력 검사(@Email·@Size 등). 행마다 서비스에 넘기기 전에 확인한다 */
+    private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
+    private final DataFormatter formatter = new DataFormatter();
 
     public EmployeeExcelService(EmployeeService employeeService,
                                 DepartmentRepository departmentRepository) {
@@ -59,12 +81,15 @@ public class EmployeeExcelService {
                 header.createCell(i).setCellValue(HEADERS[i]);
             }
             int r = 1;
+            Map<Long, String> paths = departmentPaths();
             // 관리 전용 계정(admin)은 내보내지 않는다. 다시 올리면 시스템 관리자 권한 제한에 걸린다
             for (var e : employees.getContent().stream().filter(x -> !x.systemAccount()).toList()) {
                 Row row = sheet.createRow(r++);
                 row.createCell(0).setCellValue(e.email());
                 row.createCell(1).setCellValue(e.name());
-                row.createCell(2).setCellValue(orEmpty(e.departmentName()));
+                // 부서는 경로로(상위 › 하위): 이름이 같은 부서가 여럿이어도 다시 올리면 같은 부서로 들어간다
+                row.createCell(2).setCellValue(e.departmentId() != null && paths.containsKey(e.departmentId())
+                        ? paths.get(e.departmentId()) : orEmpty(e.departmentName()));
                 row.createCell(3).setCellValue(orEmpty(e.position()));
                 row.createCell(4).setCellValue(orEmpty(e.phone()));
                 row.createCell(5).setCellValue(e.hireDate() != null ? e.hireDate().toString() : "");
@@ -125,12 +150,19 @@ public class EmployeeExcelService {
                             resolveDepartmentId(cell(row, 2 + shift)),
                             cell(row, 3 + shift),
                             cell(row, 4 + shift),
-                            parseDate(cell(row, 5 + shift)),
+                            parseDate(row.getCell(5 + shift)),
                             parseRole(cell(row, 6 + shift)));
+                    validate(req);
                     employeeService.create(req);
                     created++;
-                } catch (Exception ex) {
+                } catch (BusinessException ex) {
                     errors.add(rowNum + "행: " + ex.getMessage());
+                } catch (DataIntegrityViolationException ex) {
+                    errors.add(rowNum + "행: 이미 등록된 이메일이거나 값이 너무 깁니다.");
+                } catch (RuntimeException ex) {
+                    // DB·내부 오류 문구(SQL 등)는 화면에 내보내지 않는다
+                    log.warn("엑셀 가져오기 {}행 실패", rowNum, ex);
+                    errors.add(rowNum + "행: 등록하지 못했습니다. 입력 값을 확인해 주세요.");
                 }
             }
         } catch (IOException ex) {
@@ -139,22 +171,94 @@ public class EmployeeExcelService {
         return new ImportResult(created, errors);
     }
 
-    private Long resolveDepartmentId(String name) {
-        if (!StringUtils.hasText(name)) {
+    /**
+     * 부서 칸: 이름(그 이름이 하나뿐일 때) 또는 경로("연구소 › 개발팀", "연구소 > 개발팀").
+     * 이름이 같은 부서가 여럿이면 아무 데나 넣지 않고 경로로 적어 달라고 알린다.
+     */
+    private Long resolveDepartmentId(String value) {
+        if (!StringUtils.hasText(value)) {
             return null;
         }
-        List<Department> found = departmentRepository.findByName(name.trim());
+        String text = value.trim();
+        if (text.contains("›") || text.contains(">")) {
+            String wanted = normalizePath(text);
+            return departmentPaths().entrySet().stream()
+                    .filter(e -> normalizePath(e.getValue()).equals(wanted))
+                    .map(Map.Entry::getKey)
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.DEPARTMENT_NOT_FOUND,
+                            "부서를 찾을 수 없습니다: " + text));
+        }
+        List<Department> found = departmentRepository.findByName(text);
         if (found.isEmpty()) {
-            throw new BusinessException(ErrorCode.DEPARTMENT_NOT_FOUND, "부서를 찾을 수 없습니다: " + name);
+            throw new BusinessException(ErrorCode.DEPARTMENT_NOT_FOUND, "부서를 찾을 수 없습니다: " + text);
+        }
+        if (found.size() > 1) {
+            Map<Long, String> paths = departmentPaths();
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "이름이 같은 부서가 여러 개입니다("
+                    + found.stream().map(d -> paths.getOrDefault(d.getId(), d.getName()))
+                            .collect(Collectors.joining(", "))
+                    + "). 부서 칸에 경로로 적어 주세요(예: 연구소 › 개발팀).");
         }
         return found.get(0).getId();
     }
 
-    private LocalDate parseDate(String s) {
+    /** 부서 id → 경로("상위 › 하위"). 상위가 끊기거나 순환이 있어도 멈춘다. */
+    private Map<Long, String> departmentPaths() {
+        Map<Long, Department> byId = new HashMap<>();
+        departmentRepository.findAllByOrderBySortOrderAscNameAsc().forEach(d -> byId.put(d.getId(), d));
+        Map<Long, String> paths = new HashMap<>();
+        for (Department d : byId.values()) {
+            List<String> names = new ArrayList<>();
+            Set<Long> seen = new HashSet<>();
+            for (Department cur = d; cur != null && seen.add(cur.getId());
+                    cur = cur.getParentId() == null ? null : byId.get(cur.getParentId())) {
+                names.add(0, cur.getName());
+            }
+            paths.put(d.getId(), String.join(PATH_SEPARATOR, names));
+        }
+        return paths;
+    }
+
+    private static String normalizePath(String path) {
+        return Arrays.stream(path.split("[›>]")).map(String::trim).collect(Collectors.joining("›"));
+    }
+
+    /** 화면 등록과 같은 입력 검사. 어긋나면 칸 이름으로 알린다. */
+    private void validate(EmployeeRequests.Create req) {
+        Set<ConstraintViolation<EmployeeRequests.Create>> violations = validator.validate(req);
+        if (violations.isEmpty()) {
+            return;
+        }
+        String message = violations.stream()
+                .map(v -> switch (v.getPropertyPath().toString()) {
+                    case "email" -> "이메일 형식이 아닙니다";
+                    case "name" -> "이름이 비어 있거나 100자를 넘습니다";
+                    case "position" -> "직급은 50자까지입니다";
+                    case "phone" -> "전화번호는 30자까지입니다";
+                    case "hireDate" -> "입사일이 비어 있습니다";
+                    default -> v.getPropertyPath() + " 값이 올바르지 않습니다";
+                })
+                .sorted()
+                .distinct()
+                .collect(Collectors.joining(", "));
+        throw new BusinessException(ErrorCode.INVALID_INPUT, message + ".");
+    }
+
+    /** 입사일 칸: 글자(2024-03-01) 또는 엑셀 날짜 서식 칸. */
+    private LocalDate parseDate(Cell c) {
+        if (c != null && c.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(c)) {
+            return c.getLocalDateTimeCellValue().toLocalDate();
+        }
+        String s = c == null ? null : formatter.formatCellValue(c).trim();
         if (!StringUtils.hasText(s)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "입사일이 비어 있습니다.");
         }
-        return LocalDate.parse(s.trim(), DATE_FMT);
+        try {
+            return LocalDate.parse(s, DATE_FMT);
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "입사일 형식이 올바르지 않습니다(예: 2024-03-01): " + s);
+        }
     }
 
     /**
@@ -186,12 +290,9 @@ public class EmployeeExcelService {
         if (c == null) {
             return null;
         }
-        return switch (c.getCellType()) {
-            case STRING -> c.getStringCellValue().trim();
-            case NUMERIC -> String.valueOf((long) c.getNumericCellValue());
-            case BOOLEAN -> String.valueOf(c.getBooleanCellValue());
-            default -> null;
-        };
+        // 화면에 보이는 그대로 읽는다(숫자 칸의 서식, 수식 결과 포함)
+        String text = formatter.formatCellValue(c).trim();
+        return text.isEmpty() ? null : text;
     }
 
     private String orEmpty(String s) {

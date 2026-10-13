@@ -114,6 +114,19 @@ class LeaveChargesTest {
         verify(balanceService, never()).getOrCreate(10L, 2027);
     }
 
+    @Test
+    void 승인_뒤_종류의_차감_방식이_연차와_무관으로_바뀌어도_취소하면_뺀_만큼_돌려준다() {
+        LeaveRequest r = 휴가(연차, "3", 2026, "2");
+        LeaveCharges.charge(balanceService, r);
+
+        ReflectionTestUtils.setField(연차, "annualDeductionMode",
+                com.company.leave.leave.domain.AnnualDeductionMode.NONE); // 관리자가 종류를 바꿈
+        LeaveCharges.restore(balanceService, r);
+
+        assertThat(balances.get(2026).getUsed()).isZero();
+        assertThat(balances.get(2027).getUsed()).isZero();
+    }
+
     private LeaveRequest 휴가(LeaveType type, String deducted, int year, String nextPart) {
         LeaveRequest r = new LeaveRequest(직원, type, LocalDate.of(2027, 3, 12), LocalDate.of(2027, 3, 16),
                 new BigDecimal(deducted), new BigDecimal(deducted), year, "사유");

@@ -7,9 +7,12 @@ import com.company.leave.policy.domain.BlackoutConflictMode;
 import com.company.leave.policy.domain.BlackoutPeriod;
 import com.company.leave.policy.domain.ServiceAwardRule;
 import com.company.leave.policy.domain.SpecialLeaveRule;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -30,8 +33,8 @@ public final class PolicyRuleDtos {
 
     public record AwardRuleRequest(
             @Min(1) int years,
-            @NotNull BigDecimal bonusDays,
-            String name) {
+            @NotNull @DecimalMin("0.5") @DecimalMax("99.5") BigDecimal bonusDays,
+            @Size(max = 100) String name) {
     }
 
     // --- 경조사 규칙 ---
@@ -49,8 +52,8 @@ public final class PolicyRuleDtos {
      * @param annualLimit 연간 사용 횟수(1 이상). null 이면 제한 없음
      */
     public record SpecialRuleRequest(
-            @NotBlank String name,
-            @NotNull BigDecimal days,
+            @NotBlank @Size(max = 100) String name,
+            @NotNull @DecimalMin("0.5") @DecimalMax("99.5") BigDecimal days,
             String leaveTypeCode,
             Integer sortOrder,
             @Min(1) Integer annualLimit) {

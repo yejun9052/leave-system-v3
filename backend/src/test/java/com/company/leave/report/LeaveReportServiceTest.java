@@ -77,6 +77,7 @@ class LeaveReportServiceTest {
     private final LeaveType 반차 = type("HALF_AM", DayPortion.HALF, "0.5", AnnualDeductionMode.DEDUCT);
     private final LeaveType 시간차 = type("HOURLY", DayPortion.HOURLY, "0.125", AnnualDeductionMode.DEDUCT);
     private final LeaveType 경조사 = type("CONDOLENCE", DayPortion.FULL, "0.0", AnnualDeductionMode.NONE);
+    private final LeaveType 공가 = type("OFFICIAL", DayPortion.FULL, "0.0", AnnualDeductionMode.NONE);
 
     @BeforeEach
     void setUp() {
@@ -399,6 +400,44 @@ class LeaveReportServiceTest {
     }
 
     @Test
+    void 경조사_표_아래_세_줄을_띄우고_같은_모양으로_공가_사용_내역을_쓴다() throws IOException {
+        Department 개발팀 = department(1L, "개발팀", null, 0);
+        Employee 가온 = employee(1L, "가온", 개발팀);
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of(
+                new LeaveBalanceService.PeriodBalance(가온, Y2024, balance(1L, "15", "0"))));
+        공휴일();
+        LeaveRequest 결혼 = request(가온, 경조사, LocalDate.of(2024, 3, 4), LocalDate.of(2024, 3, 8), "5", "0");
+        결혼.attachSpecialRule(1L, "본인 결혼", new BigDecimal("5"));
+        LeaveRequest 예비군 = request(가온, 공가, LocalDate.of(2024, 4, 15), LocalDate.of(2024, 4, 15), "1", "0");
+        예비군.attachSpecialRule(6L, "예비군", new BigDecimal("1"));
+        승인(결혼, 예비군);
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        int condolence = 제목_줄(sheet, "경조사 사용 내역");
+        assertThat(칸들(sheet.getRow(condolence + 2)).subList(C, C + 4)).as("경조사 표에는 공가가 없다")
+                .containsExactly("1.0", "가온", "개발팀", "본인 결혼");
+        assertThat(sheet.getRow(condolence + 3)).isNull();
+        int official = 제목_줄(sheet, "공가 사용 내역");
+        assertThat(official).as("경조사 표 마지막 줄 뒤 빈 줄 3개").isEqualTo(condolence + 2 + 4);
+        assertThat(칸들(sheet.getRow(official + 1)).subList(C, C + 10)).containsExactly(
+                "번호", "이름", "부서", "공가 규정", "", "", "사용일", "", "", "일수");
+        assertThat(칸들(sheet.getRow(official + 2)).subList(C, C + 10)).containsExactly(
+                "1.0", "가온", "개발팀", "예비군", "", "", "2024-04-15", "", "", "1.0");
+    }
+
+    @Test
+    void 공가가_없으면_없다고_한_줄_쓴다() throws IOException {
+        when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
+
+        Sheet sheet = 시트(service.exportUsage(2024));
+
+        int official = 제목_줄(sheet, "공가 사용 내역");
+        assertThat(official).isEqualTo(제목_줄(sheet, "경조사 사용 내역") + 2 + 4);
+        assertThat(칸(sheet, official + 2, C)).isEqualTo("해당 연도에 승인된 공가가 없습니다.");
+    }
+
+    @Test
     void 경조사_휴가가_없으면_없다고_한_줄_쓴다() throws IOException {
         when(balanceService.balancesAsOf(any(), eq(false), eq(false))).thenReturn(List.of());
 
@@ -508,9 +547,14 @@ class LeaveReportServiceTest {
 
     /** 경조사 표 제목 줄 번호(없으면 -1). */
     private static int 경조사_제목_줄(Sheet sheet) {
+        return 제목_줄(sheet, "경조사 사용 내역");
+    }
+
+    /** 제목이 title 인 표의 제목 줄 번호(없으면 -1). */
+    private static int 제목_줄(Sheet sheet, String title) {
         for (int r = HEADER_ROW + 1; r <= sheet.getLastRowNum(); r++) {
             Row row = sheet.getRow(r);
-            if (row != null && "경조사 사용 내역".equals(값(row.getCell(C)))) {
+            if (row != null && title.equals(값(row.getCell(C)))) {
                 return r;
             }
         }

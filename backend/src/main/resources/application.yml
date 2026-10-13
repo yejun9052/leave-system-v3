@@ -26,6 +26,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # 목록에서 직원·부서 등 연관 엔티티를 하나씩 불러오지 않고 묶어서(IN) 불러온다(N+1 완화)
+        default_batch_fetch_size: 100
         jdbc:
           time_zone: Asia/Seoul
   task:
@@ -56,6 +58,8 @@ spring:
           auth: ${MAIL_AUTH:false}
           starttls:
             enable: ${MAIL_STARTTLS:false}
+          # 받는 사람 중 한 주소가 거부돼도 나머지에게는 보낸다(숨은 참조 공지·참조 메일이 통째로 안 가지 않게)
+          sendpartial: true
           # SMTP 응답 지연 시 발송 스레드가 묶이지 않도록 제한(ms)
           connectiontimeout: 5000
           timeout: 10000
@@ -63,7 +67,9 @@ spring:
 
 server:
   port: 8080
-  forward-headers-strategy: framework
+  # Caddy 뒤에서 실제 접속 IP·https 를 알기 위해. native = Tomcat RemoteIpValve: 사설망(도커 네트워크) 프록시가 보낸
+  # X-Forwarded-For/Proto 만 믿는다. framework 는 클라이언트가 넣은 Forwarded 헤더를 먼저 믿어 로그인 차단(IP)을 우회할 수 있다
+  forward-headers-strategy: native
   servlet:
     session:
       cookie:

@@ -133,6 +133,18 @@ class RealtimeTest {
     }
 
     @Test
+    void 서버를_끌_때는_열린_연결을_먼저_모두_닫는다() throws Exception {
+        MvcResult mine = 연결(사원);
+        기다림(() -> 내용(mine).contains("event:connected"));
+        hub.start();
+
+        hub.stop();
+
+        assertThat(hub.isRunning()).isFalse();
+        assertThat(hub.connectionCount()).isZero();
+    }
+
+    @Test
     void 자동_작업_신호는_바꾼_탭이_없고_이상한_탭_ID_는_비운다() {
         assertThat(RealtimeHub.payload(null)).isEqualTo("{\"origin\":\"\"}");
         assertThat(RealtimeHub.payload("a\"}<script>")).isEqualTo("{\"origin\":\"\"}");

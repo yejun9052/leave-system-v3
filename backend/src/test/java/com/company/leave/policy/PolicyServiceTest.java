@@ -78,6 +78,19 @@ class PolicyServiceTest {
     }
 
     @Test
+    void 회계연도_시작일이_그_달에_없는_날이면_저장하지_않는다() {
+        assertThatThrownBy(() -> service.update(new PolicyDtos.UpdateRequest(GrantBasis.FISCAL_YEAR, 2, 30,
+                new BigDecimal("15"), 2, BigDecimal.ONE, new BigDecimal("25"), true, 11, false, true, false,
+                0, 0, 0, false, BigDecimal.ZERO, null)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("회계연도 시작일: 2월은 28일까지 있습니다.");
+        assertThatThrownBy(() -> service.update(new PolicyDtos.UpdateRequest(GrantBasis.FISCAL_YEAR, 4, 31,
+                new BigDecimal("15"), 2, BigDecimal.ONE, new BigDecimal("25"), true, 11, false, true, false,
+                0, 0, 0, false, BigDecimal.ZERO, null)))
+                .hasMessage("회계연도 시작일: 4월은 30일까지 있습니다.");
+    }
+
+    @Test
     void 다음_기간_예약_값을_보내지_않으면_켜진_것으로_본다() {
         LeavePolicy policy = LeavePolicy.createDefault();
         when(policyRepository.findFirstByActiveTrueOrderByIdAsc()).thenReturn(Optional.of(policy));

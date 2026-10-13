@@ -116,8 +116,11 @@ public class AnnouncementMessenger {
     private List<Employee> audience(EventView view) {
         return switch (view.scope()) {
             case COMPANY -> companyWide();
+            // 부서 일정은 그 부서와 하위 부서 직원이 캘린더에서 본다 → 알림도 같은 사람들에게
             case DEPARTMENT -> view.departmentId() == null ? List.of()
-                    : employeeRepository.findByDepartmentId(view.departmentId());
+                    : departmentRepository.findSubtreeIds(view.departmentId()).stream()
+                            .flatMap(id -> employeeRepository.findByDepartmentId(id).stream())
+                            .toList();
             case PERSONAL -> List.of();
         };
     }
@@ -132,7 +135,7 @@ public class AnnouncementMessenger {
                 .filter(v -> v.scope() == CalendarEventScope.DEPARTMENT)
                 .map(v -> departmentName(v.departmentId()))
                 .distinct()
-                .collect(Collectors.joining("·")) + " 소속 직원";
+                .collect(Collectors.joining("·")) + "(하위 부서 포함) 소속 직원";
     }
 
     private List<Employee> companyWide() {

@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -30,6 +31,8 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class MaintenanceFilter extends OncePerRequestFilter {
 
+    private static final UrlPathHelper PATHS = new UrlPathHelper();
+
     static final String STATUS_PATH = "/api/backups/status";
 
     private final MaintenanceMode maintenance;
@@ -43,7 +46,8 @@ public class MaintenanceFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
                                     @NonNull FilterChain chain) throws ServletException, IOException {
-        String path = request.getRequestURI();
+        // 디코딩한 경로로 판단한다(인코딩한 /%61pi/... 로 점검 모드를 피하지 못하게)
+        String path = PATHS.getPathWithinApplication(request);
         if (!path.startsWith("/api/")) {
             chain.doFilter(request, response);
             return;
@@ -52,13 +56,14 @@ public class MaintenanceFilter extends OncePerRequestFilter {
             write(response, HttpStatus.OK, ApiResponse.ok(Map.of("maintenance", maintenance.isActive())));
             return;
         }
-        if (maintenance.isActive()) {
-            write(response, ErrorCode.MAINTENANCE.status(),
-                    ApiResponse.error(ErrorCode.MAINTENANCE.name(), ErrorCode.MAINTENANCE.defaultMessage()));
-            return;
-        }
+        // 먼저 세고 나서 점검 중인지 본다: 그 사이에 복원이 시작돼도 복원은 이 요청이 끝나기를 기다린다
         maintenance.requestStarted();
         try {
+            if (maintenance.isActive()) {
+                write(response, ErrorCode.MAINTENANCE.status(),
+                        ApiResponse.error(ErrorCode.MAINTENANCE.name(), ErrorCode.MAINTENANCE.defaultMessage()));
+                return;
+            }
             chain.doFilter(request, response);
         } finally {
             maintenance.requestFinished();

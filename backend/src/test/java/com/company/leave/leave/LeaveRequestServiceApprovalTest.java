@@ -190,6 +190,22 @@ class LeaveRequestServiceApprovalTest {
     // --- 결재 권한 ---
 
     @Test
+    void 같은_날_두_번_들어온_신청은_하나만_승인되고_두_번_차감되지_않는다() {
+        // 더블클릭·탭 두 개로 같은 날 종일 연차가 두 건 결재 대기가 됨
+        LeaveRequest 첫번째 = 대기_신청(파트원);
+        LeaveRequest 두번째 = 대기_신청(파트원);
+        when(requestRepository.findActiveOverlapping(파트원.getId(), TUE, TUE)).thenReturn(List.of(첫번째, 두번째));
+
+        service.approve(첫번째.getId(), 파트장.getId()); // 다른 건은 아직 결재 대기라 막지 않는다
+
+        assertThatThrownBy(() -> service.approve(두번째.getId(), 파트장.getId()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.LEAVE_DATE_OVERLAP));
+        assertThat(두번째.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+        assertThat(balance.getUsed()).isEqualByComparingTo("1");
+    }
+
+    @Test
     void 팀원_신청은_담당_팀장이_승인하면_바로_확정된다() {
         LeaveRequest request = 대기_신청(파트원);
 
@@ -963,6 +979,29 @@ class LeaveRequestServiceApprovalTest {
                     anyString());
             verify(auditService, Mockito.times(2)).record(eq("blackout_cancel"), eq("leave-requests"), anyString(),
                     anyString(), eq(true));
+        }
+
+        @Test
+        void 이미_시작했거나_지난_휴가는_모두_취소_정책이어도_건드리지_않는다() {
+            LocalDate 지난주 = LocalDate.now().minusDays(7);
+            LocalDate 다음주 = LocalDate.now().plusDays(7);
+            List<LeaveRequestService.DateRange> 지난_날짜_포함 = List.of(new LeaveRequestService.DateRange(지난주, 다음주));
+            LeaveRequest 지난_승인 = 승인된_휴가(파트원, LocalDate.now().minusDays(3));
+            LeaveRequest 지난_대기 = 대기_신청(개발팀원);
+            ReflectionTestUtils.setField(지난_대기, "startDate", LocalDate.now().minusDays(1));
+            ReflectionTestUtils.setField(지난_대기, "endDate", LocalDate.now().plusDays(1)); // 이미 시작함
+            LeaveRequest 앞으로 = 승인된_휴가(개발팀원, LocalDate.now().plusDays(2));
+            when(requestRepository.findByStatusInOverlapping(any(), eq(지난주), eq(다음주)))
+                    .thenReturn(List.of(지난_승인, 지난_대기, 앞으로));
+
+            LeaveRequestService.BlackoutPlan plan = service.applyBlackout("점검", 지난주, 다음주, 지난_날짜_포함,
+                    BlackoutConflictMode.CANCEL_ALL, 인사관리자.getId());
+
+            assertThat(plan.kept()).containsExactly(지난_승인, 지난_대기);
+            assertThat(plan.cancel()).containsExactly(앞으로);
+            assertThat(지난_승인.getStatus()).isEqualTo(LeaveRequestStatus.APPROVED);
+            assertThat(지난_대기.getStatus()).isEqualTo(LeaveRequestStatus.PENDING);
+            assertThat(앞으로.getStatus()).isEqualTo(LeaveRequestStatus.CANCELLED);
         }
 
         @Test

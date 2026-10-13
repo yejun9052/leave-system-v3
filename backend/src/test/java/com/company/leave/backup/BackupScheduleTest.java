@@ -61,6 +61,15 @@ class BackupScheduleTest {
     }
 
     @Test
+    void N개월마다는_12의_약수만_받는다() {
+        for (String ok : new String[] {"0 0 4 1 */1 *", "0 0 4 1 */2 *", "0 0 4 1 */4 *", "0 0 4 1 */6 *", "0 0 4 1 */12 *"}) {
+            assertThat(s(ok).problem(NOW)).as(ok).isNull();
+        }
+        assertThat(s("0 0 4 1 */5 *").problem(NOW)).contains("1·2·3·4·6·12");
+        assertThat(s("0 0 4 1 */7 *").problem(NOW)).contains("1·2·3·4·6·12");
+    }
+
+    @Test
     void N시간마다는_시작_시각부터_N시간_간격으로_실행한다() {
         assertThat(s("0 0 0/5 * * *").label()).isEqualTo("5시간마다(0시부터, 매번 00분)");
         assertThat(s("0 0 0/5 * * *").next(NOW)).isEqualTo(LocalDateTime.of(2026, 10, 8, 15, 0));

@@ -52,6 +52,32 @@ class ResetRequestLimiterTest {
     }
 
     @Test
+    void 같은_IP_에서는_이메일을_바꿔도_한_시간에_20번까지만_허용한다() {
+        for (int i = 0; i < ResetRequestLimiter.MAX_REQUESTS_PER_IP; i++) {
+            assertThat(limiter.tryAcquire("user" + i + "@company.com", "10.0.0.9")).isTrue();
+        }
+
+        assertThat(limiter.tryAcquire("another@company.com", "10.0.0.9")).isFalse();
+        assertThat(limiter.tryAcquire("another@company.com", "10.0.0.10")).as("다른 IP 는 따로").isTrue();
+        clock.advance(java.time.Duration.ofHours(1).plusSeconds(1));
+        assertThat(limiter.tryAcquire("late@company.com", "10.0.0.9")).isTrue();
+    }
+
+    @Test
+    void 이메일_한도에_걸린_요청은_IP_횟수에도_세지_않는다() {
+        for (int i = 0; i < 3; i++) {
+            limiter.tryAcquire(EMAIL, "10.0.0.9");
+        }
+        for (int i = 0; i < 5; i++) {
+            assertThat(limiter.tryAcquire(EMAIL, "10.0.0.9")).isFalse();
+        }
+
+        for (int i = 0; i < ResetRequestLimiter.MAX_REQUESTS_PER_IP - 3; i++) {
+            assertThat(limiter.tryAcquire("u" + i + "@company.com", "10.0.0.9")).isTrue();
+        }
+    }
+
+    @Test
     void 다른_이메일은_따로_센다() {
         for (int i = 0; i < 3; i++) {
             limiter.tryAcquire(EMAIL);

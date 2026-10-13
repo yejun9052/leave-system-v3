@@ -190,9 +190,30 @@ class AuthServiceLoginTest {
     }
 
     @Test
+    void 같은_브라우저에_남은_로그인_유지_세션이_있어도_유지_없이_로그인하면_넘어오지_않는다() {
+        인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
+        // 공용 PC: 앞사람이 로그인 유지로 쓰던 세션이 남아 있고, 이 요청에서 필터가 쿠키 유지 표시를 켜 둠
+        MockHttpSession 앞사람 = new MockHttpSession();
+        앞사람.setAttribute("rememberMeUntil", System.currentTimeMillis() + 86_400_000L);
+        앞사람.setMaxInactiveInterval(30 * 24 * 3600);
+        request.setSession(앞사람);
+        request.setAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR, true);
+        int defaultInterval = new MockHttpSession().getMaxInactiveInterval();
+
+        authService.login(new LoginRequest(EMAIL, PASSWORD, false), request, response);
+
+        assertThat(앞사람.isInvalid()).isTrue();
+        assertThat(request.getSession(false)).isNotSameAs(앞사람);
+        assertThat(request.getSession(false).getAttribute("rememberMeUntil")).isNull();
+        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(defaultInterval);
+        assertThat(request.getAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR)).isNull();
+    }
+
+    @Test
     void 비밀번호가_틀리면_인증_실패로_처리하고_실패_횟수를_기록하며_세션을_만들지_않는다() {
         when(authenticationManager.authenticate(any()))
                 .thenThrow(new BadCredentialsException("bad"));
+        when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(직원(EmployeeStatus.ACTIVE)));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, "wrong!"), request, response))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -203,6 +224,19 @@ class AuthServiceLoginTest {
         assertThat(request.getSession(false)).isNull();
         verify(auditService).record(isNull(), eq(EMAIL), eq("LOGIN"), eq("auth"), isNull(),
                 anyString(), eq(false));
+    }
+
+    @Test
+    void 없는_아이디로_실패하면_이벤트_로그에_앞_두_글자만_남긴다() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad"));
+
+        // 아이디 칸에 비밀번호를 잘못 넣은 경우
+        assertThatThrownBy(() -> authService.login(new LoginRequest("MySecret123!", "x"), request, response))
+                .isInstanceOf(BusinessException.class);
+
+        verify(auditService).record(isNull(), eq("My*** (없는 아이디)"), eq("LOGIN"), eq("auth"), isNull(),
+                eq("로그인 실패: My*** (없는 아이디) · IP " + IP), eq(false));
+        assertThat(authService.loginIdForLog("nobody@company.com")).isEqualTo("no***@company.com");
     }
 
     @Test

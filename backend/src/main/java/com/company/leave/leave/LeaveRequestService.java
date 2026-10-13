@@ -284,7 +284,7 @@ public class LeaveRequestService {
                     requireNextPeriodAvailable(employee, appliedYear, currentPart, available, policy, false);
                 } else if (currentPart.compareTo(available) > 0) {
                     throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
-                            "잔여 연차가 부족합니다. (차감 " + currentPart + "일 / 사용가능 " + available + "일)");
+                            "잔여 연차가 부족합니다. (차감 " + plain(currentPart) + "일 / 사용 가능 " + plain(available.max(BigDecimal.ZERO)) + "일)");
                 }
                 if (nextPart.signum() > 0) {
                     BigDecimal nextAvailable = available(employee, appliedYear + 1, policy)
@@ -528,6 +528,13 @@ public class LeaveRequestService {
             throw new BusinessException(ErrorCode.LEAVE_NOT_PENDING, "이미 처리된 신청입니다.");
         }
         requireApprover(approver, request);
+        // 동시에 같은 날을 두 번 신청하면(더블클릭·탭 두 개) 둘 다 결재 대기가 될 수 있다.
+        // 승인할 때 이미 승인된(취소 요청 중 포함) 휴가와 다시 겹침 규칙을 확인해 두 번 차감되지 않게 한다
+        validateNoOverlap(requestRepository.findActiveOverlapping(request.getEmployee().getId(),
+                        request.getStartDate(), request.getEndDate()).stream()
+                        .filter(r -> !r.getId().equals(request.getId()) && !r.isAwaitingApproval())
+                        .toList(),
+                request.getPortion(), request.halfSide(), request.getDays());
 
         if (request.getLeaveType().isDeductFromAnnual()) {
             LeavePolicy policy = policyService.getActivePolicy();
@@ -542,8 +549,8 @@ public class LeaveRequestService {
                     requireNextPeriodAvailable(applicant, year, deduction, available, policy, true);
                 } else if (deduction.compareTo(available) > 0) {
                     throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
-                            "승인 시점 잔여 연차가 부족합니다. (차감 " + deduction
-                                    + "일 / 잔여 " + available + "일)");
+                            "승인 시점 잔여 연차가 부족합니다. (차감 " + plain(deduction)
+                                    + "일 / 잔여 " + plain(available.max(BigDecimal.ZERO)) + "일)");
                 }
                 if (nextPart.signum() > 0) {
                     requireNextPeriodAvailable(applicant, year + 1, nextPart,
@@ -736,6 +743,7 @@ public class LeaveRequestService {
      *   <li>처리 대상: segments(등록이면 금지 기간 전체, 늘려 수정하면 새로 늘어난 날짜만)와 하루라도 겹치는 신청 건 전체</li>
      *   <li>결재 대기 → 자동 반려. 승인·취소 요청 중 → "모두 취소"면 자동 취소, "승인된 휴가만 유지"면 유지</li>
      *   <li>금지 기간에도 신청할 수 있는 종류(경조사·공가 등)는 처리하지 않는다(목록에서도 뺀다)</li>
+     *   <li>오늘 전에 시작한(이미 쓰고 있거나 지난) 휴가는 상태와 관계없이 처리하지 않는다(유지 목록)</li>
      * </ul>
      */
     @Transactional(readOnly = true)
@@ -750,9 +758,12 @@ public class LeaveRequestService {
                 .sorted(Comparator.comparing(LeaveRequest::getStartDate)
                         .thenComparing(r -> r.getEmployee().getName()))
                 .toList();
+        LocalDate today = LocalDate.now();
         for (LeaveRequest r : candidates) {
             boolean inSegment = segments.stream().anyMatch(s -> s.overlaps(r.getStartDate(), r.getEndDate()));
-            if (inSegment && r.isAwaitingApproval()) {
+            if (r.getStartDate().isBefore(today)) {
+                kept.add(r); // 이미 시작했거나 지난 휴가는 건드리지 않는다(지난 날짜를 금지 기간에 넣어도 쓴 연차가 돌아오지 않게)
+            } else if (inSegment && r.isAwaitingApproval()) {
                 reject.add(r);
             } else if (inSegment && mode == BlackoutConflictMode.CANCEL_ALL) {
                 cancel.add(r);
@@ -972,11 +983,14 @@ public class LeaveRequestService {
                 .filter(r -> departmentId.equals(r.getEmployee().getDepartmentId()))
                 .filter(r -> !r.getEmployee().getId().equals(applicant.getId()))
                 .toList();
+        // 주말·공휴일은 근무일이 아니라 부재로 세지 않는다
+        Set<LocalDate> holidays = holidaysBetween(request.getStartDate(), request.getEndDate());
         LocalDate worstDay = null;
         Set<Long> worstApproved = Set.of();
         Set<Long> worstPending = Set.of();
         for (LocalDate day = request.getStartDate(); !day.isAfter(request.getEndDate()); day = day.plusDays(1)) {
-            if (day.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || day.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            if (day.getDayOfWeek() == java.time.DayOfWeek.SATURDAY || day.getDayOfWeek() == java.time.DayOfWeek.SUNDAY
+                    || holidays.contains(day)) {
                 continue;
             }
             LocalDate d = day;
@@ -1085,7 +1099,12 @@ public class LeaveRequestService {
      */
     private void validateNoOverlap(Long employeeId, LocalDate start, LocalDate end, DayPortion portion,
                                    HalfDayPart halfSide, BigDecimal days) {
-        List<LeaveRequest> overlapping = requestRepository.findActiveOverlapping(employeeId, start, end);
+        validateNoOverlap(requestRepository.findActiveOverlapping(employeeId, start, end), portion, halfSide, days);
+    }
+
+    /** 같은 날 겹침 규칙(취소 요청 중이면 모두 막음, 반차는 오전+오후만, 반차·시간차 섞기 불가, 시간차 합계 1일). */
+    private void validateNoOverlap(List<LeaveRequest> overlapping, DayPortion portion, HalfDayPart halfSide,
+                                   BigDecimal days) {
         if (overlapping.isEmpty()) {
             return;
         }

@@ -128,7 +128,8 @@ public class HolidayImpactService {
         BigDecimal oldDays = request.getDays();
         BigDecimal oldDeducted = request.getDeductedDays();
         // 최종 승인 전(대기·1차 승인)은 아직 잔액에서 빠지지 않았다
-        boolean chargedBalance = !request.isAwaitingApproval() && type.isDeductFromAnnual();
+        // 승인 때 실제로 뺀 차감액 기준(나중에 종류의 차감 방식이 바뀌어도 뺀 만큼 돌려준다)
+        boolean chargedBalance = !request.isAwaitingApproval() && oldDeducted.signum() > 0;
         String holidayText = hit.entrySet().stream()
                 .map(e -> e.getKey() + " " + e.getValue()).collect(Collectors.joining(", "));
         String period = type.getName() + " " + request.getStartDate() + " ~ " + request.getEndDate();

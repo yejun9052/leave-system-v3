@@ -21,6 +21,18 @@ public class FlywayDbVersion implements DbVersionSource, SchemaMigrator {
     }
 
     @Override
+    public String latestAvailable() {
+        MigrationInfo latest = null;
+        for (MigrationInfo info : flyway.info().all()) {
+            if (info.getVersion() != null
+                    && (latest == null || info.getVersion().compareTo(latest.getVersion()) > 0)) {
+                latest = info;
+            }
+        }
+        return latest != null ? latest.getVersion().getVersion() : null;
+    }
+
+    @Override
     public int migrate() {
         return flyway.migrate().migrationsExecuted;
     }

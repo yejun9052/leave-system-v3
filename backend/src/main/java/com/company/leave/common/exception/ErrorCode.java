@@ -46,7 +46,7 @@ public enum ErrorCode {
     // 부서
     DEPARTMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "부서를 찾을 수 없습니다."),
     DEPARTMENT_HAS_CHILDREN(HttpStatus.CONFLICT, "하위 부서가 있어 삭제할 수 없습니다."),
-    DEPARTMENT_HAS_MEMBERS(HttpStatus.CONFLICT, "소속 사용자가 있어 삭제할 수 없습니다."),
+    DEPARTMENT_HAS_MEMBERS(HttpStatus.CONFLICT, "소속 사용자(퇴사자 포함)가 있어 삭제할 수 없습니다. 사용자 관리에서 다른 부서로 옮긴 뒤 삭제해 주세요."),
     DEPARTMENT_CYCLE(HttpStatus.BAD_REQUEST, "부서를 자신의 하위로 이동할 수 없습니다."),
 
     // 정책

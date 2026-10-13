@@ -139,10 +139,8 @@ public class RestoreService {
 
     private Result doRestore(String fileName, Source source, Long actorId, String actorName) {
         Check check;
-        BackupFile pre;
         try {
             check = verify(resolve(fileName, source), source);
-            pre = preRestoreBackup();
         } catch (BusinessException ex) {
             recordAudit(actorId, actorName, false, describe(fileName, source, null, null) + " | " + ex.getMessage());
             throw ex;
@@ -151,11 +149,15 @@ public class RestoreService {
         if (!maintenance.begin()) {
             throw new BusinessException(ErrorCode.BACKUP_IN_PROGRESS, "복원이 진행 중입니다.");
         }
+        BackupFile pre = null;
         RuntimeException failure = null;
         int migrations = 0;
         int sessions = 0;
         try {
+            // 점검 모드로 새 요청을 막고 처리 중인 요청이 끝난 다음에 복원 전 백업을 뜬다:
+            // 그 사이에 저장된 것도 복원 전 백업에 남아 "되돌리기"로 살릴 수 있다
             drain();
+            pre = preRestoreBackup();
             apply(openForRestore(resolve(fileName, source)));
             migrations = migrator.migrate();
             evictConnections();
@@ -166,6 +168,12 @@ public class RestoreService {
             maintenance.end();
         }
 
+        if (pre == null) {
+            // 복원 전 백업을 못 떠서 복원하지 않았다(DB 는 그대로)
+            recordAudit(actorId, actorName, false, describe(fileName, source, check, null) + " | " + brief(failure));
+            throw failure instanceof BusinessException business ? business
+                    : new BusinessException(ErrorCode.BACKUP_RESTORE_FAILED, "복원하지 않았습니다. " + brief(failure));
+        }
         String detail = describe(fileName, source, check, pre.fileName());
         if (failure != null) {
             log.error("[복원] 실패: {} (복원 전 백업 {})", fileName, pre.fileName(), failure);
@@ -231,9 +239,13 @@ public class RestoreService {
                     "연차관리 앱의 백업이 아닙니다(백업 안에 DB 버전 기록이 없습니다).");
         }
         String current = dbVersion.current();
-        if (current != null && DbVersionSource.compare(version, current) > 0) {
+        // 지금 DB 가 아니라 이 앱이 아는 최신 버전과 비교한다: 복원 뒤 DB 업그레이드가 실패해 DB 가 옛 버전에
+        // 머물러도, 이 앱으로 만든 복원 전 백업으로 되돌릴 수 있어야 한다
+        String supported = dbVersion.latestAvailable();
+        String limit = supported != null ? supported : current;
+        if (limit != null && DbVersionSource.compare(version, limit) > 0) {
             throw new BusinessException(ErrorCode.BACKUP_NEWER_VERSION,
-                    "이 백업은 더 새 버전의 앱에서 만들어졌습니다(백업 DB 버전 " + version + ", 지금 " + current
+                    "이 백업은 더 새 버전의 앱에서 만들어졌습니다(백업 DB 버전 " + version + ", 이 앱 " + limit
                             + "). 앱을 먼저 업데이트하세요.");
         }
         return new Check(file.getFileName().toString(), source, meta.kind(), meta.createdAt(), meta.size(), version,

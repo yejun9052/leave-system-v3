@@ -91,6 +91,11 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
 
     long countByStatusIn(Collection<LeaveRequestStatus> statuses);
 
+    /** 이 휴가 종류로 주어진 상태이면서 date 이후에 끝나는 신청 수(차감 방식 변경 검사용). */
+    long countByLeaveTypeIdAndStatusInAndEndDateGreaterThanEqual(Long leaveTypeId,
+                                                                 Collection<LeaveRequestStatus> statuses,
+                                                                 LocalDate date);
+
     /** 특정 기간 내 승인된 휴가 (팀 동시부재/캘린더용) */
     @Query("""
             select r from LeaveRequest r

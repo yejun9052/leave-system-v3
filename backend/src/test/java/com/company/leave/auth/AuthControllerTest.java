@@ -95,11 +95,11 @@ class AuthControllerTest {
     void 비밀번호_재설정_요청은_이메일_형식이_맞을_때만_서비스에_넘긴다() throws Exception {
         mvc.perform(post("/api/auth/password-reset/request").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"not-an-email\"}")).andExpect(status().isBadRequest());
-        verify(passwordResetService, never()).requestReset(anyString());
+        verify(passwordResetService, never()).requestReset(anyString(), anyString());
 
         mvc.perform(post("/api/auth/password-reset/request").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"user@company.com\"}")).andExpect(status().isOk());
-        verify(passwordResetService).requestReset("user@company.com");
+        verify(passwordResetService).requestReset("user@company.com", "127.0.0.1");
     }
 
     @Test

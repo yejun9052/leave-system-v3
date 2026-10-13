@@ -67,7 +67,12 @@ public class JobRunRecorder {
             throw ex;
         } finally {
             if (realtime != null) {
-                realtime.broadcast(null);
+                try {
+                    realtime.broadcast(null);
+                } catch (RuntimeException ex) {
+                    // 종료 중 등 신호를 못 보내도 작업 결과는 그대로 둔다
+                    log.debug("실시간 신호를 보내지 못함: {}", ex.getMessage());
+                }
             }
         }
     }

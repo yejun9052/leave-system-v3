@@ -100,11 +100,16 @@ public class LeaveAccrualCalculator {
 
     /** asOf 가 속한 회계연도의 시작일. */
     public LocalDate currentFiscalStart(LocalDate asOf, LeavePolicy policy) {
-        LocalDate candidate = LocalDate.of(asOf.getYear(),
-                policy.getFiscalStartMonth(), policy.getFiscalStartDay());
+        LocalDate candidate = fiscalStart(asOf.getYear(), policy);
         if (asOf.isBefore(candidate)) {
-            candidate = candidate.minusYears(1);
+            candidate = fiscalStart(asOf.getYear() - 1, policy);
         }
         return candidate;
+    }
+
+    /** year 의 회계연도 시작일. 그 달에 없는 날(4월 31일, 평년 2월 29일)은 말일로 본다({@link LeavePeriodCalculator} 와 같다). */
+    private static LocalDate fiscalStart(int year, LeavePolicy policy) {
+        LocalDate first = LocalDate.of(year, policy.getFiscalStartMonth(), 1);
+        return first.withDayOfMonth(Math.min(policy.getFiscalStartDay(), first.lengthOfMonth()));
     }
 }
