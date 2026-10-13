@@ -750,13 +750,14 @@ class LeaveRequestServiceApprovalTest {
         }
 
         @Test
-        void 자가_승인_메일은_자가_승인으로_안내한다() {
+        void 자가_승인_메일도_승인되었다고_안내하고_처리자_줄에_본인이_남는다() {
             LeaveRequest request = 대기_신청(개발팀장);
 
             service.approve(request.getId(), 개발팀장.getId());
 
             assertThat(보낸_메일()).singleElement()
-                    .satisfies(m -> assertThat(m.text()).contains("직원2님의 휴가가 자가 승인으로 확정되었습니다"));
+                    .satisfies(m -> assertThat(m.text()).contains("직원2님의 휴가가 승인되었습니다")
+                            .contains("처리자: 직원2 (팀장)").doesNotContain("자가 승인"));
         }
 
         @Test
@@ -875,7 +876,19 @@ class LeaveRequestServiceApprovalTest {
         void 신청자가_대기_중인_신청을_철회하면_처리자는_신청자_본인이다() {
             service.cancel(대기_신청(파트원).getId(), 파트원.getId(), null);
 
-            assertThat(받은(보낸_메일(), 파트장_메일).text()).contains("처리자: 직원13 (신청자)");
+            assertThat(받은(보낸_메일(), 파트장_메일).text()).contains("처리자: 직원13 (신청자)")
+                    .contains("결재 대기 중인 연차 없음");
+        }
+
+        @Test
+        void 철회_안내_메일에는_받는_결재자의_결재함에_남은_건수가_들어간다() {
+            LeaveRequest 남은_신청 = 대기_신청(파트원);
+            when(employeeService.employeeIdsInDepartments(Set.of(3L))).thenReturn(Set.of(7L, 13L, 20L));
+            when(requestRepository.findForApproval(any(), any())).thenReturn(List.of(남은_신청));
+
+            service.cancel(대기_신청(파트원).getId(), 파트원.getId(), null);
+
+            assertThat(받은(보낸_메일(), 파트장_메일).text()).contains("결재 대기 중인 연차 1건");
         }
 
         private List<LeaveMail> 보낸_메일() {

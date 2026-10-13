@@ -85,7 +85,7 @@ public final class LeaveMailTemplates {
     /** @param route 결재 경로 안내(예: "팀장 홍길동님 승인(인사관리자도 승인 가능)") */
     public static Mail submitted(Info info, String domain, String baseUrl, String route) {
         Content content = content("휴가 신청 접수 안내",
-                List.of("휴가 신청이 접수되었습니다.", "결재가 끝나면 결과를 메일로 알려 드립니다."),
+                List.of("휴가 신청이 접수되었습니다.", "결재가 처리되면 안내 메일이 발송됩니다."),
                 null, info, List.of(Row.of("결재", route)), "결재 대기", MY_LEAVES, baseUrl, "/my-leaves");
         return root(info, Thread.APPLICANT, domain, content);
     }
@@ -102,10 +102,10 @@ public final class LeaveMailTemplates {
         return root(info, Thread.APPLICANT, domain, content);
     }
 
-    /** @param self 신청자 본인의 자가 승인이면 true */
-    public static Mail approved(Info info, String domain, String baseUrl, Handler by, boolean self) {
-        String headline = info.applicantName() + (self ? "님의 휴가가 자가 승인으로 확정되었습니다." : "님의 휴가가 승인되었습니다.");
-        return applicantReply(info, domain, baseUrl, "휴가 승인 안내", List.of(headline, DONE), by, List.of(), "승인 완료");
+    /** 자가 승인도 같은 문장이다(누가 승인했는지는 표의 처리자 줄에 남는다). */
+    public static Mail approved(Info info, String domain, String baseUrl, Handler by) {
+        return applicantReply(info, domain, baseUrl, "휴가 승인 안내",
+                List.of(info.applicantName() + "님의 휴가가 승인되었습니다.", DONE), by, List.of(), "승인 완료");
     }
 
     public static Mail rejected(Info info, String domain, String baseUrl, Handler by, String reason) {
@@ -123,7 +123,7 @@ public final class LeaveMailTemplates {
 
     public static Mail cancelRejected(Info info, String domain, String baseUrl, Handler by, String reason) {
         return applicantReply(info, domain, baseUrl, "휴가 취소 반려 안내",
-                List.of(by.honorific() + "이 휴가 취소 요청을 반려했습니다.", "휴가는 승인 상태로 유지됩니다."), by,
+                List.of(by.honorific() + "이 휴가 취소 요청을 반려했습니다.", "휴가가 승인 상태로 유지됩니다."), by,
                 List.of(Row.of("반려 사유", orNone(reason))), "승인 유지");
     }
 
@@ -166,9 +166,11 @@ public final class LeaveMailTemplates {
         return root(info, Thread.APPROVER, domain, content);
     }
 
-    public static Mail withdrawn(Info info, String domain, String baseUrl) {
+    /** @param waiting 이 메일을 받는 결재자의 결재함에 남은 신청 수(취소 요청 포함) */
+    public static Mail withdrawn(Info info, String domain, String baseUrl, int waiting) {
         Content content = content("휴가 신청 철회 안내",
-                List.of(info.applicantName() + "님이 결재 대기 중이던 휴가 신청을 취소했습니다.", "더 결재하지 않아도 됩니다."),
+                List.of(info.applicantName() + "님이 결재 대기 중이던 휴가 신청을 취소했습니다.",
+                        waiting > 0 ? "결재 대기 중인 연차 " + waiting + "건" : "결재 대기 중인 연차 없음"),
                 new Handler("신청자", info.applicantName()), info, List.of(), "신청 취소",
                 APPROVALS, baseUrl, "/approvals");
         return reply(info, Thread.APPROVER, domain, content);

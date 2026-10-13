@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.ToIntFunction;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -56,12 +58,11 @@ public class LeaveMessenger {
     /** 승인: 신청자, 담당 팀장(결재한 사람이 아니면)은 참조. */
     public void approved(LeaveRequest r, Employee approver, Employee lead) {
         Handler by = handler(approver);
-        boolean self = approver.getId().equals(r.getEmployee().getId());
         notify(r.getEmployee(), "LEAVE_APPROVED", "휴가가 승인되었습니다.",
-                summary(r) + " · " + (self ? "자가 승인" : by.title()), "/my-leaves");
+                summary(r) + " · " + by.title(), "/my-leaves");
         notify(lead, "LEAVE_APPROVED_INFO", "팀원 휴가 승인",
                 r.getEmployee().getName() + "님의 " + summary(r) + " · " + by.title() + " 승인", "/calendar");
-        mailWithLeadCc(r.getEmployee(), lead, LeaveMailTemplates.approved(info(r), domain(), baseUrl(), by, self));
+        mailWithLeadCc(r.getEmployee(), lead, LeaveMailTemplates.approved(info(r), domain(), baseUrl(), by));
     }
 
     /** 반려: 신청자. */
@@ -72,10 +73,15 @@ public class LeaveMessenger {
                 LeaveMailTemplates.rejected(info(r), domain(), baseUrl(), by, reason));
     }
 
-    /** 결재 대기 중 신청자가 철회: 결재 요청을 받았던 사람. */
-    public void withdrawn(LeaveRequest r, Collection<Employee> approvers) {
+    /**
+     * 결재 대기 중 신청자가 철회: 결재 요청을 받았던 사람.
+     *
+     * @param waiting 결재자마다 결재함에 남은 신청 수(이 신청은 빠진 뒤). 메일에 "결재 대기 중인 연차 N건"으로 쓴다
+     */
+    public void withdrawn(LeaveRequest r, Collection<Employee> approvers, ToIntFunction<Employee> waiting) {
+        Info info = info(r);
         deliver(approvers, "LEAVE_WITHDRAWN", "휴가 신청 취소", withApplicant(r) + " · 신청자가 취소함", "/approvals",
-                LeaveMailTemplates.withdrawn(info(r), domain(), baseUrl()));
+                e -> LeaveMailTemplates.withdrawn(info, domain(), baseUrl(), waiting.applyAsInt(e)));
     }
 
     /** 결재 대기 중인 신청을 인사관리자가 강제로 취소: 신청자. */
@@ -175,6 +181,12 @@ public class LeaveMessenger {
     /** 알림은 받는 사람 모두, 메일은 표의 수신자 줄이 사람마다 달라 한 사람씩 따로 보낸다. */
     private void deliver(Collection<Employee> recipients, String type, String title, String message, String link,
                          LeaveMailTemplates.Mail mail) {
+        deliver(recipients, type, title, message, link, e -> mail);
+    }
+
+    /** 받는 사람마다 내용이 다른 메일(결재자별 남은 건수 등). */
+    private void deliver(Collection<Employee> recipients, String type, String title, String message, String link,
+                         Function<Employee, LeaveMailTemplates.Mail> mailFor) {
         Map<Long, Employee> unique = new LinkedHashMap<>();
         recipients.stream().filter(Objects::nonNull).forEach(e -> unique.putIfAbsent(e.getId(), e));
         if (unique.isEmpty()) {
@@ -185,8 +197,10 @@ public class LeaveMessenger {
         unique.values().stream()
                 .filter(LeaveMessenger::mailable)
                 .filter(e -> sent.add(e.getEmail()))
-                .forEach(e -> publish(List.of(e.getEmail()), List.of(), mail,
-                        mail.content().withRecipient(e.getName())));
+                .forEach(e -> {
+                    LeaveMailTemplates.Mail mail = mailFor.apply(e);
+                    publish(List.of(e.getEmail()), List.of(), mail, mail.content().withRecipient(e.getName()));
+                });
     }
 
     /** 앱 알림 한 건(받는 사람이 없으면 생략). */

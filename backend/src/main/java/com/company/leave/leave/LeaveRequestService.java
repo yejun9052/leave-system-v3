@@ -462,6 +462,16 @@ public class LeaveRequestService {
     public List<LeaveRequestDtos.Response> pendingForApprover(Long approverId) {
         Employee approver = employeeService.getEntity(approverId);
         LeavePolicy policy = policyService.getActivePolicy();
+        return approvalQueue(approver).stream()
+                .sorted(java.util.Comparator.comparing(LeaveRequest::getCreatedAt,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+                .map(r -> LeaveRequestDtos.Response.from(r)
+                        .withInbox(r.getEmployee().getId().equals(approverId), teamLimitWarning(r, policy)))
+                .toList();
+    }
+
+    /** 이 결재자가 처리할 신청(대기·취소 요청). 결재함 목록과 철회 안내 메일의 남은 건수가 같은 기준을 쓴다. */
+    private List<LeaveRequest> approvalQueue(Employee approver) {
         boolean hr = isHrApprover(approver);
         java.util.Collection<Long> targets = hr ? allEmployeeIds() : subordinateEmployeeIds(approver);
         if (!hr && targets.isEmpty()) {
@@ -470,10 +480,6 @@ public class LeaveRequestService {
         return requestRepository.findForApproval(targets,
                         EnumSet.of(LeaveRequestStatus.PENDING, LeaveRequestStatus.CANCEL_REQUESTED)).stream()
                 .filter(r -> canApprove(approver, r))
-                .sorted(java.util.Comparator.comparing(LeaveRequest::getCreatedAt,
-                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
-                .map(r -> LeaveRequestDtos.Response.from(r)
-                        .withInbox(r.getEmployee().getId().equals(approverId), teamLimitWarning(r, policy)))
                 .toList();
     }
 
@@ -622,7 +628,8 @@ public class LeaveRequestService {
             case PENDING -> {
                 request.cancel();
                 if (owner) {
-                    messenger.withdrawn(request, approversToNotify(request.getEmployee()));
+                    messenger.withdrawn(request, approversToNotify(request.getEmployee()),
+                            approver -> approvalQueue(approver).size());
                 } else {
                     messenger.cancelledByHr(request, requester, reason);
                 }
