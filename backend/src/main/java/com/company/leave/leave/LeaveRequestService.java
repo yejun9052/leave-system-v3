@@ -1264,14 +1264,19 @@ public class LeaveRequestService {
         }
     }
 
+    /** 캘린더 제목 끝의 시간차·반차 표시(" 3시간", " 오후 반차"). 종일이면 빈 문자열. 종류를 가린 제목에도 붙인다 */
+    private static String portionSuffix(LeaveRequest request) {
+        return (request.getLeaveType().getPortion() == DayPortion.HOURLY
+                ? " " + WorkdayCalculator.hoursOf(request.getDays()) + "시간" : "")
+                + (request.getHalfDayPart() != null ? " " + request.getHalfDayPart().label() + " 반차" : "");
+    }
+
     private void createCalendarEvent(LeaveRequest request) {
         Employee e = request.getEmployee();
         CalendarEvent event = CalendarEvent.builder()
                 .title(e.getName() + " - " + request.getLeaveType().getName()
                         + (request.getSpecialRuleName() != null ? "(" + request.getSpecialRuleName() + ")" : "")
-                        + (request.getLeaveType().getPortion() == DayPortion.HOURLY
-                                ? " " + WorkdayCalculator.hoursOf(request.getDays()) + "시간" : "")
-                        + (request.getHalfDayPart() != null ? " " + request.getHalfDayPart().label() + " 반차" : ""))
+                        + portionSuffix(request))
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .allDay(true)
@@ -1336,7 +1341,7 @@ public class LeaveRequestService {
     }
 
     /**
-     * 캘린더의 휴가 일정 중 이 사람에게 종류를 가려야 하는 것: 휴가 신청 ID → 가린 제목("이름 - 휴가").
+     * 캘린더의 휴가 일정 중 이 사람에게 종류를 가려야 하는 것: 휴가 신청 ID → 가린 제목("이름 - 휴가", 반차면 "이름 - 휴가 오후 반차").
      * {@link #leaveTypeVisibility}
      */
     @Transactional(readOnly = true)
@@ -1348,7 +1353,7 @@ public class LeaveRequestService {
         return requestRepository.findAllById(requestIds).stream()
                 .filter(visible.negate())
                 .collect(Collectors.toMap(LeaveRequest::getId,
-                        r -> r.getEmployee().getName() + " - " + LeaveRequestDtos.HIDDEN_TYPE_NAME));
+                        r -> r.getEmployee().getName() + " - " + LeaveRequestDtos.HIDDEN_TYPE_NAME + portionSuffix(r)));
     }
 
     /** 전사 결재·강제 취소·강제 등록 권한: 인사관리자와 시스템 관리자(같은 권한, 회사 합의). */

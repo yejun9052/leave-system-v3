@@ -210,6 +210,16 @@ class LeaveRequestServiceDayLeavesTest {
         assertThat(service.hiddenLeaveTitles(개발팀장.getId(), List.of(800L, 802L))).isEmpty();
     }
 
+    @Test
+    void 가린_제목에도_반차_표시는_남긴다() {
+        LeaveRequest 생일반차 = 신청(803L, 개발팀원, LeaveRequestStatus.APPROVED, 경조사);
+        ReflectionTestUtils.setField(생일반차, "halfDayPart", com.company.leave.leave.domain.HalfDayPart.PM);
+        lenient().when(requestRepository.findAllById(any())).thenReturn(List.of(생일반차));
+
+        assertThat(service.hiddenLeaveTitles(영업팀원.getId(), List.of(803L)))
+                .containsExactly(java.util.Map.entry(803L, "직원6 - 휴가 오후 반차"));
+    }
+
     private void 병가와_경조사가_있는_날() {
         lenient().when(requestRepository.findByStatusInOverlapping(any(), eq(TUE), eq(TUE))).thenReturn(List.of(
                 신청(800L, 개발동료, LeaveRequestStatus.APPROVED),
