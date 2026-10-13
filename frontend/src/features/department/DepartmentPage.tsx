@@ -104,15 +104,18 @@ export default function DepartmentPage() {
     if (ok) moveMutation.mutate({ id: dept.id, parentId: target === "root" ? null : target });
   };
 
-  /** 부서를 누르면 그 부서 이름으로 검색한 사용자 관리 화면으로 넘어간다(확인 후) */
+  /**
+   * 부서를 누르면 그 부서(하위 부서 포함, 인원 배지와 같은 범위) 소속으로 거른 사용자 관리 화면으로 넘어간다(확인 후).
+   * 이름 검색으로 넘기면 이메일·전화번호에 그 글자가 든 사람까지 섞였다
+   */
   const onOpenMembers = async (dept: Department) => {
     if (Date.now() - dragEndedAt.current < 300) return;
     const ok = await confirm({
       title: `'${dept.name}' 부서 명단을 확인하시겠습니까?`,
-      description: `사용자 관리로 이동해 '${dept.name}' 검색 결과를 보여 줍니다.`,
+      description: `사용자 관리로 이동해 '${dept.name}'(하위 부서 포함) 소속 사용자를 보여 줍니다.`,
       confirmText: "확인",
     });
-    if (ok) navigate(`/admin/employees?${new URLSearchParams({ keyword: dept.name })}`);
+    if (ok) navigate(`/admin/employees?${new URLSearchParams({ departmentIds: [...subtreeIds(dept)].join(",") })}`);
   };
 
   /**

@@ -72,6 +72,11 @@ const STATUS_LABEL: Record<EmployeeStatus, string> = {
 
 const STATUS_RANK: EmployeeStatus[] = ["ACTIVE", "ON_LEAVE", "RESIGNED"];
 
+/** 주소의 "3,4,7" → 부서 id 집합 */
+function parseIds(text: string): Set<number> {
+  return new Set(text.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0));
+}
+
 export default function EmployeePage() {
   const qc = useQueryClient();
   const myId = useAuthStore((s) => s.user?.id);
@@ -79,16 +84,22 @@ export default function EmployeePage() {
   const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // 검색어는 주소(?keyword=)에 둔다: 부서 관리에서 부서를 눌러 넘어오면 그 부서 이름으로 검색된 상태로 열린다
+  // 검색어는 주소(?keyword=)에 둔다. 부서 관리에서 부서를 눌러 넘어오면 ?departmentIds= 로 그 부서(하위 포함)가 체크된 채 열린다
   const [searchParams, setSearchParams] = useSearchParams();
   const search = searchParams.get("keyword") ?? "";
+  const deptParam = searchParams.get("departmentIds") ?? "";
   const [keyword, setKeyword] = useState(search);
   const [page, setPage] = useState(0);
-  const [departmentIds, setDepartmentIds] = useState<Set<number>>(new Set());
+  const [departmentIds, setDepartmentIds] = useState<Set<number>>(() => parseIds(deptParam));
   useEffect(() => {
     setKeyword(search);
     setPage(0);
   }, [search]);
+  useEffect(() => {
+    if (!deptParam) return;
+    setDepartmentIds(parseIds(deptParam));
+    setPage(0);
+  }, [deptParam]);
   const [editing, setEditing] = useState<Employee | null>(null);
   const [creating, setCreating] = useState(false);
   /** 엑셀 일괄 등록에서 등록하지 못한 행과 이유(닫을 때까지 보여 줌) */
