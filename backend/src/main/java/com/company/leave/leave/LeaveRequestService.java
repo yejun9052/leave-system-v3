@@ -284,7 +284,7 @@ public class LeaveRequestService {
                     requireNextPeriodAvailable(employee, appliedYear, currentPart, available, policy, false);
                 } else if (currentPart.compareTo(available) > 0) {
                     throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
-                            "잔여 연차가 부족합니다. (차감 " + currentPart + "일 / 사용가능 " + available + "일)");
+                            "잔여 연차가 부족합니다. (차감 " + plain(currentPart) + "일 / 사용 가능 " + plain(available.max(BigDecimal.ZERO)) + "일)");
                 }
                 if (nextPart.signum() > 0) {
                     BigDecimal nextAvailable = available(employee, appliedYear + 1, policy)
@@ -549,8 +549,8 @@ public class LeaveRequestService {
                     requireNextPeriodAvailable(applicant, year, deduction, available, policy, true);
                 } else if (deduction.compareTo(available) > 0) {
                     throw new BusinessException(ErrorCode.INSUFFICIENT_LEAVE_BALANCE,
-                            "승인 시점 잔여 연차가 부족합니다. (차감 " + deduction
-                                    + "일 / 잔여 " + available + "일)");
+                            "승인 시점 잔여 연차가 부족합니다. (차감 " + plain(deduction)
+                                    + "일 / 잔여 " + plain(available.max(BigDecimal.ZERO)) + "일)");
                 }
                 if (nextPart.signum() > 0) {
                     requireNextPeriodAvailable(applicant, year + 1, nextPart,

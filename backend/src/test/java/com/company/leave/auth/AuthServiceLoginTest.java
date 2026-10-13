@@ -213,6 +213,7 @@ class AuthServiceLoginTest {
     void 비밀번호가_틀리면_인증_실패로_처리하고_실패_횟수를_기록하며_세션을_만들지_않는다() {
         when(authenticationManager.authenticate(any()))
                 .thenThrow(new BadCredentialsException("bad"));
+        when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(직원(EmployeeStatus.ACTIVE)));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, "wrong!"), request, response))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -223,6 +224,19 @@ class AuthServiceLoginTest {
         assertThat(request.getSession(false)).isNull();
         verify(auditService).record(isNull(), eq(EMAIL), eq("LOGIN"), eq("auth"), isNull(),
                 anyString(), eq(false));
+    }
+
+    @Test
+    void 없는_아이디로_실패하면_이벤트_로그에_앞_두_글자만_남긴다() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad"));
+
+        // 아이디 칸에 비밀번호를 잘못 넣은 경우
+        assertThatThrownBy(() -> authService.login(new LoginRequest("MySecret123!", "x"), request, response))
+                .isInstanceOf(BusinessException.class);
+
+        verify(auditService).record(isNull(), eq("My*** (없는 아이디)"), eq("LOGIN"), eq("auth"), isNull(),
+                eq("로그인 실패: My*** (없는 아이디) · IP " + IP), eq(false));
+        assertThat(authService.loginIdForLog("nobody@company.com")).isEqualTo("no***@company.com");
     }
 
     @Test

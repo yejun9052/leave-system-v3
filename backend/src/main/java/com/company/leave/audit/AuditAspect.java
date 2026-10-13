@@ -9,6 +9,8 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -16,9 +18,11 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 /**
  * 모든 상태 변경 요청(POST/PUT/PATCH/DELETE)과 엑셀 내보내기(GET .../export)를 자동으로 감사 로그에 기록한다.
  * 인증 관련(/api/auth/*)은 AuthService 에서 별도로 남긴다.
+ * 권한 검사(@PreAuthorize)보다 바깥에서 돈다(가장 먼저): 권한이 없어 거부된 변경 시도도 실패로 남는다.
  */
 @Aspect
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class AuditAspect {
 
     private static final Logger log = LoggerFactory.getLogger(AuditAspect.class);
