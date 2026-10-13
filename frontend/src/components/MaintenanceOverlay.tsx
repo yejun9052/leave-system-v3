@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Loader2, Wrench } from "lucide-react";
 import { fetchMaintenance } from "@/api/backups";
 import { useMaintenanceStore } from "@/store/maintenance";
@@ -14,6 +14,12 @@ export default function MaintenanceOverlay() {
   const active = useMaintenanceStore((s) => s.active);
   const selfRestoring = useMaintenanceStore((s) => s.selfRestoring);
   const visible = active && !selfRestoring;
+  const ref = useRef<HTMLDivElement>(null);
+
+  // 키보드 사용자가 뒤 화면에 남지 않게 안내로 포커스를 옮긴다
+  useEffect(() => {
+    if (visible) ref.current?.focus();
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -44,7 +50,11 @@ export default function MaintenanceOverlay() {
       aria-labelledby="maintenance-title"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 p-4"
     >
-      <div className="w-full max-w-sm space-y-3 rounded-lg border bg-card p-6 text-center shadow-lg">
+      <div
+        ref={ref}
+        tabIndex={-1}
+        className="w-full max-w-sm space-y-3 rounded-lg border bg-card p-6 text-center shadow-lg outline-none"
+      >
         <Wrench className="mx-auto h-8 w-8 text-primary" />
         <h2 id="maintenance-title" className="text-lg font-semibold">
           시스템 점검 중입니다

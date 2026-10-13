@@ -157,7 +157,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>직원</Label>
+            <Label htmlFor={employee ? undefined : "leave-register-employee"}>직원</Label>
             {employee ? (
               <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
                 <span>
@@ -184,6 +184,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    id="leave-register-employee"
                     className="pl-9"
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
@@ -222,9 +223,9 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
           </div>
 
           <div className="space-y-2">
-            <Label>휴가 종류</Label>
+            <Label htmlFor="leave-register-type">휴가 종류</Label>
             <Select value={typeId} onValueChange={setTypeId}>
-              <SelectTrigger>
+              <SelectTrigger id="leave-register-type">
                 <SelectValue placeholder="종류 선택" />
               </SelectTrigger>
               <SelectContent>
@@ -239,9 +240,9 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
 
           {needsRule && (
             <div className="space-y-2">
-              <Label>사유(규정)</Label>
+              <Label htmlFor="leave-register-rule">사유(규정)</Label>
               <Select value={specialRuleId} onValueChange={setSpecialRuleId}>
-                <SelectTrigger>
+                <SelectTrigger id="leave-register-rule">
                   <SelectValue placeholder="규정 선택" />
                 </SelectTrigger>
                 <SelectContent>
@@ -258,12 +259,13 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>{isPartial ? "날짜" : "시작일"}</Label>
-              <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+              <Label htmlFor="leave-register-start">{isPartial ? "날짜" : "시작일"}</Label>
+              <Input id="leave-register-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>종료일</Label>
+              <Label htmlFor="leave-register-end">종료일</Label>
               <Input
+                id="leave-register-end"
                 type="date"
                 value={endDate}
                 min={start || undefined}
@@ -275,9 +277,9 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
 
           {isHourly && (
             <div className="space-y-2">
-              <Label>시간</Label>
+              <Label htmlFor="leave-register-hours">시간</Label>
               <Select value={hours} onValueChange={setHours}>
-                <SelectTrigger>
+                <SelectTrigger id="leave-register-hours">
                   <SelectValue placeholder="시간 선택 (1~3시간)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -292,8 +294,9 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
           )}
 
           <div className="space-y-2">
-            <Label>사유 (선택)</Label>
+            <Label htmlFor="leave-register-reason">사유 (선택)</Label>
             <Input
+              id="leave-register-reason"
               value={reason}
               maxLength={500}
               onChange={(e) => setReason(e.target.value)}

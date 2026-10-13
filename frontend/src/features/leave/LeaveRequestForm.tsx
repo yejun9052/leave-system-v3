@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import { leaveApi, type ApprovalRoute, type LeaveRequestCreate } from "@/api/leave";
@@ -64,11 +64,12 @@ export function HalfDayPartSelect({
   value: HalfDayPart | "";
   onChange: (v: HalfDayPart) => void;
 }) {
+  const id = useId();
   return (
     <div className="space-y-2">
-      <Label>오전·오후</Label>
+      <Label htmlFor={id}>오전·오후</Label>
       <Select value={value} onValueChange={(v) => onChange(v as HalfDayPart)}>
-        <SelectTrigger>
+        <SelectTrigger id={id}>
           <SelectValue placeholder="오전·오후 선택" />
         </SelectTrigger>
         <SelectContent>
@@ -311,13 +312,14 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
     ...usableTypes.filter((t) => !blockedReasons.has(t.id)),
     ...usableTypes.filter((t) => blockedReasons.has(t.id)),
   ];
+  const id = useId();
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>휴가 종류</Label>
+        <Label htmlFor={`${id}-type`}>휴가 종류</Label>
         <Select value={typeId} onValueChange={setTypeId}>
-          <SelectTrigger>
+          <SelectTrigger id={`${id}-type`}>
             <SelectValue placeholder="종류 선택" />
           </SelectTrigger>
           <SelectContent>
@@ -333,9 +335,9 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
       </div>
       {needsRule && (
         <div className="space-y-2">
-          <Label>사유(규정)</Label>
+          <Label htmlFor={`${id}-rule`}>사유(규정)</Label>
           <Select value={specialRuleId} onValueChange={setSpecialRuleId}>
-            <SelectTrigger>
+            <SelectTrigger id={`${id}-rule`}>
               <SelectValue placeholder="규정 선택" />
             </SelectTrigger>
             <SelectContent>
@@ -359,9 +361,9 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
       {dates}
       {isHourly && (
         <div className="space-y-2">
-          <Label>시간</Label>
+          <Label htmlFor={`${id}-hours`}>시간</Label>
           <Select value={hours} onValueChange={setHours}>
-            <SelectTrigger>
+            <SelectTrigger id={`${id}-hours`}>
               <SelectValue placeholder="시간 선택 (1~3시간)" />
             </SelectTrigger>
             <SelectContent>
@@ -392,8 +394,8 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
         </div>
       )}
       <div className="space-y-2">
-        <Label>사유 (선택)</Label>
-        <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="예: 개인 사유" />
+        <Label htmlFor={`${id}-reason`}>사유 (선택)</Label>
+        <Input id={`${id}-reason`} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="예: 개인 사유" />
       </div>
       {route && <p className="text-sm text-muted-foreground">{approvalRouteText(route)}</p>}
     </div>

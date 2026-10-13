@@ -58,8 +58,9 @@ export default function HolidayTab() {
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1">
-            <Label className="text-xs">연도</Label>
+            <Label htmlFor="holiday-year" className="text-xs">연도</Label>
             <Input
+              id="holiday-year"
               type="number"
               className="w-28"
               value={yearText}

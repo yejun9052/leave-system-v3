@@ -63,7 +63,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 </ToastPrimitive.Description>
               )}
             </div>
-            <ToastPrimitive.Close className="absolute right-2 top-2 rounded-md p-1 opacity-70 transition-opacity hover:opacity-100">
+            <ToastPrimitive.Close
+              aria-label="닫기"
+              className="absolute right-2 top-2 rounded-md p-1 opacity-70 transition-opacity hover:opacity-100"
+            >
               <X className="h-4 w-4" />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>

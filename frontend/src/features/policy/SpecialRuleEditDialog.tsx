@@ -54,16 +54,17 @@ export default function SpecialRuleEditDialog({ rule, onClose }: { rule: Special
         <div className="space-y-4">
           <div className="space-y-2">
             {/* 카드와 같게: 경조사는 "사유/관계", 공가 등은 "사유" */}
-            <Label>{rule.leaveTypeCode === "CONDOLENCE" ? "사유/관계" : "사유"}</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
+            <Label htmlFor="rule-edit-name">{rule.leaveTypeCode === "CONDOLENCE" ? "사유/관계" : "사유"}</Label>
+            <Input id="rule-edit-name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>일수</Label>
-            <Input type="number" step="0.5" className="w-28" value={days} onChange={(e) => setDays(Number(e.target.value))} />
+            <Label htmlFor="rule-edit-days">일수</Label>
+            <Input id="rule-edit-days" type="number" step="0.5" className="w-28" value={days} onChange={(e) => setDays(Number(e.target.value))} />
           </div>
           <div className="space-y-2">
-            <Label>연간 사용 횟수</Label>
+            <Label htmlFor="rule-edit-limit">연간 사용 횟수</Label>
             <Input
+              id="rule-edit-limit"
               type="number"
               min={1}
               className="w-28"

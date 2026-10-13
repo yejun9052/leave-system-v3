@@ -120,8 +120,9 @@ export default function ReportsPage() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label>연도</Label>
+            <Label htmlFor="report-year">연도</Label>
             <Input
+              id="report-year"
               type="number"
               value={yearText}
               onChange={(e) => setYearText(e.target.value)}
@@ -165,6 +166,7 @@ export default function ReportsPage() {
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
                   placeholder="이름 · 부서 · 직급으로 찾기"
+                  aria-label="사용자를 이름 · 부서 · 직급으로 찾기"
                   className="pl-8"
                 />
               </div>

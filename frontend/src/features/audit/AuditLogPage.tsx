@@ -66,6 +66,7 @@ export default function AuditLogPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
+            aria-label="사용자·동작·대상·결과·상세·날짜 검색"
             placeholder="사용자·동작·대상·결과·상세·날짜(2026-10-01) 검색"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}

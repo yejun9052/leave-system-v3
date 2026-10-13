@@ -25,6 +25,7 @@ import { todayString } from "@/lib/dateFormat";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -272,18 +273,20 @@ export function LeaveRequestDialog({ onClose, onSaved }: {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>휴가 신청</DialogTitle>
+          <DialogDescription className="sr-only">날짜와 종류를 고르면 신청할 수 있는지와 차감 일수를 바로 확인합니다.</DialogDescription>
         </DialogHeader>
         <LeaveRequestFields
           form={form}
           dates={
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>{isPartial ? "날짜" : "시작일"}</Label>
-                <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+                <Label htmlFor="leave-request-start">{isPartial ? "날짜" : "시작일"}</Label>
+                <Input id="leave-request-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>종료일</Label>
+                <Label htmlFor="leave-request-end">종료일</Label>
                 <Input
+                  id="leave-request-end"
                   type="date"
                   value={isPartial ? start : end}
                   min={start}

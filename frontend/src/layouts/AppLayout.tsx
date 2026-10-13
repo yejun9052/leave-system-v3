@@ -95,7 +95,7 @@ export default function AppLayout() {
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-background shadow-xl">
             <div className="flex items-center justify-between pr-3">
               <Brand />
-              <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}>
+              <Button variant="ghost" size="icon" aria-label="메뉴 닫기" onClick={() => setMobileOpen(false)}>
                 <X className="h-5 w-5" />
               </Button>
             </div>
@@ -115,6 +115,8 @@ export default function AppLayout() {
             variant="ghost"
             size="icon"
             className="lg:hidden"
+            aria-label="메뉴 열기"
+            aria-expanded={mobileOpen}
             onClick={() => setMobileOpen(true)}
           >
             <Menu className="h-5 w-5" />

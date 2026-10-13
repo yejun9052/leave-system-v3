@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -448,20 +449,23 @@ function DepartmentDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {mode.type === "move" ? "새 상위 부서를 골라 부서를 옮깁니다." : "부서 이름을 입력해 저장합니다."}
+          </DialogDescription>
         </DialogHeader>
 
         {mode.type !== "move" && (
           <div className="space-y-2">
-            <Label>부서명</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 개발팀" />
+            <Label htmlFor="department-name">부서명</Label>
+            <Input id="department-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 개발팀" />
           </div>
         )}
 
         {mode.type === "move" && (
           <div className="space-y-2">
-            <Label>이동할 상위 부서</Label>
+            <Label htmlFor="department-parent">이동할 상위 부서</Label>
             <Select value={newParentId} onValueChange={setNewParentId}>
-              <SelectTrigger>
+              <SelectTrigger id="department-parent">
                 {/* 선택값은 상위 부서부터 경로로: "개발 › 234" */}
                 <SelectValue>
                   {newParentId === "root"

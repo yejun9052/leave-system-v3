@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -801,31 +802,32 @@ function EventDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? "일정 수정" : "일정 추가"}</DialogTitle>
+          <DialogDescription className="sr-only">제목·기간·범위·색상을 정해 캘린더 일정을 저장합니다.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>제목</Label>
-            <Input value={form.title} onChange={(e) => set("title", e.target.value)} />
+            <Label htmlFor="event-title">제목</Label>
+            <Input id="event-title" value={form.title} onChange={(e) => set("title", e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>시작일</Label>
-              <Input type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
+              <Label htmlFor="event-start">시작일</Label>
+              <Input id="event-start" type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>종료일</Label>
-              <Input type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
+              <Label htmlFor="event-end">종료일</Label>
+              <Input id="event-end" type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>범위</Label>
+              <Label htmlFor="event-scope">범위</Label>
               <Select
                 value={selectedScope ? selectedKey : ""}
                 onValueChange={onScopeChange}
                 disabled={scopesLoading || scopeOptions?.length === 0}
               >
-                <SelectTrigger>
+                <SelectTrigger id="event-scope">
                   <SelectValue placeholder="선택" />
                 </SelectTrigger>
                 <SelectContent>
@@ -847,8 +849,8 @@ function EventDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label>색상</Label>
-              <Input type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
+              <Label htmlFor="event-color">색상</Label>
+              <Input id="event-color" type="color" value={form.colorHex} onChange={(e) => set("colorHex", e.target.value)} />
             </div>
           </div>
         </div>

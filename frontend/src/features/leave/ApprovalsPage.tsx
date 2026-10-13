@@ -24,6 +24,7 @@ import { useTableSort } from "@/lib/useTableSort";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -340,10 +341,11 @@ function RejectDialog({
           <DialogTitle>
             {target.req.employeeName} 님의 {isCancel ? "취소 요청 반려" : "신청 반려"}
           </DialogTitle>
+          <DialogDescription>반려 사유는 신청자에게 알림과 메일로 전달됩니다.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label>반려 사유</Label>
-          <Input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="사유를 입력하세요" />
+          <Label htmlFor="reject-reason">반려 사유</Label>
+          <Input id="reject-reason" value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="사유를 입력하세요" />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>

@@ -44,6 +44,7 @@ import { downloadFile } from "@/lib/download";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -225,6 +226,7 @@ export default function EmployeePage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
+            aria-label="이름·이메일·부서·직급·권한·상태 검색"
             placeholder="이름·이메일·부서·직급·권한·상태 검색"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
@@ -482,29 +484,31 @@ function EmployeeDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isEdit ? "사용자 수정" : "사용자 추가"}</DialogTitle>
+          <DialogDescription className="sr-only">사용자 정보와 권한을 입력해 저장합니다.</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="이름">
-            <Input value={form.name} onChange={(e) => set("name", e.target.value)} />
+          <Field id="employee-name" label="이름">
+            <Input id="employee-name" value={form.name} onChange={(e) => set("name", e.target.value)} />
           </Field>
-          <Field label={isSystem ? "아이디 (변경 불가)" : "이메일"}>
+          <Field id="employee-email" label={isSystem ? "아이디 (변경 불가)" : "이메일"}>
             <Input
+              id="employee-email"
               type={isSystem ? "text" : "email"}
               value={form.email}
               disabled={isSystem}
               onChange={(e) => set("email", e.target.value)}
             />
           </Field>
-          <Field label="직급">
-            <Input value={form.position} onChange={(e) => set("position", e.target.value)} />
+          <Field id="employee-position" label="직급">
+            <Input id="employee-position" value={form.position} onChange={(e) => set("position", e.target.value)} />
           </Field>
-          <Field label="부서">
+          <Field id="employee-department" label="부서">
             <Select
               value={form.departmentId ? String(form.departmentId) : "none"}
               onValueChange={(v) => set("departmentId", v === "none" ? null : Number(v))}
             >
-              <SelectTrigger>
+              <SelectTrigger id="employee-department">
                 {/* 선택값은 상위 부서부터 경로로: "개발 › 234" */}
                 <SelectValue placeholder="부서 선택">
                   {form.departmentId
@@ -522,11 +526,11 @@ function EmployeeDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="전화번호">
-            <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+          <Field id="employee-phone" label="전화번호">
+            <Input id="employee-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
           </Field>
-          <Field label="입사일">
-            <Input type="date" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} />
+          <Field id="employee-hire-date" label="입사일">
+            <Input id="employee-hire-date" type="date" value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} />
           </Field>
         </div>
         {!isEdit && (
@@ -584,10 +588,11 @@ function EmployeeDialog({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** id 는 children 의 입력 칸(Select 면 SelectTrigger)에도 같이 붙인다. */
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   );

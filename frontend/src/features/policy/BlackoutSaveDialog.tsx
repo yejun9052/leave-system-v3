@@ -129,16 +129,16 @@ export default function BlackoutSaveDialog({
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">시작</Label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <Label htmlFor="blackout-dialog-start" className="text-xs">시작</Label>
+                <Input id="blackout-dialog-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">종료</Label>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                <Label htmlFor="blackout-dialog-end" className="text-xs">종료</Label>
+                <Input id="blackout-dialog-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
               <div className="min-w-[200px] flex-1 space-y-1">
-                <Label className="text-xs">명칭</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Label htmlFor="blackout-dialog-name" className="text-xs">명칭</Label>
+                <Input id="blackout-dialog-name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
             </div>
             {checking && (
