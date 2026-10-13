@@ -53,7 +53,9 @@ public class LeaveDataInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         policyService.getActivePolicy(); // 기본 정책 보장
 
-        if (leaveTypeRepository.count() == 0) {
+        // 처음 설치할 때만(휴가 종류가 아직 없을 때) 기본 데이터를 넣는다. 관리자가 지운 규정을 재시작 때 되살리지 않게
+        boolean firstInstall = leaveTypeRepository.count() == 0;
+        if (firstInstall) {
             // 시간차는 정책에서 켜야 신청 가능(기본 꺼짐).
             // 차감 방식: 연차·반차·시간차는 일반 연차 차감, 병가는 연차 소진 완료 후 사용, 경조사·공가는 연차와 무관
             // 연차 사용 금지 기간에도 신청 가능: 경조사·공가(병가는 불가)
@@ -78,7 +80,7 @@ public class LeaveDataInitializer implements ApplicationRunner {
 
         // 장기근속 포상 규칙은 기본으로 넣지 않는다. 관리자가 정책 › 포상·경조사에서 직접 등록한다
 
-        if (specialRuleRepository.count() == 0) {
+        if (firstInstall && specialRuleRepository.count() == 0) {
             specialRuleRepository.saveAll(List.of(
                     new SpecialLeaveRule("본인 결혼", new BigDecimal("5.0"), "CONDOLENCE", 1),
                     new SpecialLeaveRule("배우자 출산", new BigDecimal("10.0"), "CONDOLENCE", 2),

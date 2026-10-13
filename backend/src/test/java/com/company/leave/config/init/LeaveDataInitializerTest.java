@@ -96,7 +96,6 @@ class LeaveDataInitializerTest {
     void 이미_데이터가_있으면_아무것도_만들지_않는다() {
         when(leaveTypeRepository.count()).thenReturn(7L);
         when(holidayRepository.count()).thenReturn(19L);
-        when(specialRuleRepository.count()).thenReturn(5L);
 
         초기화(null);
 
@@ -104,6 +103,17 @@ class LeaveDataInitializerTest {
         verify(specialRuleRepository, never()).saveAll(anyList());
         verify(holidayRepository, never()).save(any());
         verify(policyService).getActivePolicy();
+    }
+
+    @Test
+    void 관리자가_경조사_공가_규정을_모두_지워도_재시작_때_되살리지_않는다() {
+        when(leaveTypeRepository.count()).thenReturn(7L); // 이미 설치된 상태
+        when(holidayRepository.count()).thenReturn(19L);
+
+        초기화(null);
+
+        verify(specialRuleRepository, never()).count();
+        verify(specialRuleRepository, never()).saveAll(anyList());
     }
 
     @Test
