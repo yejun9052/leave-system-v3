@@ -158,6 +158,22 @@ class EmployeeServicePasswordTest {
     }
 
     @Test
+    void 지금과_같은_비밀번호로는_바꿀_수_없어_변경_요구도_그대로_남는다() {
+        Employee employee = 직원(passwordEncoder.encode("Temp#Pass123"));
+        employee.requirePasswordChange();
+        String before = employee.getPasswordHash();
+        when(employeeRepository.findById(5L)).thenReturn(Optional.of(employee));
+
+        assertThatThrownBy(() -> service.changeMyPassword(5L, "Temp#Pass123", "Temp#Pass123"))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
+                    assertThat(ex.getMessage()).isEqualTo("현재 비밀번호와 다른 비밀번호를 입력하세요.");
+                });
+        assertThat(employee.getPasswordHash()).isEqualTo(before);
+        assertThat(employee.isPasswordChangeRequired()).isTrue();
+    }
+
+    @Test
     void 현재_비밀번호를_다섯_번_틀리면_맞혀도_잠시_막힌다() {
         Employee employee = 직원(passwordEncoder.encode("Temp#Pass123"));
         when(employeeRepository.findById(5L)).thenReturn(Optional.of(employee));
