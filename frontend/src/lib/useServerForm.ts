@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * 실시간 갱신으로 서버 값이 바뀌었을 때
  * - 고치는 중이 아니면 새 값으로 바꾼다.
  * - 고치는 중이면 입력을 지우지 않고 changedElsewhere = true 로 알린다. reload() 로 새 값을 불러온다.
+ * dirty 는 지금 입력이 바탕 서버 값과 다른지(저장하지 않은 변경이 있는지).
  * 저장에 성공하면 reset(저장된 값, 보낸 입력)으로 맞춘다(서버가 값을 다듬어 돌려줘도 남이 바꾼 것으로 보지 않게,
  * 저장 중에 더 고친 입력은 덮지 않게).
  *
@@ -15,6 +16,8 @@ export function useServerForm<T>(server: T | undefined) {
   const [changedElsewhere, setChangedElsewhere] = useState(false);
   /** 지금 입력의 바탕이 된 서버 값(JSON) */
   const base = useRef<string | null>(server === undefined ? null : JSON.stringify(server));
+  /** base 를 화면에도 쓰려고 둔 사본(dirty 계산용). base 를 바꿀 때 함께 바꾼다 */
+  const [baseJson, setBaseJson] = useState(base.current);
   const serverJson = server === undefined ? null : JSON.stringify(server);
   const latest = useRef(server);
   latest.current = server;
@@ -29,6 +32,7 @@ export function useServerForm<T>(server: T | undefined) {
     const editing = form !== null && base.current !== null && JSON.stringify(form) !== base.current;
     if (!editing || JSON.stringify(form) === serverJson) {
       base.current = serverJson;
+      setBaseJson(serverJson);
       setForm(latest.current ?? null);
       setChangedElsewhere(false);
     } else {
@@ -42,6 +46,7 @@ export function useServerForm<T>(server: T | undefined) {
     const value = latest.current;
     if (value === undefined) return;
     base.current = JSON.stringify(value);
+    setBaseJson(base.current);
     setForm(value);
     setChangedElsewhere(false);
   }, []);
@@ -55,10 +60,13 @@ export function useServerForm<T>(server: T | undefined) {
    */
   const reset = useCallback((value: T, sent?: T) => {
     base.current = JSON.stringify(value);
+    setBaseJson(base.current);
     setChangedElsewhere(false);
     if (sent !== undefined && JSON.stringify(formRef.current) !== JSON.stringify(sent)) return;
     setForm(value);
   }, []);
 
-  return { form, setForm, changedElsewhere, reload, reset };
+  const dirty = form !== null && baseJson !== null && JSON.stringify(form) !== baseJson;
+
+  return { form, setForm, dirty, changedElsewhere, reload, reset };
 }

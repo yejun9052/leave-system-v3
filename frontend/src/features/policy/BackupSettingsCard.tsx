@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarClock, CircleAlert, Save } from "lucide-react";
 import { backupApi, type BackupSettings, type BackupSettingsForm } from "@/api/backups";
@@ -7,6 +7,7 @@ import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 import { useServerForm } from "@/lib/useServerForm";
+import { useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -194,6 +195,12 @@ export default function BackupSettingsCard() {
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
+  const dirty = !!data && !!form
+    && (form.enabled !== data.enabled || form.keepMonths !== data.keepMonths || cron !== data.cron);
+  // 화면을 나갈 때 "저장"을 고르면 부른다. 저장 버튼과 같은 조건(아래에서 계산)이라 렌더마다 바꿔 끼운다
+  const saveOnLeave = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
+  useUnsavedChanges("자동 백업 설정", dirty, () => saveOnLeave.current());
+
   if (!data || !form) {
     if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
     return <p className="text-sm text-muted-foreground">불러오는 중…</p>;
@@ -232,7 +239,6 @@ export default function BackupSettingsCard() {
   // 아직 저장한 적이 없으면 지금 저장된 설정 하나라도 보여 준다
   const recentShown = recent.length > 0 ? recent : [{ cron: data.cron, label: data.scheduleLabel }];
 
-  const dirty = form.enabled !== data.enabled || form.keepMonths !== data.keepMonths || cron !== data.cron;
   // 미리보기가 지금 입력과 같은 값을 해석했을 때만 믿는다
   const current = preview.data && preview.data.cron === cron ? preview.data : null;
   const cronError = cron === "" ? "실행 시각을 입력해 주세요." : current?.error ?? null;
@@ -243,6 +249,16 @@ export default function BackupSettingsCard() {
   const cronChanged = cron !== data.cron;
   const blockedByCron = cronChanged && (!!cronError || checking);
   const keepInvalid = keepText !== null && !isValidKeepMonths(keepText);
+  saveOnLeave.current = async () => {
+    if (blockedByCron || keepInvalid) {
+      toast({
+        title: keepInvalid ? "자동 백업 설정: 보관 기간을 확인해 주세요." : "자동 백업 설정: 실행 시각을 확인해 주세요.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return save.mutateAsync(form).then(() => true, () => false);
+  };
 
   return (
     <Card>

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Loader2, Wrench } from "lucide-react";
 import { fetchMaintenance } from "@/api/backups";
 import { useMaintenanceStore } from "@/store/maintenance";
+import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
 const POLL_MS = 3000;
 
@@ -27,6 +28,7 @@ export default function MaintenanceOverlay() {
     const poll = async () => {
       try {
         if (!(await fetchMaintenance())) {
+          useUnsavedChangesStore.getState().discardAll();
           window.location.href = "/login";
           return;
         }

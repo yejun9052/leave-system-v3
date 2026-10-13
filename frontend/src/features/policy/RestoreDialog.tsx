@@ -6,6 +6,7 @@ import { extractErrorMessage } from "@/api/client";
 import { formatDateTime } from "@/lib/dateFormat";
 import { useAuthStore } from "@/store/auth";
 import { useMaintenanceStore } from "@/store/maintenance";
+import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +54,7 @@ export default function RestoreDialog({ fileName, source, onClose }: {
       // 서버가 모든 세션을 지웠다 → 로그인 화면으로
       window.setTimeout(() => {
         useAuthStore.setState({ user: null });
+        useUnsavedChangesStore.getState().discardAll();
         window.location.href = "/login";
       }, 2500);
     } catch (e) {

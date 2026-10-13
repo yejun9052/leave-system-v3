@@ -20,6 +20,7 @@ import DashboardPage from "@/features/dashboard/DashboardPage";
 import ReportsPage from "@/features/report/ReportsPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
 import MaintenanceOverlay from "@/components/MaintenanceOverlay";
+import UnsavedChangesGuard from "@/components/UnsavedChangesGuard";
 
 export default function App() {
   const loadMe = useAuthStore((s) => s.loadMe);
@@ -37,6 +38,7 @@ export default function App() {
   return (
     <>
       <MaintenanceOverlay />
+      <UnsavedChangesGuard />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

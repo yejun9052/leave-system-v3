@@ -22,6 +22,7 @@ import { formatDays } from "@/lib/leaveFormat";
 import { useTableSort, type SortValue } from "@/lib/useTableSort";
 import { todayString } from "@/lib/dateFormat";
 import { useServerForm } from "@/lib/useServerForm";
+import { useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,7 +139,7 @@ function PolicyTab() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const { data, error, refetch } = useQuery({ queryKey: ["policy"], queryFn: policyApi.get });
-  const { form, setForm, changedElsewhere, reload, reset } = useServerForm(data ? policyForm(data) : undefined);
+  const { form, setForm, dirty, changedElsewhere, reload, reset } = useServerForm(data ? policyForm(data) : undefined);
 
   const set = <K extends keyof PolicyInput>(k: K, v: PolicyInput[K]) =>
     setForm((f) => (f ? { ...f, [k]: v } : f));
@@ -154,6 +155,9 @@ function PolicyTab() {
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
+  // 화면을 나갈 때 "저장"을 고르면 확인 창 없이 바로 저장한다(나가기 확인 창이 이미 물었다)
+  useUnsavedChanges("연차 정책", dirty, () =>
+    form ? save.mutateAsync(form).then(() => true, () => false) : Promise.resolve(false));
 
   const grant = useMutation({
     mutationFn: () => leaveAdminApi.grantAll(),

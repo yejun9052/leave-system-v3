@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import NotificationBell, { useUnreadNotifications } from "@/components/NotificationBell";
 import LicenseBanner from "@/features/license/LicenseBanner";
 import ForcePasswordChangeDialog from "@/features/auth/ForcePasswordChangeDialog";
+import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
 interface NavItem {
   to: string;
@@ -63,6 +64,8 @@ export default function AppLayout() {
   const visibleNav = NAV.filter((n) => !n.roles || hasAnyRole(...n.roles));
 
   const onLogout = async () => {
+    // 저장 안 한 설정이 있으면 로그아웃(세션 종료) 전에 묻는다: 로그아웃 뒤에는 저장할 수 없다
+    if (!(await useUnsavedChangesStore.getState().confirmLeave())) return;
     await logout().catch(() => undefined);
     navigate("/login", { replace: true });
   };

@@ -1,5 +1,6 @@
 import { loginUrlReturningHere, type ApiEnvelope } from "@/api/client";
 import { useMaintenanceStore } from "@/store/maintenance";
+import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
 /**
  * 파일 내려받기(엑셀·백업). 서비스 워커가 /api 로 가는 페이지 이동을 가로채지 않도록 링크 대신 fetch 로 받아 저장한다.
@@ -20,7 +21,10 @@ export async function downloadFile(url: string, fileName: string, failMessage: s
     }
     const code = body?.error?.code;
     if (res.status === 503 && code === "MAINTENANCE") useMaintenanceStore.getState().setActive(true);
-    if (res.status === 401 && (!code || code === "UNAUTHORIZED")) window.location.href = loginUrlReturningHere();
+    if (res.status === 401 && (!code || code === "UNAUTHORIZED")) {
+      useUnsavedChangesStore.getState().discardAll();
+      window.location.href = loginUrlReturningHere();
+    }
     throw new Error(body?.error?.message ?? failMessage);
   }
   const href = URL.createObjectURL(await res.blob());

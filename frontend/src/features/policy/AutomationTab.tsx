@@ -6,6 +6,7 @@ import QueryError from "@/components/QueryError";
 import { formatDateTime } from "@/lib/dateFormat";
 import { cn } from "@/lib/utils";
 import { useServerForm } from "@/lib/useServerForm";
+import { useUnsavedChanges } from "@/lib/useUnsavedChanges";
 import ChangedElsewhereNotice from "@/components/ChangedElsewhereNotice";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,17 +109,28 @@ function PromotionAutomation({
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
+  /** 자동 발송을 새로 켜면 메일이 나가기 시작하므로 저장 전에 한 번 묻는다 */
+  const confirmEnable = async () =>
+    !(enabled && !savedEnabled)
+    || confirm({
+      title: "연차 촉진 자동 발송을 켤까요?",
+      description: "매일 09:00에 발송 시기에 들어온 직원에게 메일과 앱 알림이 자동으로 발송됩니다.",
+      confirmText: "켜기",
+    });
+
   const onSave = async () => {
-    if (enabled && !savedEnabled) {
-      const ok = await confirm({
-        title: "연차 촉진 자동 발송을 켤까요?",
-        description: "매일 09:00에 발송 시기에 들어온 직원에게 메일과 앱 알림이 자동으로 발송됩니다.",
-        confirmText: "켜기",
-      });
-      if (!ok) return;
-    }
+    if (!(await confirmEnable())) return;
     save.mutate({ enabled, months });
   };
+
+  useUnsavedChanges("연차 촉진 자동 발송", dirty, async () => {
+    if (months.length === 0) {
+      toast({ title: "연차 촉진 자동 발송: 발송 시기를 하나 이상 골라 주세요.", variant: "destructive" });
+      return false;
+    }
+    if (!(await confirmEnable())) return false;
+    return save.mutateAsync({ enabled, months }).then(() => true, () => false);
+  });
 
   return (
     <Card>

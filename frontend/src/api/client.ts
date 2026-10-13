@@ -1,5 +1,6 @@
 import axios, { AxiosError } from "axios";
 import { useMaintenanceStore } from "@/store/maintenance";
+import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
 /**
  * 백엔드 표준 응답 형태.
@@ -75,6 +76,7 @@ api.interceptors.response.use(
       window.location.pathname !== "/login"
     ) {
       // 세션 만료·강제 종료 → 로그인 페이지로(다시 로그인하면 보던 화면으로)
+      useUnsavedChangesStore.getState().discardAll();
       window.location.href = loginUrlReturningHere();
     }
     return Promise.reject(error);

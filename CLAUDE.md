@@ -99,6 +99,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
   - TanStack Query handles server state. After mutations, invalidate the related keys, e.g. `["dashboard"]`, `["notifications"]`, `["leavePreview"]`.
   - `lib/useRealtime.ts` (in `AppLayout`) invalidates all queries when another tab or user changes data; hidden tabs disconnect.
   - Screens that copy server data into an editable form use `lib/useServerForm.ts`, so a realtime refresh never wipes unsaved input (`ChangedElsewhereNotice`). Don't copy query data into form state with a plain `useEffect`.
+  - Such forms also call `lib/useUnsavedChanges.ts`: leaving the page (menu, back, logout) with unsaved input asks "저장 / 저장 안 함 / 취소" (`components/UnsavedChangesGuard.tsx`, `useBlocker`, which is why `main.tsx` uses `createBrowserRouter`). Forced redirects (session lost, restore) call `discardAll()` first.
   - zustand `store/auth.ts` holds the user and `hasAnyRole`.
 - Shared Korean formatting lives in `lib/leaveFormat.ts` (days, half-day labels, period split).
 - `types/index.ts` mirrors backend DTOs. Update both sides together.
