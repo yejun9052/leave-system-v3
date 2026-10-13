@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, Search, X } from "lucide-react";
+import { Download, FileSpreadsheet, Search } from "lucide-react";
 import { reportApi } from "@/api/dashboard";
 import { downloadFile } from "@/lib/download";
 import { isValidYear } from "@/lib/dateFormat";
@@ -53,7 +53,6 @@ export default function ReportsPage() {
       return words.every((w) => text.includes(w));
     });
   }, [employees, keyword]);
-  const chosen = employees.filter((e) => employeeIds.has(e.id));
 
   const toggleEmployee = (id: number) => {
     setEmployeeIds((prev) => {
@@ -196,23 +195,6 @@ export default function ReportsPage() {
                   ))
                 )}
               </ul>
-              {chosen.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {chosen.map((e) => (
-                    <Badge key={e.id} variant="default" className="gap-1 pr-1">
-                      {e.name}
-                      <button
-                        type="button"
-                        aria-label={`${e.name} 선택 해제`}
-                        className="rounded hover:bg-primary/20"
-                        onClick={() => toggleEmployee(e.id)}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </section>
           </div>
 
