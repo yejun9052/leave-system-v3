@@ -122,8 +122,25 @@ function writeDeptIds(ids: number[]) {
   }
 }
 
-/** 데스크톱 달력 본문 높이(요일 머리 + 6주). 한 칸에 날짜와 일정 3줄, "+N개" 링크가 들어가는 높이 */
+/** 데스크톱 달력 본문 높이(요일 머리 + 6주). 한 칸에 날짜와 일정 3줄이 들어가는 높이 */
 const CALENDAR_CONTENT_HEIGHT = 880;
+
+/** 한 칸에 보이는 줄 수. 일정이 이보다 많으면 (줄 수 - 1)개 + "+N개 더보기" 로 칸 높이를 지킨다 */
+const DAY_MAX_ROWS = 3;
+
+/**
+ * 칸에 위에서부터 놓는 순서(작을수록 위): 공휴일·연차 제한 → 회사 일정 → 팀 일정 → 팀원 휴가 → 내 휴가·개인 일정·내 연차 기간.
+ * 칸이 넘치면 뒤의 것이 "더보기"로 접힌다.
+ */
+const PRIORITY = { HOLIDAY: 0, BLACKOUT: 1, COMPANY: 2, TEAM: 3, MEMBER: 4, PERSONAL: 5 } as const;
+
+function priorityOf(e: CalendarEventDto, me: { id: number } | null): number {
+  if (e.source === "HOLIDAY") return PRIORITY.HOLIDAY;
+  if (e.source === "ADMIN_EVENT") {
+    return e.scope === "COMPANY" ? PRIORITY.COMPANY : e.scope === "DEPARTMENT" ? PRIORITY.TEAM : PRIORITY.PERSONAL;
+  }
+  return me && e.employeeId === me.id ? PRIORITY.PERSONAL : PRIORITY.MEMBER;
+}
 
 export default function CalendarPage() {
   const qc = useQueryClient();
@@ -355,6 +372,7 @@ export default function CalendarPage() {
     backgroundColor: e.colorHex,
     borderColor: e.colorHex,
     editable: false,
+    priority: priorityOf(e, me),
   }));
   // 블랙아웃(연차 사용 제한) 기간은 공휴일처럼 빨간 막대로, 보기 탭과 관계없이 항상 표시한다
   for (const b of blackouts) {
@@ -367,6 +385,7 @@ export default function CalendarPage() {
       backgroundColor: HOLIDAY_COLOR,
       borderColor: HOLIDAY_COLOR,
       editable: false,
+      priority: PRIORITY.BLACKOUT,
     });
   }
   if (showPeriod) {
@@ -379,6 +398,7 @@ export default function CalendarPage() {
         backgroundColor: PERIOD_COLOR,
         borderColor: PERIOD_COLOR,
         editable: false,
+        priority: PRIORITY.PERSONAL,
       });
     }
   }
@@ -613,7 +633,7 @@ export default function CalendarPage() {
                   initialDate={`${viewMonth}-01`}
                   locale="ko"
                   // 일정이 많은 주만 칸이 높아져 달마다 간격이 달라지지 않게: 높이를 고정하고 늘 6주로 그려 모든 주의 칸 높이를 같게 둔다.
-                  // 칸에 못 들어가는 일정은 "+N개"로 접힌다(dayMaxEvents)
+                  // 일정이 3개를 넘는 칸은 우선순위 앞의 2개 + "+N개 더보기"(더보기도 한 줄로 쳐서 칸이 늘지 않음)
                   contentHeight={CALENDAR_CONTENT_HEIGHT}
                   expandRows
                   fixedWeekCount
@@ -624,7 +644,9 @@ export default function CalendarPage() {
                   eventClick={onEventClick}
                   dateClick={onDateClick}
                   dayCellClassNames={(arg) => (holidays.has(localDateString(arg.date)) ? ["fc-holiday"] : [])}
-                  dayMaxEvents
+                  dayMaxEventRows={DAY_MAX_ROWS}
+                  eventOrder="priority,start,-duration,allDay,title"
+                  moreLinkContent={(arg) => `+${arg.num}개 더보기`}
                 />
               </div>
             </CardContent>
