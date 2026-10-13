@@ -93,12 +93,12 @@ public final class LeaveMailTemplates {
     /**
      * 인사관리자가 대신 등록(바로 승인됨). 신청 접수 대신 이 메일이 대화의 첫 메일이 된다.
      * 담당 팀장이 참조로 함께 받을 수 있어 문장은 신청자 이름으로 쓴다(이하 결과 메일 모두 같음).
-     * 직원이 신청한 것이 아니므로 표의 신청자는 "없음"(휴가 주인은 안내 문장과 수신자 줄에 나온다).
+     * 직원이 신청한 것이 아니므로 표의 신청자는 "-"(휴가 주인은 안내 문장과 수신자 줄에 나온다).
      */
     public static Mail registered(Info info, String domain, String baseUrl, Handler by) {
         Content content = content("휴가 등록 안내",
                 List.of(by.honorific() + "이 " + info.applicantName() + "님의 휴가를 등록했습니다.", DONE),
-                by, info, "없음", List.of(), "승인 완료", MY_LEAVES, baseUrl, "/my-leaves");
+                by, info, "-", List.of(), "승인 완료", MY_LEAVES, baseUrl, "/my-leaves");
         return root(info, Thread.APPLICANT, domain, content);
     }
 
@@ -240,7 +240,7 @@ public final class LeaveMailTemplates {
         return content(title, intro, by, info, info.applicantName(), extra, status, linkLabel, baseUrl, path);
     }
 
-    /** @param applicant 표의 신청자 칸(인사관리자 직접 등록은 "없음") */
+    /** @param applicant 표의 신청자 칸(인사관리자 직접 등록은 "-") */
     private static Content content(String title, List<String> intro, Handler by, Info info, String applicant,
                                    List<Row> extra, String status, String linkLabel, String baseUrl, String path) {
         List<Row> rows = new ArrayList<>();

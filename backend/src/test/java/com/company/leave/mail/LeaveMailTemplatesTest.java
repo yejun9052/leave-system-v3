@@ -91,7 +91,7 @@ class LeaveMailTemplatesTest {
     @Test
     void 강제_등록_메일은_신청자가_없음이고_다른_메일은_신청자_이름이다() {
         assertThat(LeaveMailTemplates.registered(info, DOMAIN, BASE, 인사).body())
-                .contains("신청자: 없음").doesNotContain("신청자: 홍길동");
+                .contains("신청자: -").doesNotContain("신청자: 홍길동");
         assertThat(LeaveMailTemplates.approved(info, DOMAIN, BASE, 인사).body()).contains("신청자: 홍길동");
         assertThat(LeaveMailTemplates.forceCancelled(info, DOMAIN, BASE, 인사, "근태 정정").body()).contains("신청자: 홍길동");
     }
