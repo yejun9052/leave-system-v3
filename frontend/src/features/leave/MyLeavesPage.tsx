@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import QueryError from "@/components/QueryError";
@@ -21,6 +21,7 @@ import {
   SortableTableHead,
 } from "@/components/ui/table";
 import { useTableSort } from "@/lib/useTableSort";
+import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
 import { todayString } from "@/lib/dateFormat";
 import {
   Dialog,
@@ -47,6 +48,8 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warnin
 
 const STATUS_RANK: LeaveRequestStatus[] = ["PENDING", "APPROVED", "CANCEL_REQUESTED", "REJECTED", "CANCELLED"];
 
+const PAGE_SIZE = 20;
+
 export default function MyLeavesPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -58,7 +61,22 @@ export default function MyLeavesPage() {
   const today = todayString();
 
   const balanceQuery = useQuery({ queryKey: ["myBalance"], queryFn: () => leaveApi.myBalance() });
-  const requestsQuery = useQuery({ queryKey: ["myRequests"], queryFn: () => leaveApi.myRequests() });
+  // 서버가 시작일 최신순으로 20건씩 나눠 준다. 지난 신청(반려·취소 포함)도 볼 수 있게 페이지를 넘긴다
+  const [page, setPage] = useState(0);
+  const requestsQuery = useQuery({
+    queryKey: ["myRequests", { page }],
+    queryFn: () => leaveApi.myRequests(page, PAGE_SIZE),
+    placeholderData: (prev) => prev,
+  });
+  const totalPages = requestsQuery.data?.totalPages ?? 0;
+  useArrowKeyNavigation({
+    onPrev: page > 0 ? () => setPage((p) => p - 1) : null,
+    onNext: page + 1 < totalPages ? () => setPage((p) => p + 1) : null,
+  });
+  // 취소 등으로 마지막 페이지가 없어지면 남은 마지막 페이지로
+  useEffect(() => {
+    if (totalPages > 0 && page >= totalPages) setPage(totalPages - 1);
+  }, [page, totalPages]);
   const balance = balanceQuery.data;
   const requests = requestsQuery.data;
   const loadError = balanceQuery.error ?? requestsQuery.error;
@@ -237,6 +255,23 @@ export default function MyLeavesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>총 {requestsQuery.data?.totalElements ?? 0}건</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+              이전
+            </Button>
+            <span>
+              {page + 1} / {totalPages}
+            </span>
+            <Button variant="outline" size="sm" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              다음
+            </Button>
+          </div>
+        </div>
+      )}
 
       {open && <LeaveRequestDialog onClose={() => setOpen(false)} onSaved={(warning) => {
         setRequestWarning(warning ?? null);
