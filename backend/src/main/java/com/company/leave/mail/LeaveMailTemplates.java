@@ -28,7 +28,7 @@ public final class LeaveMailTemplates {
     private static final String CALENDAR = "캘린더 보기";
     private static final String DONE = "아래 휴가 내역은 승인 완료 상태입니다.";
     private static final String RESTORED = "차감된 연차는 돌아갑니다.";
-    /** 본인이 하지 않은 취소(강제 취소·금지 기간 자동 취소)에 붙이는 안내 */
+    /** 본인이 하지 않은 취소(인사관리자 강제 취소·금지 기간 등록 취소)에 붙이는 안내 */
     static final String ASK_MANAGER = "문제가 있을 시 담당자에게 문의하세요.";
 
     private LeaveMailTemplates() {
@@ -127,33 +127,34 @@ public final class LeaveMailTemplates {
                 List.of(Row.of("반려 사유", orNone(reason))), "승인 유지");
     }
 
-    /** 결재 대기 중인 신청을 인사관리자가 취소. */
+    /** 결재 대기 중인 신청을 인사관리자가 강제로 취소. */
     public static Mail cancelledByHr(Info info, String domain, String baseUrl, Handler by, String reason) {
-        return applicantReply(info, domain, baseUrl, "휴가 신청 취소 안내",
-                List.of(by.honorific() + "이 휴가 신청을 취소했습니다."), by,
-                reason != null && !reason.isBlank() ? List.of(Row.of("취소 사유", reason)) : List.of(), "신청 취소");
+        return applicantReply(info, domain, baseUrl, "휴가 신청 강제 취소 안내",
+                List.of(info.applicantName() + "님의 휴가 신청이 " + by.honorific() + "에 의해 강제로 취소되었습니다.",
+                        ASK_MANAGER), by,
+                reason != null && !reason.isBlank() ? List.of(Row.of("취소 사유", reason)) : List.of(), "강제 취소");
     }
 
     /** 승인된 휴가를 인사관리자가 강제 취소(시작 후 포함). */
     public static Mail forceCancelled(Info info, String domain, String baseUrl, Handler by, String reason) {
         return applicantReply(info, domain, baseUrl, "휴가 강제 취소 안내",
-                List.of(info.applicantName() + "님의 휴가가 " + by.honorific() + "에 의해 강제 취소되었습니다.", RESTORED,
+                List.of(info.applicantName() + "님의 휴가가 " + by.honorific() + "에 의해 강제로 취소되었습니다.", RESTORED,
                         ASK_MANAGER), by,
                 List.of(Row.of("취소 사유", orNone(reason))), "강제 취소");
     }
 
     /**
-     * 연차 사용 금지 기간을 등록(또는 늘려 수정)해 승인된 휴가가 자동 취소됨.
+     * 연차 사용 금지 기간을 등록(또는 늘려 수정)해 승인된 휴가가 강제로 취소됨.
      *
      * @param period 금지 기간 "2026-12-24 ~ 2026-12-31"
      * @param reason 사유(금지 기간 이름과, 겹치지 않는 근무일이 있으면 다시 신청 안내)
      */
     public static Mail blackoutCancelled(Info info, String domain, String baseUrl, Handler by, String period,
                                          String reason) {
-        return applicantReply(info, domain, baseUrl, "휴가 자동 취소 안내",
-                List.of("연차 사용 금지 기간(" + period + ") 등록으로 인해 연차 사용이 자동 취소되었습니다.", RESTORED,
+        return applicantReply(info, domain, baseUrl, "휴가 강제 취소 안내",
+                List.of("연차 사용 금지 기간(" + period + ") 등록으로 인해 연차 사용이 강제로 취소되었습니다.", RESTORED,
                         ASK_MANAGER), by,
-                List.of(Row.of("취소 사유", orNone(reason))), "자동 취소");
+                List.of(Row.of("취소 사유", orNone(reason))), "강제 취소");
     }
 
     // --- 결재자 대화 ---

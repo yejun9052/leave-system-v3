@@ -78,11 +78,13 @@ public class LeaveMessenger {
                 LeaveMailTemplates.withdrawn(info(r), domain(), baseUrl()));
     }
 
-    /** 결재 대기 중인 신청을 인사관리자가 취소: 신청자. */
+    /** 결재 대기 중인 신청을 인사관리자가 강제로 취소: 신청자. */
     public void cancelledByHr(LeaveRequest r, Employee hr, String reason) {
         Handler by = handler(hr);
-        deliver(List.of(r.getEmployee()), "LEAVE_CANCELLED_BY_HR", "인사관리자가 휴가 신청을 취소했습니다.",
-                summary(r) + " · " + by.title(), "/my-leaves",
+        deliver(List.of(r.getEmployee()), "LEAVE_CANCELLED_BY_HR", "휴가 신청이 강제로 취소되었습니다.",
+                summary(r) + " · " + by.title() + "에 의해 강제 취소"
+                        + (reason != null && !reason.isBlank() ? " · 사유: " + reason.trim() : "")
+                        + " · 문제가 있을 시 담당자에게 문의하세요.", "/my-leaves",
                 LeaveMailTemplates.cancelledByHr(info(r), domain(), baseUrl(), by, reason));
     }
 
@@ -119,27 +121,27 @@ public class LeaveMessenger {
     /** 인사관리자 강제 취소: 신청자, 담당 팀장은 참조. */
     public void forceCancelled(LeaveRequest r, Employee hr, String reason, Employee lead) {
         Handler by = handler(hr);
-        notify(r.getEmployee(), "LEAVE_FORCE_CANCELLED", "휴가가 강제 취소되었습니다.",
+        notify(r.getEmployee(), "LEAVE_FORCE_CANCELLED", "휴가가 강제로 취소되었습니다.",
                 summary(r) + " · " + by.title() + "에 의해 강제 취소 · 사유: " + reason
                         + " · 문제가 있을 시 담당자에게 문의하세요.", "/my-leaves");
-        notify(lead, "LEAVE_CANCELLED_INFO", "팀원 휴가 취소",
-                r.getEmployee().getName() + "님의 " + summary(r) + " · " + by.title() + " 취소", "/calendar");
+        notify(lead, "LEAVE_CANCELLED_INFO", "팀원 휴가 강제 취소",
+                r.getEmployee().getName() + "님의 " + summary(r) + " · " + by.title() + "에 의해 강제 취소", "/calendar");
         mailWithLeadCc(r.getEmployee(), lead,
                 LeaveMailTemplates.forceCancelled(info(r), domain(), baseUrl(), by, reason));
     }
 
     /**
-     * 연차 사용 금지 기간 등록으로 승인된 휴가가 자동 취소됨: 신청자, 담당 팀장은 참조.
+     * 연차 사용 금지 기간 등록으로 승인된 휴가가 강제로 취소됨: 신청자, 담당 팀장은 참조.
      *
      * @param period 금지 기간 "2026-12-24 ~ 2026-12-31"
      */
     public void blackoutCancelled(LeaveRequest r, Employee actor, String period, String reason, Employee lead) {
         Handler by = handler(actor);
-        notify(r.getEmployee(), "LEAVE_FORCE_CANCELLED", "휴가가 자동 취소되었습니다.",
-                summary(r) + " · 연차 사용 금지 기간(" + period + ") 등록으로 자동 취소"
+        notify(r.getEmployee(), "LEAVE_FORCE_CANCELLED", "휴가가 강제로 취소되었습니다.",
+                summary(r) + " · 연차 사용 금지 기간(" + period + ") 등록으로 강제 취소"
                         + " · 문제가 있을 시 담당자에게 문의하세요.", "/my-leaves");
-        notify(lead, "LEAVE_CANCELLED_INFO", "팀원 휴가 자동 취소",
-                r.getEmployee().getName() + "님의 " + summary(r) + " · 연차 사용 금지 기간(" + period + ") 등록으로 자동 취소",
+        notify(lead, "LEAVE_CANCELLED_INFO", "팀원 휴가 강제 취소",
+                r.getEmployee().getName() + "님의 " + summary(r) + " · 연차 사용 금지 기간(" + period + ") 등록으로 강제 취소",
                 "/calendar");
         mailWithLeadCc(r.getEmployee(), lead,
                 LeaveMailTemplates.blackoutCancelled(info(r), domain(), baseUrl(), by, period, reason));

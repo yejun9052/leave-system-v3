@@ -780,7 +780,7 @@ class LeaveRequestServiceApprovalTest {
             assertThat(보낸_메일()).singleElement().satisfies(m -> {
                 assertThat(m.to()).containsExactly(파트원_메일);
                 assertThat(m.cc()).containsExactly(파트장_메일);
-                assertThat(m.text()).contains("직원13님의 휴가가 직원11님에 의해 강제 취소되었습니다.")
+                assertThat(m.text()).contains("직원13님의 휴가가 직원11님에 의해 강제로 취소되었습니다.")
                         .contains("취소 사유: 근태 정정").contains("문제가 있을 시 담당자에게 문의하세요.");
             });
             verify(notificationService).notify(eq(파트장.getId()), eq("LEAVE_CANCELLED_INFO"), anyString(), anyString(), anyString());
@@ -974,7 +974,7 @@ class LeaveRequestServiceApprovalTest {
                     .satisfies(m -> {
                         assertThat(m.cc()).containsExactly("e7@company.com");
                         assertThat(m.text()).contains("취소 사유: 연차 사용 금지 기간 지정 (릴리스")
-                                .contains("연차 사용 금지 기간(2027-05-03 ~ 2027-05-07) 등록으로 인해 연차 사용이 자동 취소되었습니다.")
+                                .contains("연차 사용 금지 기간(2027-05-03 ~ 2027-05-07) 등록으로 인해 연차 사용이 강제로 취소되었습니다.")
                                 .contains("문제가 있을 시 담당자에게 문의하세요.");
                     });
             verify(notificationService).notify(eq(파트원.getId()), eq("LEAVE_FORCE_CANCELLED"), anyString(), anyString(),
