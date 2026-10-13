@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import QueryError from "@/components/QueryError";
-import StatusReason from "./StatusReason";
+import LeaveDetailDialog from "./LeaveDetailDialog";
 import { Plus, CalendarDays, X } from "lucide-react";
 import { leaveApi } from "@/api/leave";
-import { LEAVE_STATUS_LABEL, type LeaveRequestStatus } from "@/types";
+import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +35,7 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { extractErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
-import { formatDays, formatLeaveAmount, formatPeriodSplit, formatSpecialRule } from "@/lib/leaveFormat";
+import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
 import { LeaveRequestFields, useLeaveRequestForm } from "./LeaveRequestForm";
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
@@ -50,6 +50,9 @@ const STATUS_RANK: LeaveRequestStatus[] = ["PENDING", "APPROVED", "CANCEL_REQUES
 
 const PAGE_SIZE = 20;
 
+/** 줄 안의 취소 버튼: 상태 배지(22px)와 같은 높이로 맞춰 버튼이 있는 줄만 높아지지 않게 */
+const ROW_BUTTON = "h-[22px] px-2 py-0";
+
 export default function MyLeavesPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -57,6 +60,8 @@ export default function MyLeavesPage() {
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [requestWarning, setRequestWarning] = useState<string | null>(null);
+  /** 줄을 눌러 여는 휴가 상세 */
+  const [detail, setDetail] = useState<LeaveRequest | null>(null);
   const canCancelOwn = !!user;
   const today = todayString();
 
@@ -161,7 +166,19 @@ export default function MyLeavesPage() {
             <TableBody>
               {requests && requests.content.length > 0 ? (
                 sorted.map((r) => (
-                  <TableRow key={r.id}>
+                  <TableRow
+                    key={r.id}
+                    tabIndex={0}
+                    aria-label={`${r.leaveTypeName} ${r.startDate} 상세 보기`}
+                    className="h-12 cursor-pointer"
+                    onClick={() => setDetail(r)}
+                    onKeyDown={(e) => {
+                      if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        setDetail(r);
+                      }
+                    }}
+                  >
                     <TableCell>
                       <span className="inline-flex items-center gap-2">
                         <span
@@ -178,27 +195,26 @@ export default function MyLeavesPage() {
                       {r.startDate}
                       {r.startDate !== r.endDate && ` ~ ${r.endDate}`}
                     </TableCell>
-                    <TableCell>
+                    {/* 줄 높이가 같게 한 줄로만. 기간별 차감·사유 같은 긴 내용은 줄을 눌러 상세에서 */}
+                    <TableCell className="whitespace-nowrap">
                       {formatLeaveAmount(r)}
                       {r.forfeitedDays > 0 && (
                         <span className="ml-2 text-xs text-muted-foreground">
                           연차 {formatDays(r.forfeitedDays)}일 소멸
                         </span>
                       )}
-                      {formatPeriodSplit(r) && (
-                        <p className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{formatPeriodSplit(r)}</p>
-                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{LEAVE_STATUS_LABEL[r.status]}</Badge>
-                      <StatusReason leave={r} />
                     </TableCell>
                     <TableCell className="text-muted-foreground">{r.approverName ?? "-"}</TableCell>
-                    <TableCell className="text-right">
+                    {/* 취소 버튼을 눌러도 상세 창이 열리지 않게 */}
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       {canCancelOwn && r.employeeId === user?.id && r.status === "PENDING" && (
                         <Button
                           size="sm"
                           variant="ghost"
+                          className={ROW_BUTTON}
                           onClick={async () => {
                             const ok = await confirm({
                               title: "휴가 신청을 취소할까요?",
@@ -218,6 +234,7 @@ export default function MyLeavesPage() {
                         <Button
                           size="sm"
                           variant="ghost"
+                          className={ROW_BUTTON}
                           onClick={async () => {
                             const ok = await confirm({
                               title: "승인된 휴가의 취소를 요청할까요?",
@@ -272,6 +289,8 @@ export default function MyLeavesPage() {
           </div>
         </div>
       )}
+
+      {detail && <LeaveDetailDialog leave={detail} onClose={() => setDetail(null)} />}
 
       {open && <LeaveRequestDialog onClose={() => setOpen(false)} onSaved={(warning) => {
         setRequestWarning(warning ?? null);
