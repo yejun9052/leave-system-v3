@@ -19,6 +19,8 @@ import ForceCancelDialog from "@/features/leave/ForceCancelDialog";
 import { formatKoreanDate } from "./useDateSelection";
 
 const SCOPE_LABEL = { COMPANY: "전사", DEPARTMENT: "부서", PERSONAL: "개인" } as const;
+/** 블랙아웃(연차 사용 제한) 기간 색: 캘린더의 빨간 막대와 같다 */
+const BLACKOUT_COLOR = "#ef4444";
 
 /** 휴가 단위 표시: 종일 · 오전 반차 · 시간차 2시간 */
 function portionLabel(l: DayLeaveDto): string {
@@ -91,13 +93,8 @@ export default function DayDetailDialog({
           <DialogDescription className="flex flex-wrap items-center gap-2">
             <span>휴가 {peopleCount}명</span>
             <span>·</span>
-            <span>일정 {events.length}건</span>
+            <span>일정 {dayBlackouts.length + events.length}건</span>
             {data?.holidayName && <Badge variant="destructive">{data.holidayName}</Badge>}
-            {dayBlackouts.map((b) => (
-              <Badge key={b.id} variant="destructive" title="이 기간에는 연차를 신청할 수 없습니다">
-                연차 제한 · {b.name}
-              </Badge>
-            ))}
           </DialogDescription>
         </DialogHeader>
 
@@ -161,12 +158,24 @@ export default function DayDetailDialog({
             </section>
 
             <section className="space-y-2">
-              {/* 회사 일정과 부서 일정이 함께 나온다 */}
+              {/* 블랙아웃(연차 사용 제한) 기간, 회사 일정과 부서 일정이 함께 나온다 */}
               <h3 className="text-sm font-semibold">일정</h3>
-              {events.length === 0 ? (
+              {dayBlackouts.length + events.length === 0 ? (
                 <p className="text-sm text-muted-foreground">등록된 일정이 없습니다.</p>
               ) : (
                 <ul className="divide-y rounded-md border">
+                  {dayBlackouts.map((b) => (
+                    <li key={`B${b.id}`} className="flex items-center gap-3 px-3 py-2 text-sm" title="이 기간에는 연차를 신청할 수 없습니다">
+                      <span
+                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: BLACKOUT_COLOR }}
+                      />
+                      <span className="min-w-0 flex-1 truncate">연차 제한 · {b.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {SCOPE_LABEL.COMPANY} · {shortPeriod(b.startDate, b.endDate)}
+                      </span>
+                    </li>
+                  ))}
                   {events.map((e) => (
                     <li key={e.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                       <span
