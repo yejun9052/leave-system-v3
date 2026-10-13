@@ -40,6 +40,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -74,7 +75,7 @@ class AuthServiceLogoutTest {
     void setUp() {
         authService = new AuthService(authenticationManager, employeeRepository, auditService,
                 loginAttemptService, securityContextRepository, CookieCsrfTokenRepository.withHttpOnlyFalse(),
-                sessionTerminator);
+                sessionTerminator, new BCryptPasswordEncoder(4));
         request = new MockHttpServletRequest("POST", "/api/auth/logout");
         response = new MockHttpServletResponse();
     }

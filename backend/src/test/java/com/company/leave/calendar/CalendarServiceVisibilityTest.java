@@ -130,6 +130,23 @@ class CalendarServiceVisibilityTest {
                     .containsExactly(tuple("E1", true), tuple("E2", false), tuple("E4", true));
             assertThat(admin).allMatch(CalendarDtos.EventResponse::editable);
         }
+
+        @Test
+        void 볼_수_없는_동료의_병가_일정은_이름_휴가_제목과_중립_색으로_바꿔_보낸다() {
+            CalendarEvent 병가 = CalendarEvent.builder().title("동료 - 병가").startDate(DAY).endDate(DAY).allDay(true)
+                    .scope(CalendarEventScope.COMPANY).source(CalendarEventSource.LEAVE_REQUEST).colorHex("#ef4444")
+                    .employeeId(COLLEAGUE).leaveRequestId(900L).build();
+            ReflectionTestUtils.setField(병가, "id", 8L);
+            when(events.findBetween(DAY, DAY)).thenReturn(List.of(전사, 병가));
+            when(leaveRequests.hiddenLeaveTitles(ME, List.of(900L))).thenReturn(java.util.Map.of(900L, "동료 - 휴가"));
+
+            List<CalendarDtos.EventResponse> visible = service.getEvents(DAY, DAY, employee(ME, MY_DEPT, Role.EMPLOYEE));
+
+            assertThat(visible).extracting(CalendarDtos.EventResponse::id, CalendarDtos.EventResponse::title,
+                            CalendarDtos.EventResponse::colorHex)
+                    .containsExactly(tuple("E1", "일정1", 전사.getColorHex()), // 다른 일정은 그대로
+                            tuple("E8", "동료 - 휴가", com.company.leave.leave.dto.LeaveRequestDtos.HIDDEN_TYPE_COLOR));
+        }
     }
 
     @Test

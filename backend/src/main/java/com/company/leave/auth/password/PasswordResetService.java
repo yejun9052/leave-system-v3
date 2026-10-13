@@ -90,7 +90,11 @@ public class PasswordResetService {
         requestReset(email, null);
     }
 
-    /** 응답은 항상 같다(계정 존재 여부를 알리지 않음). 이메일·IP 한도를 넘으면 조용히 보내지 않는다. */
+    /**
+     * 응답은 항상 같다(계정 존재 여부를 알리지 않음). 이메일·IP 한도를 넘으면 조용히 보내지 않는다.
+     * 안에서 부르는 {@link #issue} 는 같은 객체 호출이라 그쪽 @Transactional 이 걸리지 않으므로 여기서 연다.
+     */
+    @Transactional
     public void requestReset(String email, String clientIp) {
         if (!(clientIp == null ? requestLimiter.tryAcquire(email) : requestLimiter.tryAcquire(email, clientIp))) {
             log.warn("비밀번호 재설정 요청 제한 초과(이메일 1시간 {}회 · IP 1시간 {}회): {} / {}",

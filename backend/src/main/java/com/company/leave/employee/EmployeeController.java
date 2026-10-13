@@ -38,6 +38,9 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/employees")
 public class EmployeeController {
 
+    /** 목록 한 번에 최대 인원. 리포트 화면이 직원 고르기에 전체(1000명)를 한 번에 받는다 */
+    private static final int MAX_PAGE_SIZE = 1000;
+
     private final EmployeeService employeeService;
     private final EmployeeExcelService excelService;
     private final SessionTerminator sessionTerminator;
@@ -60,7 +63,8 @@ public class EmployeeController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         var condition = new EmployeeSearchCondition(keyword, departmentIds, status);
-        return ApiResponse.ok(PageResponse.from(employeeService.search(condition, PageRequest.of(page, size))));
+        return ApiResponse.ok(PageResponse.from(employeeService.search(condition,
+                PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE)))));
     }
 
     @Operation(summary = "사용자 단건 조회")

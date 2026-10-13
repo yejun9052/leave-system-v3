@@ -431,8 +431,7 @@ function DepartmentDialog({
         return departmentApi.create({ name, parentId: mode.parentId });
       }
       if (mode.type === "edit") {
-        // 부서장은 사용자 관리에서 정한다. leadId 를 보내지 않으면 서버가 지금 부서장을 그대로 둔다
-        // (창을 연 때의 값을 보내면 그사이 사용자 관리에서 바뀐 부서장을 되돌려 버린다)
+        // 부서장은 사용자 관리에서 정한다(부서 수정은 부서장을 바꾸지 않음)
         return departmentApi.update(mode.dept.id, { name, sortOrder: mode.dept.sortOrder });
       }
       return departmentApi.move(mode.dept.id, newParentId === "root" ? null : Number(newParentId));

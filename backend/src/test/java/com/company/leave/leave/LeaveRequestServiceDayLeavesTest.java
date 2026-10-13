@@ -162,6 +162,66 @@ class LeaveRequestServiceDayLeavesTest {
         assertThat(service.leavesOnDay(개발팀장.getId(), TUE).toString()).doesNotContain("개인 사정");
     }
 
+    // --- 병가·경조사 종류 가리기 ---
+
+    private final LeaveType 병가 = new LeaveType("SICK", "병가", BigDecimal.ZERO, false, false, false, "#ef4444", 5);
+    private final LeaveType 경조사 = new LeaveType("CONDOLENCE", "경조사 휴가", BigDecimal.ZERO, true, false, false,
+            "#f59e0b", 4);
+
+    @Test
+    void 동료의_병가는_다른_직원에게_종류_없이_휴가로만_보인다() {
+        병가와_경조사가_있는_날();
+
+        assertThat(service.leavesOnDay(영업팀원.getId(), TUE))
+                .filteredOn(l -> l.id() >= 802L)
+                .allSatisfy(l -> {
+                    assertThat(l.leaveTypeName()).isEqualTo("휴가");
+                    assertThat(l.leaveTypeColor()).isEqualTo(LeaveRequestDtos.HIDDEN_TYPE_COLOR);
+                })
+                .hasSize(2);
+        assertThat(service.leavesOnDay(개발동료.getId(), TUE)).filteredOn(l -> l.id() == 803L)
+                .extracting(LeaveRequestDtos.DayLeave::leaveTypeName).containsExactly("휴가"); // 같은 팀 동료도
+    }
+
+    @Test
+    void 병가_경조사는_본인_맡은_팀장_인사관리자에게는_그대로_보인다() {
+        병가와_경조사가_있는_날();
+
+        assertThat(종류(개발팀원, 802L)).isEqualTo("병가");
+        assertThat(종류(개발팀장, 802L)).isEqualTo("병가");
+        assertThat(종류(인사관리자, 802L)).isEqualTo("병가");
+        assertThat(종류(영업팀장, 802L)).isEqualTo("휴가"); // 다른 팀 팀장은 맡은 사람이 아님
+    }
+
+    @Test
+    void 연차_같은_일반_휴가는_누구에게나_종류가_보인다() {
+        assertThat(service.leavesOnDay(영업팀원.getId(), TUE)).filteredOn(l -> l.id() == 800L)
+                .extracting(LeaveRequestDtos.DayLeave::leaveTypeName).containsExactly("연차");
+    }
+
+    @Test
+    void 캘린더_일정에서_가릴_휴가는_이름_휴가_제목으로_돌려준다() {
+        LeaveRequest 병가신청 = 신청(802L, 개발팀원, LeaveRequestStatus.APPROVED, 병가);
+        LeaveRequest 연차신청 = 신청(800L, 개발동료, LeaveRequestStatus.APPROVED, 연차);
+        lenient().when(requestRepository.findAllById(any())).thenReturn(List.of(병가신청, 연차신청));
+
+        assertThat(service.hiddenLeaveTitles(영업팀원.getId(), List.of(800L, 802L)))
+                .containsExactly(java.util.Map.entry(802L, "직원6 - 휴가"));
+        assertThat(service.hiddenLeaveTitles(개발팀장.getId(), List.of(800L, 802L))).isEmpty();
+    }
+
+    private void 병가와_경조사가_있는_날() {
+        lenient().when(requestRepository.findByStatusInOverlapping(any(), eq(TUE), eq(TUE))).thenReturn(List.of(
+                신청(800L, 개발동료, LeaveRequestStatus.APPROVED),
+                신청(802L, 개발팀원, LeaveRequestStatus.APPROVED, 병가),
+                신청(803L, 개발팀원, LeaveRequestStatus.APPROVED, 경조사)));
+    }
+
+    private String 종류(Employee caller, long requestId) {
+        return service.leavesOnDay(caller.getId(), TUE).stream().filter(l -> l.id() == requestId)
+                .map(LeaveRequestDtos.DayLeave::leaveTypeName).findFirst().orElseThrow();
+    }
+
     // --- helpers ---
 
     private List<Long> 보이는_신청(Employee caller) {
@@ -185,7 +245,11 @@ class LeaveRequestServiceDayLeavesTest {
     }
 
     private LeaveRequest 신청(long id, Employee employee, LeaveRequestStatus status) {
-        LeaveRequest request = new LeaveRequest(employee, 연차, TUE, TUE,
+        return 신청(id, employee, status, 연차);
+    }
+
+    private LeaveRequest 신청(long id, Employee employee, LeaveRequestStatus status, LeaveType type) {
+        LeaveRequest request = new LeaveRequest(employee, type, TUE, TUE,
                 BigDecimal.ONE, BigDecimal.ONE, 2027, "개인 사정");
         ReflectionTestUtils.setField(request, "id", id);
         ReflectionTestUtils.setField(request, "status", status);
