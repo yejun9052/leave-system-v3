@@ -155,7 +155,8 @@ export default function DateRangePickerDialog({
           datesSet={onDatesSet}
           dateClick={onDateClick}
           dayCellClassNames={(arg) => (holidays.has(localDateString(arg.date)) ? ["fc-holiday"] : [])}
-          dayMaxEventRows={3}
+          // 작은 달력이라 칸 높이에 맞춰 접는다(줄 수로 자르면 일정 많은 주만 높아진다)
+          dayMaxEvents
           eventOrder="order,start,-duration,title"
           moreLinkContent={(arg) => `+${arg.num}개 더보기`}
         />

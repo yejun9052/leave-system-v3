@@ -53,11 +53,14 @@ function shortPeriod(start: string, end: string): string {
 export default function DayDetailDialog({
   date,
   canApply,
+  applyLabel = "이 날짜로 신청하기",
   onApply,
   onClose,
 }: {
   date: string;
   canApply: boolean;
+  /** 관리자가 직접 등록·연차 제한 등록을 고른 경우 문구가 바뀐다 */
+  applyLabel?: string;
   onApply: (date: string) => void;
   onClose: () => void;
 }) {
@@ -191,7 +194,7 @@ export default function DayDetailDialog({
           </Button>
           {canApply && (
             <Button onClick={() => onApply(date)}>
-              <CalendarPlus className="h-4 w-4" /> 이 날짜로 신청하기
+              <CalendarPlus className="h-4 w-4" /> {applyLabel}
             </Button>
           )}
         </DialogFooter>

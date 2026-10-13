@@ -100,3 +100,7 @@
 .fc .fc-holiday .fc-daygrid-day-number {
   color: #ef4444;
 }
+/* 캘린더 화면: 모든 주를 같은 높이로(일정 줄 수로 자르면 "더보기"가 있는 주만 높아진다). 높이는 화면이 --calendar-row-height 로 준다 */
+.calendar-equal-rows .fc .fc-daygrid-body tr {
+  height: var(--calendar-row-height);
+}

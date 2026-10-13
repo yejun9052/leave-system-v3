@@ -134,8 +134,14 @@ function writeDeptIds(ids: number[]) {
 /** 데스크톱 달력 본문 높이(요일 머리 + 6주). 한 칸에 날짜와 일정 3줄이 들어가는 높이 */
 const CALENDAR_CONTENT_HEIGHT = 880;
 
-/** 한 칸에 보이는 줄 수. 일정이 이보다 많으면 (줄 수 - 1)개 + "+N개 더보기" 로 칸 높이를 지킨다 */
+/** 한 칸에 보이는 줄 수. 일정이 이보다 많으면 (줄 수 - 1)개 + "+N개 더보기" */
 const DAY_MAX_ROWS = 3;
+
+/**
+ * 주(행) 높이: 본문 높이에서 요일 머리(약 29px)를 빼고 6주로 나눈 값.
+ * 줄 수로 자르면 FullCalendar 가 칸 높이를 내용대로 나눠 "더보기"가 있는 주만 높아지므로 모든 주를 이 높이로 고정한다.
+ */
+const CALENDAR_ROW_HEIGHT = Math.floor((CALENDAR_CONTENT_HEIGHT - 30) / 6);
 
 /**
  * 칸에 위에서부터 놓는 순서(작을수록 위): 공휴일·연차 제한 → 회사 일정 → 팀 일정 → 팀원 휴가 → 내 휴가·개인 일정·내 연차 기간.
@@ -331,6 +337,16 @@ export default function CalendarPage() {
       if (cell) return cell.getAttribute("data-date");
     }
     return target.closest("[data-date]")?.getAttribute("data-date") ?? null;
+  };
+
+  /** "+N개 더보기"는 FullCalendar 의 작은 팝오버 대신 우클릭 "일정 상세보기"와 같은 그날 상세 창을 연다 */
+  const onClickCapture = (e: React.MouseEvent) => {
+    if (!(e.target instanceof Element)) return;
+    const date = e.target.closest(".fc-daygrid-more-link")?.closest("td[data-date]")?.getAttribute("data-date");
+    if (!date) return;
+    e.preventDefault();
+    e.stopPropagation(); // 캡처 단계에서 막아 FullCalendar 의 팝오버가 열리지 않게
+    setDetailDate(date);
   };
 
   const onContextMenu = (e: React.MouseEvent) => {
@@ -674,7 +690,12 @@ export default function CalendarPage() {
 
           <Card>
             <CardContent className="p-2 sm:p-4">
-              <div onContextMenu={onContextMenu}>
+              <div
+                onContextMenu={onContextMenu}
+                onClickCapture={onClickCapture}
+                className="calendar-equal-rows"
+                style={{ "--calendar-row-height": `${CALENDAR_ROW_HEIGHT}px` } as React.CSSProperties}
+              >
                 <FullCalendar
                   ref={calendarRef}
                   plugins={[dayGridPlugin, interactionPlugin]}
@@ -722,6 +743,7 @@ export default function CalendarPage() {
         <DayDetailDialog
           date={detailDate}
           canApply={canApply}
+          applyLabel={ENTRY_MODES.find((m) => m.key === mode)?.menuLabel}
           onApply={applyFrom}
           onClose={() => setDetailDate(null)}
         />
