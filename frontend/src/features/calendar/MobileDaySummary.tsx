@@ -80,7 +80,7 @@ export default function MobileDaySummary({
     items.push({
       key: `L${l.id}`,
       dot: "bg-primary",
-      title: `${l.employeeName}${l.mine ? " · 나" : ""}`,
+      title: `${l.employeeName}${l.departmentName ? `(${l.departmentName})` : ""}${l.mine ? " · 나" : ""}`,
       sub: leaveLabel(l) + (pending ? " · 결재 대기" : ""),
       eventId: null,
     });

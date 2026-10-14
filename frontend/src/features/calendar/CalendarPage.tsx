@@ -119,6 +119,12 @@ function writeDeptIds(ids: number[]) {
   }
 }
 
+/** 휴가 막대 제목 "김민준 - 연차" → "김민준(개발팀) - 연차". 부서가 없으면 그대로 */
+function withDepartment(title: string, department: string | undefined): string {
+  const i = title.indexOf(" - ");
+  return department && i > 0 ? `${title.slice(0, i)}(${department})${title.slice(i)}` : title;
+}
+
 /** 한 칸에 보이는 줄 수. 일정이 이보다 많으면 (줄 수 - 1)개 + "+N개 더보기"(더보기가 셋째 줄 자리에 온다) */
 const DAY_MAX_ROWS = 3;
 
@@ -198,6 +204,9 @@ export default function CalendarPage() {
     setPickedDeptIds(next);
     writeDeptIds(next);
   };
+
+  // 휴가 막대 제목의 이름 옆에 붙일 팀 이름(지금 부서 이름. 저장된 제목은 그대로 둔다)
+  const deptNameById = useMemo(() => new Map(flatDepartments.map((d) => [d.id, d.name])), [flatDepartments]);
 
   const filtered = useMemo(
     () => events.filter((e) => inView(e, view, me ? { id: me.id } : null, deptIds)),
@@ -436,7 +445,7 @@ export default function CalendarPage() {
     .filter((e) => e.source === "HOLIDAY" || !q || e.title.includes(q))
     .map((e) => ({
     id: e.id,
-    title: e.title,
+    title: e.source === "LEAVE_REQUEST" ? withDepartment(e.title, deptNameById.get(e.departmentId ?? -1)) : e.title,
     start: e.start,
     end: e.end,
     allDay: e.allDay,
