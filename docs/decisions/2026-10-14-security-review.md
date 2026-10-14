@@ -9,7 +9,7 @@
 - 방법: 코드 읽기. 재현은 DB 사본과 별도 포트(28081·28082)에서만 했고 끝난 뒤 지웠다. 코드는 고치지 않았다.
 - 앞선 점검 [2026-10-13-security-review.md](2026-10-13-security-review.md)에서 고친 것·보류한 것(운영 항목), 하지 않기로 한 것(인사관리자의 이메일 변경 탈취, 비밀번호 변경 알림 메일), 라이선스는 다시 올리지 않았다.
 - 상태: H1·M1·M2(+L6) 고침. 나머지는 ❓ 사용자 결정 대기
-- 할 일 목록: [developer/todoList.md](../../developer/todoList.md)
+- 할 일 목록: [docs/developer/todoList.md](../developer/todoList.md)
 
 ## 결정·진행 (2026-10-14)
 

@@ -25,6 +25,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
   - Local secrets (holiday API key, SMTP) live in the gitignored `backend/application-secret.yml`.
   - The local admin login is `admin` / `admin1234!`.
 - To run a second backend next to the user's 8080 for verification, use `SERVER_PORT=18080` and set `CORS_ORIGINS` to include the extra Vite origin.
+- Vite listens on all interfaces (`server.host: true`) so phones on the LAN can test. The proxy rewrites `Origin` to localhost. Verification copies of `vite.config.ts` should set `host: false`.
 - Shell edits can leave the user's long-running Vite (5173) on stale code. This happens with `sed -i`, `mv`, or several quick edits to one file. Re-save the file afterwards, then check what is actually served with `curl http://localhost:5173/src/...`.
 
 ## Architecture
@@ -48,7 +49,16 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 - Session lifetime is one value, `SESSION_TIMEOUT` (`spring.session.timeout`, default `10m`), sent to the frontend as `MeResponse.idleTimeoutSeconds`.
   - `lib/useIdleLogout.ts` counts only human input (not polling or SSE) and calls `POST /api/auth/idle-logout`, which ends just this browser's session. The normal logout ends all of the user's sessions.
   - There is no "remember me". The login screen only remembers the ID in `localStorage`.
-- Login throttling is per IP in memory (`auth/LoginAttemptService`). A successful login clears only that ID's failures.
+- Login throttling is per IP in memory (`auth/LoginAttemptService`).
+  - `tryAcquire` counts the attempt *before* the password check, so concurrent requests cannot exceed 10. A successful login removes only that ID's count.
+  - While an IP is blocked, only the first request is audited; the rest never touch the DB.
+- `AuthService.login` and `PasswordResetService.requestReset` are deliberately **not** `@Transactional`. Holding a connection across BCrypt while the audit write (`REQUIRES_NEW`) waited for a second one starved the pool (security review M1). Keep DB work there in short `TransactionTemplate` blocks.
+- Filters, aspects and interceptors that branch on the URL use `common/web/RequestPaths.of(request)` (decoded, `;` stripped), never `getRequestURI()`. Before this, `/%61pi/...` skipped `AccountStateFilter` (security review H1).
+  - `security/EncodedPathRejectFilter` runs first and returns 400 for percent-encoded letters, digits and `-._~` in the path.
+- `common/web/RequestBodyLimitFilter` runs second and caps non-multipart request bodies at 1MB (413 `REQUEST_TOO_LARGE`), chunked bodies included.
+  - Multipart (only the employee Excel import) keeps the `spring.servlet.multipart` limits of 5MB per file and 8MB per request.
+  - Production Caddy caps every request body at 10MB.
+  - These limits apply to uploads only, never to downloads such as report Excel or backups.
 - New-password rules live in `auth/password/PasswordPolicy` and are mirrored in `frontend/src/features/auth/passwordSchema.ts`. Change both together.
 - `license/LicenseEnforcementFilter` blocks every API except license status when there is no valid signed license key.
   - `application-local.yml` carries a localhost dev key.
@@ -62,6 +72,11 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 - `LeaveRequestService` is the core: apply, approve, reject, cancel, HR force-register, blackout handling.
 - `plan(...)` is the single validation path. Both the preview (`GET /leave-requests/eligibility`) and the real submit go through it. Change rules there so the preview and submit stay identical.
   - Same-day overlap rules: cancel-requested leave blocks everything; half days AM+PM only; half + hourly not allowed; hourly total ≤ 1 day.
+- Multi-date selection: the `/batch` endpoints (leave apply, HR register, eligibility, calendar events, blackouts) take a list of `common/dto/DateSpan` (max 31).
+  - Each span becomes its own request or event, so approval and notifications are per span.
+  - A batch is all-or-nothing, and errors are prefixed with the failing date.
+  - `plan(..., extraPending)` counts the earlier spans of the same batch.
+  - Frontend: `lib/dateSpans.ts`. Rules: `docs/decisions/2026-10-14-multi-date-selection.md`.
 - `accrual/`:
   - `LeaveAccrualCalculator` computes the entitlement.
   - `LeavePeriodCalculator` handles leave periods: hire-date or fiscal-year anniversaries, and leave that spans an anniversary (`nextPeriodDeduction`).
@@ -135,6 +150,9 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 - `docs/policy-overview.md`: plain-language Korean summary of every leave rule. Update it when rules change.
 - `docs/developer-guide.md`: the developer document. One entry per technical mechanism, each starting "X = 어떤 방식이다", followed by values, reasons, verification results (e.g. the SSE load test) and related code. Covers cron jobs, session expiry, login limits, SSE, backup and restore. Add or update an entry when a mechanism or its values change.
 - `docs/decisions/YYYY-MM-DD-topic.md`: decision records (❓ marks open items).
+- `docs/developer/todoList.md`: security to-do checklist for `docs/decisions/2026-10-14-security-review.md`.
+  - H/M/L numbers are IDs local to that review.
+  - When an item is fixed, mark it `[x] (완료)` with the commit, and update the review's 결정·진행 table.
 - `DEPLOY.md`: production install, backup and restore. Also `SECURITY.md`, `README.md`, `RUN.md`.
 - `SESSION.md`, if present, is a temporary hand-off note for continuing work.
 
