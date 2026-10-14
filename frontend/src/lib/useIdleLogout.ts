@@ -4,12 +4,15 @@ import { authApi } from "@/api/auth";
 import { useAuthStore } from "@/store/auth";
 import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
-/** 사람이 화면을 쓰고 있다고 보는 입력(스크롤은 요소 안에서 일어나도 잡히게 capture 로 듣는다) */
-const ACTIVITY_EVENTS = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart", "scroll"] as const;
+/**
+ * 사람이 화면을 쓰고 있다고 보는 입력: 클릭(터치)·키보드·스크롤. 마우스를 움직이기만 한 것은 치지 않는다
+ * (책상에서 마우스가 조금만 밀려도 시간이 다시 차지 않게). 스크롤은 요소 안에서 일어나도 잡히게 capture 로 듣는다.
+ */
+const ACTIVITY_EVENTS = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const;
 /** 탭끼리 마지막 입력 시각·자동 로그아웃을 나누는 저장소 키(같은 브라우저의 다른 탭에서 쓰고 있으면 로그아웃하지 않게) */
 const ACTIVITY_KEY = "idle.lastActivityAt";
 const LOGOUT_KEY = "idle.loggedOutAt";
-/** 마우스를 움직일 때마다 기록하지 않고 이 간격으로만 */
+/** 스크롤처럼 연달아 오는 입력은 매번 기록하지 않고 이 간격으로만 */
 const RECORD_EVERY_MS = 1_000;
 /** 쓰고 있는 동안 서버 세션도 같은 시간으로 끝나지 않게 알리는 간격(자동 로그아웃 시간보다 충분히 짧게) */
 const KEEPALIVE_EVERY_MS = 2 * 60_000;
@@ -42,7 +45,7 @@ function setSecondsLeft(secondsLeft: number | null) {
 }
 
 /**
- * 자동 로그아웃: 마우스·키보드·터치 입력이 timeoutSeconds 동안 없으면 이 브라우저의 로그인을 끊고 로그인 화면으로 보낸다.
+ * 자동 로그아웃: 클릭·키보드·스크롤·터치 입력이 timeoutSeconds 동안 없으면 이 브라우저의 로그인을 끊고 로그인 화면으로 보낸다.
  * <ul>
  *   <li>화면이 알아서 하는 요청(알림 새로 고침·실시간 갱신)은 "사용"으로 치지 않는다. 사람의 입력만 센다.</li>
  *   <li>같은 브라우저의 탭들은 마지막 입력 시각을 나눠 본다: 한 탭에서 쓰고 있으면 다른 탭도 로그아웃하지 않고,

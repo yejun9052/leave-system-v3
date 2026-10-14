@@ -47,7 +47,7 @@ public class AuthController {
     }
 
     @Operation(summary = "자동 로그아웃",
-            description = "화면에서 마우스·키보드 입력 없이 자동 로그아웃 시간(내 정보의 idleTimeoutSeconds)이 지났을 때. "
+            description = "화면에서 클릭·키보드·스크롤 입력 없이 자동 로그아웃 시간(내 정보의 idleTimeoutSeconds)이 지났을 때. "
                     + "이 브라우저의 세션만 삭제(다른 기기 로그인은 유지).")
     @PostMapping("/idle-logout")
     public ApiResponse<Void> idleLogout(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {

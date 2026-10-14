@@ -31,7 +31,7 @@ export interface Me {
   passwordChangeRequired: boolean;
   /** true 면 직원이 아닌 관리 전용 계정(연차·휴가 신청 대상 아님) */
   systemAccount: boolean;
-  /** 자동 로그아웃 시간(초): 이만큼 마우스·키보드 입력이 없으면 로그아웃(서버 세션 만료와 같은 값) */
+  /** 자동 로그아웃 시간(초): 이만큼 클릭·키보드·스크롤 입력이 없으면 로그아웃(서버 세션 만료와 같은 값) */
   idleTimeoutSeconds: number;
 }
 

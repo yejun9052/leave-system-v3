@@ -191,7 +191,7 @@ public class AuthService {
     }
 
     /**
-     * 자동 로그아웃(화면에서 마우스·키보드 입력 없이 idleTimeout 이 지남): 이 브라우저의 세션만 끝낸다.
+     * 자동 로그아웃(화면에서 클릭·키보드·스크롤 입력 없이 idleTimeout 이 지남): 이 브라우저의 세션만 끝낸다.
      * 자리를 비운 PC 때문에 다른 기기(휴대폰 등)에서 쓰던 로그인까지 끊지 않는다.
      */
     public void idleLogout(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {

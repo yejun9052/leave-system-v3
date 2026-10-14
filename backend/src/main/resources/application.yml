@@ -37,7 +37,7 @@ spring:
         size: 2
   session:
     # 미사용 자동 로그아웃 시간 (예: 10m, 30m). 환경변수 SESSION_TIMEOUT 으로 변경 가능.
-    # 화면도 같은 값(/api/auth/me 의 idleTimeoutSeconds)으로 마우스·키보드 입력이 없으면 로그아웃한다
+    # 화면도 같은 값(/api/auth/me 의 idleTimeoutSeconds)으로 클릭·키보드·스크롤 입력이 없으면 로그아웃한다
     timeout: ${SESSION_TIMEOUT:10m}
     jdbc:
       # 세션 테이블은 Flyway(V1__baseline)가 관리 → 자동 생성 끔

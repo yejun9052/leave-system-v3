@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * 자동 로그아웃(입력 없이 정해진 시간이 지나면 로그아웃)과 마지막 1분의 안내 창.
- * 마우스를 움직이거나 키를 누르면 시간이 다시 시작되고 창도 닫힌다. 남은 시간은 상단 {@link SessionTimer} 에도 보인다.
+ * 클릭·키보드·스크롤 입력이 있으면 시간이 다시 시작되고 창도 닫힌다(마우스 이동만으로는 아님). 남은 시간은 상단 {@link SessionTimer} 에도 보인다.
  */
 export default function IdleLogoutWarning({ timeoutSeconds }: { timeoutSeconds: number | undefined }) {
   useIdleLogout(timeoutSeconds);
@@ -53,7 +53,7 @@ export function SessionTimer() {
     <div
       role="timer"
       aria-label={`세션 만료까지 ${time}`}
-      title="마우스·키보드 입력이 없으면 이 시간이 지난 뒤 자동으로 로그아웃됩니다. 입력하면 다시 시작됩니다."
+      title="클릭·키보드·스크롤 입력이 없으면 이 시간이 지난 뒤 자동으로 로그아웃됩니다. 입력하면 다시 시작됩니다."
       className={cn(
         "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm",
         warn ? "border-amber-300 bg-amber-50 font-semibold text-amber-800" : "text-muted-foreground",
