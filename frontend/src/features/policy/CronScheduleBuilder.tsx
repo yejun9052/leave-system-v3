@@ -181,7 +181,7 @@ function Cell({
       aria-pressed={on}
       aria-label={label}
       className={cn(
-        "h-9 min-w-10 rounded-md border px-2 text-sm tabular-nums transition-colors",
+        "h-9 min-w-0 whitespace-nowrap rounded-md border px-1 text-xs tabular-nums transition-colors sm:min-w-12 sm:px-2 sm:text-sm",
         on ? "border-primary bg-primary font-semibold text-primary-foreground" : "bg-background hover:bg-accent",
         className,
       )}
@@ -238,10 +238,10 @@ export default function CronScheduleBuilder({ value, onChange }: { value: string
   const minutes = showAll ? ALL_MINUTES : COMMON_MINUTES;
   const hoursGrid = (
     <Section title="시" hint="여러 개 고를 수 있음">
-      <div className="grid w-fit grid-cols-6 gap-1">
+      <div className="grid w-full max-w-sm grid-cols-6 gap-1 sm:w-fit sm:max-w-none">
         {HOURS.map((h) => (
           <Cell key={h} on={parts.hours.includes(h)} onClick={() => update({ hours: toggle(parts.hours, h) })} label={`${h}시`}>
-            {pad(h)}
+            {pad(h)}시
           </Cell>
         ))}
       </div>
@@ -264,10 +264,10 @@ export default function CronScheduleBuilder({ value, onChange }: { value: string
         </button>
       }
     >
-      <div className={cn("grid w-fit gap-1", showAll ? "grid-cols-6 sm:grid-cols-10" : "grid-cols-6")}>
+      <div className={cn("grid w-full max-w-sm gap-1 sm:w-fit sm:max-w-none", showAll ? "grid-cols-6 sm:grid-cols-10" : "grid-cols-6")}>
         {minutes.map((m) => (
           <Cell key={m} on={parts.minute === m} onClick={() => update({ minute: m })} label={`${m}분`}>
-            {pad(m)}
+            {pad(m)}분
           </Cell>
         ))}
       </div>
@@ -275,7 +275,7 @@ export default function CronScheduleBuilder({ value, onChange }: { value: string
   );
   const domGrid = (
     <Section title="날짜" hint="여러 개 고를 수 있음">
-      <div className="grid w-fit grid-cols-7 gap-1">
+      <div className="grid w-full max-w-sm grid-cols-7 gap-1 sm:w-fit sm:max-w-none">
         {DAYS_OF_MONTH.map((d) => (
           <Cell
             key={d}
@@ -283,7 +283,7 @@ export default function CronScheduleBuilder({ value, onChange }: { value: string
             onClick={() => update({ dom: parts.dom === "L" ? [d] : toggle(parts.dom, d) })}
             label={`${d}일`}
           >
-            {d}
+            {d}일
           </Cell>
         ))}
         <Cell on={parts.dom === "L"} onClick={() => update({ dom: parts.dom === "L" ? [1] : "L" })} className="col-span-2">
@@ -360,7 +360,7 @@ export default function CronScheduleBuilder({ value, onChange }: { value: string
           )}
           {mode === "yearly" && (
             <Section title="달" hint="여러 개 고를 수 있음 (예: 1·4·7·10월 = 3개월마다)">
-              <div className="grid w-fit grid-cols-6 gap-1">
+              <div className="grid w-full max-w-sm grid-cols-6 gap-1 sm:w-fit sm:max-w-none">
                 {MONTHS.map((m) => (
                   <Cell key={m} on={parts.months.includes(m)} onClick={() => update({ months: toggle(parts.months, m) })}>
                     {m}월
