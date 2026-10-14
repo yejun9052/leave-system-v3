@@ -33,7 +33,9 @@ import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -115,10 +117,11 @@ class PasswordResetRequestIntegrationTest {
         }
 
         @Bean
-        PasswordResetService passwordResetService(PasswordResetTokenRepository tokens) {
+        PasswordResetService passwordResetService(PasswordResetTokenRepository tokens,
+                                                  PlatformTransactionManager transactionManager) {
             return new PasswordResetService(tokens, EMPLOYEES, mock(PasswordEncoder.class),
                     mock(ApplicationEventPublisher.class), mock(SessionTerminator.class), new ResetRequestLimiter(),
-                    mock(AuditService.class), Clock.systemUTC());
+                    mock(AuditService.class), Clock.systemUTC(), new TransactionTemplate(transactionManager));
         }
     }
 }

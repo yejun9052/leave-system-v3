@@ -39,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionOperations;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("비밀번호 재설정")
@@ -69,7 +70,8 @@ class PasswordResetServiceTest {
     @BeforeEach
     void setUp() {
         service = new PasswordResetService(tokenRepository, employeeRepository, passwordEncoder, eventPublisher,
-                sessionTerminator, requestLimiter, auditService, Clock.fixed(NOW, ZoneOffset.UTC));
+                sessionTerminator, requestLimiter, auditService, Clock.fixed(NOW, ZoneOffset.UTC),
+                TransactionOperations.withoutTransaction());
     }
 
     // --- 토큰 발급 ---

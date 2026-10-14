@@ -8,6 +8,12 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DisplayNameGeneration;
@@ -17,7 +23,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * 로그인 연속 실패 차단: 접속한 PC(IP) 기준으로 10번 실패하면 15분 동안 그 IP의 로그인 시도를 막는다.
- * 성공하면 그 아이디로 틀린 횟수만 지우고, 시간이 지나면 풀린다. 계정은 잠그지 않는다.
+ * 시도는 비밀번호 비교 전에 실패로 먼저 세고(tryAcquire), 성공하면 그 아이디로 센 횟수만 지운다.
+ * 시간이 지나면 풀린다. 계정은 잠그지 않는다.
  */
 @DisplayName("로그인 연속 실패 차단(IP 기준)")
 @DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
@@ -70,7 +77,7 @@ class LoginAttemptServiceTest {
 
         assertThat(service.isBlocked(IP)).isFalse();
 
-        service.loginFailed(IP, ID);
+        service.tryAcquire(IP, ID);
 
         assertThat(service.isBlocked(IP)).isTrue();
         assertThat(service.lockRemaining(IP)).hasValueSatisfying(d ->
@@ -99,7 +106,7 @@ class LoginAttemptServiceTest {
         실패(9, IP, "admin");
 
         service.loginSucceeded(IP, ID); // 남의 비밀번호를 9번 틀린 뒤 자기 계정으로 로그인
-        service.loginFailed(IP, "admin");
+        service.tryAcquire(IP, "admin");
 
         assertThat(service.isBlocked(IP)).isTrue();
     }
@@ -113,7 +120,7 @@ class LoginAttemptServiceTest {
         실패(4, IP, "admin"); // 남은 5 + 4 = 9
 
         assertThat(service.isBlocked(IP)).isFalse();
-        service.loginFailed(IP, "admin");
+        service.tryAcquire(IP, "admin");
         assertThat(service.isBlocked(IP)).isTrue();
     }
 
@@ -122,18 +129,79 @@ class LoginAttemptServiceTest {
         실패(9, IP, " Kim@Company.com");
 
         service.loginSucceeded(IP, "kim@company.com");
-        service.loginFailed(IP, ID);
+        service.tryAcquire(IP, ID);
 
         assertThat(service.isBlocked(IP)).isFalse();
     }
 
     @Test
-    void 막혀_있는_동안에는_성공_처리해도_풀리지_않는다() {
-        실패(10, IP);
+    void 열_번째_시도가_맞으면_막히지_않는다() {
+        실패(9, IP);
+        service.tryAcquire(IP, ID); // 10번째: 비교 전에 세므로 일단 막힘
+
+        service.loginSucceeded(IP, ID); // 맞았으니 되돌림
+
+        assertThat(service.isBlocked(IP)).isFalse();
+    }
+
+    @Test
+    void 다른_아이디로_막힌_것은_자기_계정_성공으로_풀리지_않는다() {
+        실패(10, IP, "admin");
 
         service.loginSucceeded(IP, ID);
 
         assertThat(service.isBlocked(IP)).isTrue();
+    }
+
+    @Test
+    void 막힌_동안의_시도는_세지_않고_처음_한_번만_기록하라고_알린다() {
+        실패(10, IP);
+
+        Optional<LoginAttemptService.Block> first = service.tryAcquire(IP, ID);
+        Optional<LoginAttemptService.Block> second = service.tryAcquire(IP, "other");
+
+        assertThat(first).hasValueSatisfying(b -> {
+            assertThat(b.firstInLock()).isTrue();
+            assertThat(b.remaining()).isGreaterThan(Duration.ofMinutes(14));
+        });
+        assertThat(second).hasValueSatisfying(b -> assertThat(b.firstInLock()).isFalse());
+    }
+
+    @Test
+    void 차단이_풀린_뒤_다시_막히면_다시_처음_한_번_알린다() {
+        실패(10, IP);
+        service.tryAcquire(IP, ID);
+        clock.advance(Duration.ofMinutes(15).plusSeconds(1));
+
+        실패(10, IP);
+
+        assertThat(service.tryAcquire(IP, ID)).hasValueSatisfying(b -> assertThat(b.firstInLock()).isTrue());
+    }
+
+    @Test
+    void 한꺼번에_보내도_열_번까지만_받는다() throws Exception {
+        int threads = 50;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger accepted = new AtomicInteger();
+        try {
+            for (int i = 0; i < threads; i++) {
+                pool.submit(() -> {
+                    start.await();
+                    if (service.tryAcquire(IP, ID).isEmpty()) {
+                        accepted.incrementAndGet();
+                    }
+                    return null;
+                });
+            }
+            start.countDown();
+            pool.shutdown();
+            assertThat(pool.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertThat(accepted).hasValue(LoginAttemptService.MAX_ATTEMPTS);
     }
 
     @Test
@@ -159,7 +227,7 @@ class LoginAttemptServiceTest {
 
         assertThat(service.isBlocked(IP)).isFalse();
 
-        service.loginFailed(IP, ID); // 지워졌으므로 다시 1번째
+        service.tryAcquire(IP, ID); // 지워졌으므로 다시 1번째
         assertThat(service.isBlocked(IP)).isFalse();
     }
 
@@ -168,19 +236,19 @@ class LoginAttemptServiceTest {
         실패(9, IP);
         clock.advance(Duration.ofMinutes(16));
 
-        service.loginFailed(IP, ID); // 예전 9번은 잊고 1번째
+        service.tryAcquire(IP, ID); // 예전 9번은 잊고 1번째
 
         assertThat(service.isBlocked(IP)).isFalse();
         실패(8, IP);
         assertThat(service.isBlocked(IP)).isFalse();
-        service.loginFailed(IP, ID);
+        service.tryAcquire(IP, ID);
         assertThat(service.isBlocked(IP)).isTrue();
     }
 
     @Test
     void 짧은_간격으로_계속_틀리면_잊지_않고_센다() {
         for (int i = 0; i < 10; i++) {
-            service.loginFailed(IP, ID);
+            service.tryAcquire(IP, ID);
             clock.advance(Duration.ofMinutes(10));
         }
 
@@ -191,11 +259,11 @@ class LoginAttemptServiceTest {
     @Test
     void 기록이_많이_쌓이면_잊어도_되는_기록을_정리한다() {
         for (int i = 0; i < LoginAttemptService.CLEANUP_THRESHOLD; i++) {
-            service.loginFailed("10.1." + (i / 250) + "." + (i % 250), ID);
+            service.tryAcquire("10.1." + (i / 250) + "." + (i % 250), ID);
         }
         clock.advance(Duration.ofMinutes(16));
 
-        service.loginFailed(IP, ID);
+        service.tryAcquire(IP, ID);
 
         Map<?, ?> attempts = (Map<?, ?>) ReflectionTestUtils.getField(service, "attempts");
         assertThat(attempts).hasSize(1);
@@ -214,7 +282,7 @@ class LoginAttemptServiceTest {
 
     private void 실패(int times, String ip, String loginId) {
         for (int i = 0; i < times; i++) {
-            service.loginFailed(ip, loginId);
+            service.tryAcquire(ip, loginId);
         }
     }
 

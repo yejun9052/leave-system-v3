@@ -24,7 +24,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 비밀번호 재설정(1회용 링크).
@@ -49,6 +52,8 @@ public class PasswordResetService {
     private final ResetRequestLimiter requestLimiter;
     private final AuditService auditService;
     private final Clock clock;
+    /** 비밀번호 찾기 요청의 토큰 발급만 감싸는 트랜잭션. {@link #requestReset(String, String)} 참고 */
+    private final TransactionOperations tx;
     private final SecureRandom random = new SecureRandom();
 
     @Autowired
@@ -58,9 +63,10 @@ public class PasswordResetService {
                                 ApplicationEventPublisher eventPublisher,
                                 SessionTerminator sessionTerminator,
                                 ResetRequestLimiter requestLimiter,
-                                AuditService auditService) {
+                                AuditService auditService,
+                                PlatformTransactionManager transactionManager) {
         this(tokenRepository, employeeRepository, passwordEncoder, eventPublisher, sessionTerminator,
-                requestLimiter, auditService, Clock.systemUTC());
+                requestLimiter, auditService, Clock.systemUTC(), new TransactionTemplate(transactionManager));
     }
 
     PasswordResetService(PasswordResetTokenRepository tokenRepository,
@@ -70,7 +76,8 @@ public class PasswordResetService {
                          SessionTerminator sessionTerminator,
                          ResetRequestLimiter requestLimiter,
                          AuditService auditService,
-                         Clock clock) {
+                         Clock clock,
+                         TransactionOperations tx) {
         this.tokenRepository = tokenRepository;
         this.employeeRepository = employeeRepository;
         this.passwordEncoder = passwordEncoder;
@@ -79,35 +86,39 @@ public class PasswordResetService {
         this.requestLimiter = requestLimiter;
         this.auditService = auditService;
         this.clock = clock;
+        this.tx = tx;
     }
 
     /**
      * 본인 요청(비밀번호 찾기). 등록 여부·제한 초과와 관계없이 호출부는 항상 같은 응답을 준다
      * (계정 존재 여부 노출 방지). 재직 중인 등록 계정이고 횟수 제한 이내일 때만 메일을 보낸다.
      */
-    @Transactional
     public void requestReset(String email) {
         requestReset(email, null);
     }
 
     /**
-     * 응답은 항상 같다(계정 존재 여부를 알리지 않음). 이메일·IP 한도를 넘으면 조용히 보내지 않는다.
-     * 안에서 부르는 {@link #issue} 는 같은 객체 호출이라 그쪽 @Transactional 이 걸리지 않으므로 여기서 연다.
+     * 응답은 항상 같다(계정 존재 여부를 알리지 않음). 이메일·IP 한도를 넘으면 조용히 보내지 않는다(DB 도 쓰지 않음).
+     * 토큰 발급({@link #issue}, 같은 객체 호출이라 @Transactional 이 걸리지 않음)만 짧은 트랜잭션으로 감싸고,
+     * 감사 기록(REQUIRES_NEW)은 그 트랜잭션이 끝난 뒤 남긴다: 안에서 남기면 한 요청이 DB 연결을 둘 쥔다(로그인과 같은 문제).
      */
-    @Transactional
     public void requestReset(String email, String clientIp) {
         if (!(clientIp == null ? requestLimiter.tryAcquire(email) : requestLimiter.tryAcquire(email, clientIp))) {
             log.warn("비밀번호 재설정 요청 제한 초과(이메일 1시간 {}회 · IP 1시간 {}회): {} / {}",
                     ResetRequestLimiter.MAX_REQUESTS, ResetRequestLimiter.MAX_REQUESTS_PER_IP, email, clientIp);
             return;
         }
-        employeeRepository.findByEmail(email.trim())
+        Employee issued = tx.execute(status -> employeeRepository.findByEmail(email.trim())
                 .filter(Employee::isActive)
-                .ifPresent(employee -> {
+                .map(employee -> {
                     issue(employee);
-                    auditService.record(employee.getId(), employee.getName(), "PASSWORD_RESET_REQUEST",
-                            "auth", null, "비밀번호 재설정 링크 요청", true);
-                });
+                    return employee;
+                })
+                .orElse(null));
+        if (issued != null) {
+            auditService.record(issued.getId(), issued.getName(), "PASSWORD_RESET_REQUEST",
+                    "auth", null, "비밀번호 재설정 링크 요청", true);
+        }
     }
 
     /** 새 토큰 발급 + 재설정 메일 발송(커밋 후). 관리자 초기화에서도 사용. */
