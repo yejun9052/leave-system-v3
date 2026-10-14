@@ -1,5 +1,6 @@
 package com.company.leave.policy;
 
+import com.company.leave.common.dto.DateSpan;
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.policy.dto.PolicyRuleDtos;
 import com.company.leave.security.SecurityUtils;
@@ -98,6 +99,19 @@ public class PolicyRulesController {
             @RequestParam LocalDate startDate, @RequestParam LocalDate endDate,
             @RequestParam(required = false) Long id) {
         return ApiResponse.ok(service.blackoutImpact(startDate, endDate, id));
+    }
+
+    @PreAuthorize(MANAGER)
+    @PostMapping("/blackouts/batch")
+    public ApiResponse<List<PolicyRuleDtos.Blackout>> createBlackouts(
+            @Valid @RequestBody PolicyRuleDtos.BlackoutsRequest req) {
+        return ApiResponse.ok(service.createBlackouts(req, SecurityUtils.currentEmployeeId()));
+    }
+
+    @PreAuthorize(MANAGER)
+    @GetMapping("/blackouts/impact/batch")
+    public ApiResponse<PolicyRuleDtos.BlackoutImpact> blackoutsImpact(@RequestParam List<String> spans) {
+        return ApiResponse.ok(service.blackoutsImpact(DateSpan.parseAll(spans)));
     }
 
     @PreAuthorize(MANAGER)

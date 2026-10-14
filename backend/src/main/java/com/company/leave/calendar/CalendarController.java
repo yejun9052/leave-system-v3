@@ -65,6 +65,15 @@ public class CalendarController {
         return ApiResponse.ok(calendarService.create(req, SecurityUtils.currentPrincipal()));
     }
 
+    @Operation(summary = "일정 생성 (여러 날짜 묶음 한 번에, 관리자/팀장)",
+            description = "이어진 날짜 묶음(spans)마다 일정 하나. 하나라도 걸리면 아무것도 저장하지 않는다.")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
+    @PostMapping("/events/batch")
+    public ApiResponse<List<CalendarDtos.EventResponse>> createMany(
+            @Valid @RequestBody CalendarDtos.CreateEvents req) {
+        return ApiResponse.ok(calendarService.createMany(req, SecurityUtils.currentPrincipal()));
+    }
+
     @Operation(summary = "일정 수정")
     @PreAuthorize("hasAnyRole('TEAM_LEAD','HR_ADMIN','SYSTEM_ADMIN')")
     @PutMapping("/events/{id}")

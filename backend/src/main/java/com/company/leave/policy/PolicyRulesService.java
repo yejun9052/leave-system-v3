@@ -1,5 +1,6 @@
 package com.company.leave.policy;
 
+import com.company.leave.common.dto.DateSpan;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.leave.LeaveRequestService;
@@ -145,6 +146,32 @@ public class PolicyRulesService {
         BlackoutConflictMode mode = conflictMode();
         return PolicyRuleDtos.BlackoutImpact.of(mode, editingId != null && !segments.isEmpty(),
                 leaveRequestService.planBlackout(start, end, segments, mode));
+    }
+
+    /** 여러 묶음 새 금지 기간의 미리보기(저장하지 않음). {@link LeaveRequestService#planBlackouts} */
+    @Transactional(readOnly = true)
+    public PolicyRuleDtos.BlackoutImpact blackoutsImpact(List<DateSpan> rawSpans) {
+        List<DateSpan> spans = DateSpan.normalize(rawSpans);
+        BlackoutConflictMode mode = conflictMode();
+        return PolicyRuleDtos.BlackoutImpact.of(mode, false, leaveRequestService.planBlackouts(spans, mode));
+    }
+
+    /**
+     * 달력에서 여러 날짜를 골라 금지 기간을 한 번에 등록: 묶음마다 금지 기간 하나(같은 명칭)를 만들고, 겹치는 휴가는 한 번에
+     * 처리한다({@link LeaveRequestService#applyBlackouts}). 전 직원 안내는 금지 기간마다 따로 간다.
+     */
+    @Transactional
+    public List<PolicyRuleDtos.Blackout> createBlackouts(PolicyRuleDtos.BlackoutsRequest req, Long actorId) {
+        List<DateSpan> spans = DateSpan.normalize(req.spans());
+        List<BlackoutPeriod> saved = new ArrayList<>();
+        for (DateSpan s : spans) {
+            saved.add(blackoutRepository.save(new BlackoutPeriod(s.startDate(), s.endDate(), req.name())));
+        }
+        leaveRequestService.applyBlackouts(req.name(), spans, conflictMode(), actorId);
+        for (BlackoutPeriod b : saved) {
+            announcementMessenger.blackout(Change.CREATED, schedule(b), null, actorId);
+        }
+        return saved.stream().map(PolicyRuleDtos.Blackout::from).toList();
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.company.leave.leave;
 
 import com.company.leave.common.dto.ApiResponse;
+import com.company.leave.common.dto.DateSpan;
 import com.company.leave.common.dto.PageResponse;
 import com.company.leave.leave.domain.LeaveRequestStatus;
 import com.company.leave.leave.domain.HalfDayPart;
@@ -42,6 +43,38 @@ public class LeaveRequestController {
     public ApiResponse<LeaveRequestDtos.Response> create(
             @Valid @RequestBody LeaveRequestDtos.Create req) {
         return ApiResponse.ok(leaveRequestService.create(SecurityUtils.currentEmployeeId(), req));
+    }
+
+    @Operation(summary = "휴가 신청 (여러 날짜 묶음 한 번에)",
+            description = "달력에서 고른 날짜를 이어진 묶음(spans)으로 보낸다. 묶음마다 신청 한 건이 생기고 결재·취소는 건마다 따로다. "
+                    + "하나라도 규칙에 걸리면 아무것도 신청하지 않고, 사유 앞에 그 날짜를 붙인다.")
+    @PostMapping("/batch")
+    public ApiResponse<List<LeaveRequestDtos.Response>> createMany(
+            @Valid @RequestBody LeaveRequestDtos.CreateMany req) {
+        return ApiResponse.ok(leaveRequestService.createMany(SecurityUtils.currentEmployeeId(), req));
+    }
+
+    @Operation(summary = "휴가 강제 등록 (여러 날짜 묶음 한 번에, 인사관리자·시스템 관리자)",
+            description = "묶음마다 바로 승인 상태로 등록한다. 하나라도 규칙에 걸리면 아무것도 등록하지 않는다.")
+    @PreAuthorize("hasAnyRole('HR_ADMIN','SYSTEM_ADMIN')")
+    @PostMapping("/batch/register")
+    public ApiResponse<List<LeaveRequestDtos.Response>> registerMany(
+            @Valid @RequestBody LeaveRequestDtos.RegisterMany req) {
+        return ApiResponse.ok(leaveRequestService.registerMany(SecurityUtils.currentEmployeeId(), req));
+    }
+
+    @Operation(summary = "여러 날짜 묶음 신청 미리보기",
+            description = "spans 는 \"2026-10-11~2026-10-13\" 또는 \"2026-10-15\"(하루)를 여러 번. 묶음마다 미리보기를 주고, "
+                    + "앞 묶음의 차감 몫을 결재 대기에 더해 계산한다. 걸린 묶음에서 멈춘다(저장 안 함).")
+    @GetMapping("/eligibility/batch")
+    public ApiResponse<LeaveRequestDtos.ManyEligibility> eligibilityMany(
+            @RequestParam Long leaveTypeId,
+            @RequestParam List<String> spans,
+            @RequestParam(required = false) Integer hours,
+            @RequestParam(required = false) Long specialRuleId,
+            @RequestParam(required = false) HalfDayPart halfDayPart) {
+        return ApiResponse.ok(leaveRequestService.eligibilityMany(SecurityUtils.currentEmployeeId(), leaveTypeId,
+                DateSpan.parseAll(spans), hours, specialRuleId, halfDayPart));
     }
 
     @Operation(summary = "휴가 강제 등록 (인사관리자·시스템 관리자)",

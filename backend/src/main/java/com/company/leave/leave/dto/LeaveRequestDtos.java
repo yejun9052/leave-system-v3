@@ -1,17 +1,21 @@
 package com.company.leave.leave.dto;
 
+import com.company.leave.common.dto.DateSpan;
 import com.company.leave.leave.accrual.WorkdayCalculator;
 import com.company.leave.leave.domain.DayPortion;
 import com.company.leave.leave.domain.HalfDayPart;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
 import jakarta.validation.constraints.Max;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 public final class LeaveRequestDtos {
 
@@ -78,6 +82,50 @@ public final class LeaveRequestDtos {
                         Integer hours, Long specialRuleId, HalfDayPart halfDayPart) {
             this(employeeId, leaveTypeId, startDate, endDate, reason, hours, specialRuleId, halfDayPart, null);
         }
+    }
+
+    /**
+     * 달력에서 여러 날짜를 골라 한 번에 신청. 이어진 묶음(spans)마다 신청 한 건이 생기고, 결재·취소·알림은 건마다 따로다.
+     * 하나라도 규칙에 걸리면 전부 신청하지 않는다. 다른 칸의 뜻은 {@link Create}.
+     * 반차·시간차·반일 규정·경조사 규정은 묶음 하나만 받는다.
+     */
+    public record CreateMany(
+            @NotNull Long leaveTypeId,
+            @NotEmpty @Size(max = DateSpan.MAX_SPANS) List<@Valid @NotNull DateSpan> spans,
+            @Size(max = 500) String reason,
+            @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
+            Boolean forfeitAcknowledged,
+            Long specialRuleId,
+            HalfDayPart halfDayPart) {
+
+        public Create toCreate(DateSpan span) {
+            return new Create(leaveTypeId, span.startDate(), span.endDate(), reason, hours, forfeitAcknowledged,
+                    specialRuleId, halfDayPart);
+        }
+    }
+
+    /** 휴가 강제 등록을 여러 묶음으로(건마다 바로 승인). 하나라도 걸리면 전부 등록하지 않는다. 칸의 뜻은 {@link Register}. */
+    public record RegisterMany(
+            @NotNull Long employeeId,
+            @NotNull Long leaveTypeId,
+            @NotEmpty @Size(max = DateSpan.MAX_SPANS) List<@Valid @NotNull DateSpan> spans,
+            @Size(max = 500) String reason,
+            @Min(1) @Max(DayPortion.MAX_HOURLY_HOURS) Integer hours,
+            Long specialRuleId,
+            HalfDayPart halfDayPart,
+            Boolean limitAcknowledged) {
+
+        public Register toRegister(DateSpan span) {
+            return new Register(employeeId, leaveTypeId, span.startDate(), span.endDate(), reason, hours,
+                    specialRuleId, halfDayPart, limitAcknowledged);
+        }
+    }
+
+    /**
+     * 여러 묶음 신청 미리보기. items 는 묶음마다의 미리보기이고, 앞 묶음이 차감할 몫을 결재 대기에 더해 계산한다
+     * (신청 후 잔여가 차례로 줄어든다). 걸린 묶음이 있으면 allowed=false, reason 앞에 그 날짜를 붙이고 거기서 멈춘다.
+     */
+    public record ManyEligibility(boolean allowed, String reason, List<Eligibility> items) {
     }
 
     /** 결재자 종류: 팀장 / 인사관리자 / 본인(최상위 부서 팀장·인사관리자의 자가 승인). */

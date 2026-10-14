@@ -1,5 +1,8 @@
 package com.company.leave.calendar.dto;
 
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.Valid;
+import com.company.leave.common.dto.DateSpan;
 import com.company.leave.calendar.domain.CalendarEvent;
 import com.company.leave.calendar.domain.CalendarEventScope;
 import com.company.leave.calendar.domain.CalendarEventSource;
@@ -106,6 +109,23 @@ public final class CalendarDtos {
      * @param label 화면 표시용("전체 일정", "{부서명} 일정")
      */
     public record EventScopeOption(CalendarEventScope scope, Long departmentId, String label) {
+    }
+
+    /**
+     * 달력에서 여러 날짜를 골라 일정 추가: 이어진 묶음(spans, 달력 날짜가 바로 이어진 것끼리)마다 일정 하나.
+     * 하나라도 걸리면 아무것도 저장하지 않는다. 다른 칸은 {@link CreateEvent}.
+     */
+    public record CreateEvents(
+            @NotBlank @Size(max = 200) String title,
+            @NotEmpty @Size(max = DateSpan.MAX_SPANS) List<@Valid @NotNull DateSpan> spans,
+            boolean allDay,
+            @NotNull CalendarEventScope scope,
+            Long departmentId,
+            @Pattern(regexp = "^#[0-9a-fA-F]{6}$", message = "색은 #RRGGBB 형식이어야 합니다.") String colorHex) {
+
+        public CreateEvent toCreate(DateSpan span) {
+            return new CreateEvent(title, span.startDate(), span.endDate(), allDay, scope, departmentId, colorHex);
+        }
     }
 
     public record CreateEvent(

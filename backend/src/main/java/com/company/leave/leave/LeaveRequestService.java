@@ -7,6 +7,7 @@ import com.company.leave.calendar.domain.CalendarEventSource;
 import com.company.leave.calendar.domain.Holiday;
 import com.company.leave.calendar.repository.CalendarEventRepository;
 import com.company.leave.calendar.repository.HolidayRepository;
+import com.company.leave.common.dto.DateSpan;
 import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.common.search.SearchKeywords;
@@ -40,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -128,7 +130,7 @@ public class LeaveRequestService {
         LocalDate start = req.startDate();
         LocalDate end = req.endDate();
         Plan plan = plan(employee, type, policy, start, end, req.hours(), req.specialRuleId(), req.halfDayPart(),
-                false, false);
+                false, false, Map.of());
 
         if (plan.forfeit().signum() > 0 && !Boolean.TRUE.equals(req.forfeitAcknowledged())) {
             throw new BusinessException(ErrorCode.LEAVE_FORFEIT_NOT_ACKNOWLEDGED,
@@ -174,7 +176,7 @@ public class LeaveRequestService {
                     "현재 정책에서 사용할 수 없는 휴가 종류입니다: " + type.getName());
         }
         Plan plan = plan(employee, type, policy, req.startDate(), req.endDate(), req.hours(), req.specialRuleId(),
-                req.halfDayPart(), false, true);
+                req.halfDayPart(), false, true, Map.of());
         // 경조사 규정의 연간 사용 횟수를 넘으면 막지는 않고, 화면에서 경고를 확인한 뒤에만 등록한다
         if (plan.limitWarning() != null && !Boolean.TRUE.equals(req.limitAcknowledged())) {
             throw new BusinessException(ErrorCode.LEAVE_SPECIAL_LIMIT_NOT_ACKNOWLEDGED, plan.limitWarning());
@@ -228,10 +230,11 @@ public class LeaveRequestService {
      * @param preview 미리보기면 true: 경조사 규정을 아직 고르지 않았으면 규정 검사를 건너뛴다
      * @param forced  인사관리자 강제 등록이면 true: 사용 통제(블랙아웃·사전 신청·연속 일수)를 건너뛴다
      * @param halfDayPart 종일 종류를 오전·오후 반차로 신청(0.5일 경조사 규정에서만). 그 외 null
+     * @param extraPending 아직 저장하지 않은 결재 대기 차감(연차 기간 → 일수). 여러 묶음 미리보기에서 앞 묶음 몫. 그 외 빈 맵
      */
     private Plan plan(Employee employee, LeaveType type, LeavePolicy policy, LocalDate start, LocalDate end,
                       Integer requestedHours, Long specialRuleId, HalfDayPart halfDayPart, boolean preview,
-                      boolean forced) {
+                      boolean forced, Map<Integer, BigDecimal> extraPending) {
         Long employeeId = employee.getId();
         if (halfDayPart != null && type.getPortion() != DayPortion.FULL) {
             throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
@@ -279,7 +282,7 @@ public class LeaveRequestService {
 
         if (type.isDeductFromAnnual()) {
             BigDecimal available = available(employee, appliedYear, policy)
-                    .subtract(requestRepository.sumPendingDeductedDays(employeeId, appliedYear));
+                    .subtract(pendingOf(employeeId, appliedYear, extraPending));
             if (!policy.isAllowNegative()) {
                 if (isFuturePeriod(employee, appliedYear, policy)) {
                     requireNextPeriodAvailable(employee, appliedYear, currentPart, available, policy, false);
@@ -289,7 +292,7 @@ public class LeaveRequestService {
                 }
                 if (nextPart.signum() > 0) {
                     BigDecimal nextAvailable = available(employee, appliedYear + 1, policy)
-                            .subtract(requestRepository.sumPendingDeductedDays(employeeId, appliedYear + 1));
+                            .subtract(pendingOf(employeeId, appliedYear + 1, extraPending));
                     requireNextPeriodAvailable(employee, appliedYear + 1, nextPart, nextAvailable, policy, false);
                 }
             }
@@ -382,7 +385,8 @@ public class LeaveRequestService {
         int year = periods.yearOf(employee.getHireDate(), startDate != null ? startDate : LocalDate.now(), policy);
         BigDecimal remaining = available(employee, year, policy);
         if (startDate != null && endDate != null) {
-            return preview(employee, type, policy, startDate, endDate, hours, specialRuleId, halfDayPart, remaining);
+            return preview(employee, type, policy, startDate, endDate, hours, specialRuleId, halfDayPart, remaining,
+                    Map.of());
         }
         if (!type.isRequiresAnnualExhausted()) {
             return new LeaveRequestDtos.Eligibility(true, null, remaining, BigDecimal.ZERO);
@@ -402,21 +406,125 @@ public class LeaveRequestService {
     private LeaveRequestDtos.Eligibility preview(Employee employee, LeaveType type, LeavePolicy policy,
                                                  LocalDate start, LocalDate end, Integer hours,
                                                  Long specialRuleId, HalfDayPart halfDayPart,
-                                                 BigDecimal remaining) {
+                                                 BigDecimal remaining, Map<Integer, BigDecimal> extraPending) {
         Long employeeId = employee.getId();
         Plan plan;
         try {
-            plan = plan(employee, type, policy, start, end, hours, specialRuleId, halfDayPart, true, false);
+            plan = plan(employee, type, policy, start, end, hours, specialRuleId, halfDayPart, true, false,
+                    extraPending);
         } catch (BusinessException ex) {
             return new LeaveRequestDtos.Eligibility(false, ex.getMessage(), remaining, BigDecimal.ZERO);
         }
-        BigDecimal pending = requestRepository.sumPendingDeductedDays(employeeId, plan.appliedYear());
+        BigDecimal pending = pendingOf(employeeId, plan.appliedYear(), extraPending);
         BigDecimal currentPart = plan.deduction().subtract(plan.nextPeriodDeduction());
         BigDecimal remainingAfter = remaining.subtract(pending).subtract(currentPart).subtract(plan.forfeit());
         LeavePeriodCalculator.Period period = periods.period(employee.getHireDate(), plan.appliedYear(), policy);
         return new LeaveRequestDtos.Eligibility(true, null, remaining, plan.forfeit(),
                 plan.workdays(), plan.deduction(), pending, remainingAfter,
                 period.start(), period.end(), plan.nextPeriodDeduction());
+    }
+
+    /** 결재 대기 차감 합계(저장된 신청 + 아직 저장하지 않은 앞 묶음 몫). */
+    private BigDecimal pendingOf(Long employeeId, int year, Map<Integer, BigDecimal> extraPending) {
+        return requestRepository.sumPendingDeductedDays(employeeId, year)
+                .add(extraPending.getOrDefault(year, BigDecimal.ZERO));
+    }
+
+    // --- 여러 묶음 한 번에(달력에서 여러 날짜를 골라 신청) ---
+
+    /**
+     * 여러 묶음을 한 번에 신청한다. 묶음마다 {@link #create} 와 같은 검증·저장을 차례로 하고(앞 묶음은 결재 대기로 저장되어
+     * 다음 묶음의 잔액 검사에 들어간다), 하나라도 걸리면 예외로 전부 되돌린다. 알림·메일은 건마다 따로다.
+     */
+    @Transactional
+    public List<LeaveRequestDtos.Response> createMany(Long employeeId, LeaveRequestDtos.CreateMany req) {
+        List<DateSpan> spans = checkSpans(req.spans(), req.leaveTypeId(), req.specialRuleId(), req.halfDayPart());
+        List<LeaveRequestDtos.Response> created = new ArrayList<>();
+        for (DateSpan span : spans) {
+            try {
+                created.add(create(employeeId, req.toCreate(span)));
+            } catch (BusinessException ex) {
+                throw span.label(ex, spans.size());
+            }
+        }
+        return created;
+    }
+
+    /** 휴가 강제 등록을 여러 묶음으로. 묶음마다 {@link #register}(바로 승인), 하나라도 걸리면 전부 되돌린다. */
+    @Transactional
+    public List<LeaveRequestDtos.Response> registerMany(Long registrarId, LeaveRequestDtos.RegisterMany req) {
+        List<DateSpan> spans = checkSpans(req.spans(), req.leaveTypeId(), req.specialRuleId(), req.halfDayPart());
+        List<LeaveRequestDtos.Response> created = new ArrayList<>();
+        for (DateSpan span : spans) {
+            try {
+                created.add(register(registrarId, req.toRegister(span)));
+            } catch (BusinessException ex) {
+                throw span.label(ex, spans.size());
+            }
+        }
+        return created;
+    }
+
+    /**
+     * 여러 묶음 신청 미리보기({@link #createMany} 와 같은 순서·계산, 저장 안 함). 앞 묶음이 차감할 몫은 결재 대기에 더해
+     * 다음 묶음을 계산한다. 걸린 묶음에서 멈추고 그 날짜를 사유 앞에 붙인다.
+     */
+    @Transactional
+    public LeaveRequestDtos.ManyEligibility eligibilityMany(Long employeeId, Long leaveTypeId, List<DateSpan> rawSpans,
+                                                           Integer hours, Long specialRuleId, HalfDayPart halfDayPart) {
+        List<DateSpan> spans;
+        try {
+            spans = checkSpans(rawSpans, leaveTypeId, specialRuleId, halfDayPart);
+        } catch (BusinessException ex) {
+            return new LeaveRequestDtos.ManyEligibility(false, ex.getMessage(), List.of());
+        }
+        LeaveType type = leaveTypeService.getEntity(leaveTypeId);
+        LeavePolicy policy = policyService.getActivePolicy();
+        if (!type.isActive() || !policy.allows(type.getPortion())) {
+            return new LeaveRequestDtos.ManyEligibility(false, "현재 정책에서 사용할 수 없는 휴가 종류입니다.", List.of());
+        }
+        Employee employee = employeeService.getEntity(employeeId);
+        Map<Integer, BigDecimal> extraPending = new HashMap<>();
+        List<LeaveRequestDtos.Eligibility> items = new ArrayList<>();
+        for (DateSpan span : spans) {
+            int year = periods.yearOf(employee.getHireDate(), span.startDate(), policy);
+            LeaveRequestDtos.Eligibility e = preview(employee, type, policy, span.startDate(), span.endDate(), hours,
+                    specialRuleId, halfDayPart, available(employee, year, policy), extraPending);
+            items.add(e);
+            if (!e.allowed()) {
+                String reason = spans.size() > 1 ? span.label() + ": " + e.reason() : e.reason();
+                return new LeaveRequestDtos.ManyEligibility(false, reason, items);
+            }
+            if (type.isDeductFromAnnual()) {
+                BigDecimal next = e.nextPeriodDeduction() != null ? e.nextPeriodDeduction() : BigDecimal.ZERO;
+                extraPending.merge(year, e.deduction().subtract(next), BigDecimal::add);
+                if (next.signum() > 0) {
+                    extraPending.merge(year + 1, next, BigDecimal::add);
+                }
+            }
+        }
+        return new LeaveRequestDtos.ManyEligibility(true, null, items);
+    }
+
+    /**
+     * 묶음 목록 검사: 정렬·겹침·개수({@link DateSpan#normalize}), 그리고 하루만 신청하는 경우(반차·시간차·반일 규정)와
+     * 경조사 규정은 묶음 하나만. 경조사는 규정 일수를 묶음마다 세면 나눠 신청해 규정보다 많이 쓸 수 있어서다.
+     */
+    private List<DateSpan> checkSpans(List<DateSpan> raw, Long leaveTypeId, Long specialRuleId,
+                                      HalfDayPart halfDayPart) {
+        List<DateSpan> spans = DateSpan.normalize(raw);
+        if (spans.size() > 1) {
+            LeaveType type = leaveTypeService.getEntity(leaveTypeId);
+            if (type.getPortion() != DayPortion.FULL || halfDayPart != null) {
+                throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
+                        "반차·시간차는 날짜 하나만 신청할 수 있습니다.");
+            }
+            if (specialRuleId != null) {
+                throw new BusinessException(ErrorCode.LEAVE_INVALID_PERIOD,
+                        type.getName() + "는 이어진 날짜 하나로 신청해 주세요.");
+            }
+        }
+        return spans;
     }
 
     @Transactional(readOnly = true)
@@ -821,13 +929,76 @@ public class LeaveRequestService {
 
     /** 휴가 기간 중 금지 기간 밖의 근무일이 있는지: 있으면 그 날로 다시 신청하라고 안내한다. */
     private boolean hasWorkdayOutside(LeaveRequest r, LocalDate start, LocalDate end) {
+        return hasWorkdayOutside(r, List.of(new DateSpan(start, end)));
+    }
+
+    /** 여러 묶음 금지 기간: 어느 묶음에도 들지 않는 근무일이 있는지. */
+    private boolean hasWorkdayOutside(LeaveRequest r, List<DateSpan> spans) {
         Set<LocalDate> holidays = holidaysBetween(r.getStartDate(), r.getEndDate());
         for (LocalDate d = r.getStartDate(); !d.isAfter(r.getEndDate()); d = d.plusDays(1)) {
-            if ((d.isBefore(start) || d.isAfter(end)) && workdayCalculator.isWorkday(d, holidays)) {
+            LocalDate day = d;
+            if (spans.stream().noneMatch(s -> s.overlaps(day, day)) && workdayCalculator.isWorkday(d, holidays)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * 여러 묶음으로 새로 등록하는 금지 기간의 처리 계획(달력에서 여러 날짜를 골라 등록). 묶음마다 {@link #planBlackout} 을
+     * 하고 합친다: 한 휴가가 여러 묶음에 걸쳐도 한 번만, 어느 묶음에서든 처리 대상이면 처리(유지 목록에서는 뺀다).
+     */
+    @Transactional(readOnly = true)
+    public BlackoutPlan planBlackouts(List<DateSpan> spans, BlackoutConflictMode mode) {
+        java.util.LinkedHashMap<Long, LeaveRequest> reject = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<Long, LeaveRequest> cancel = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<Long, LeaveRequest> kept = new java.util.LinkedHashMap<>();
+        for (DateSpan s : spans) {
+            BlackoutPlan p = planBlackout(s.startDate(), s.endDate(), List.of(new DateRange(s.startDate(), s.endDate())),
+                    mode);
+            p.reject().forEach(r -> reject.put(r.getId(), r));
+            p.cancel().forEach(r -> cancel.put(r.getId(), r));
+            p.kept().forEach(r -> kept.put(r.getId(), r));
+        }
+        kept.keySet().removeAll(reject.keySet());
+        kept.keySet().removeAll(cancel.keySet());
+        Comparator<LeaveRequest> order = Comparator.comparing(LeaveRequest::getStartDate)
+                .thenComparing(r -> r.getEmployee().getName());
+        return new BlackoutPlan(reject.values().stream().sorted(order).toList(),
+                cancel.values().stream().sorted(order).toList(), kept.values().stream().sorted(order).toList());
+    }
+
+    /**
+     * 여러 묶음 금지 기간 등록의 휴가 처리({@link #planBlackouts}, 금지 기간 저장과 같은 트랜잭션). 처리 방식·알림은
+     * {@link #applyBlackout} 과 같고, 사유에는 묶음을 모두 적으며 다시 신청 안내는 어느 묶음에도 없는 근무일이 있을 때만 쓴다.
+     */
+    @Transactional
+    public BlackoutPlan applyBlackouts(String name, List<DateSpan> spans, BlackoutConflictMode mode, Long actorId) {
+        if (spans.size() == 1) {
+            DateSpan s = spans.get(0);
+            return applyBlackout(name, s.startDate(), s.endDate(), List.of(new DateRange(s.startDate(), s.endDate())),
+                    mode, actorId);
+        }
+        BlackoutPlan plan = planBlackouts(spans, mode);
+        if (plan.isEmpty()) {
+            return plan;
+        }
+        Employee actor = employeeService.getEntity(actorId);
+        String period = spans.stream().map(s -> s.startDate() + " ~ " + s.endDate())
+                .collect(Collectors.joining(", "));
+        String reason = BLACKOUT_REASON + " (" + name + ", " + period + ")";
+        for (LeaveRequest r : plan.reject()) {
+            r.reject(actor, reason, Instant.now());
+            messenger.blackoutRejected(r, actor, reason, hasWorkdayOutside(r, spans));
+            auditAfterCommit("blackout_reject", r, "금지 기간 자동 반려: " + summary(r) + " / " + name);
+        }
+        for (LeaveRequest r : plan.cancel()) {
+            restoreAndClearCalendar(r);
+            r.forceCancel(reason);
+            messenger.blackoutCancelled(r, actor, period, reason, hasWorkdayOutside(r, spans), informedLead(r, actor));
+            auditAfterCommit("blackout_cancel", r, "금지 기간 자동 취소: " + summary(r) + " / " + name);
+        }
+        return plan;
     }
 
     /** 승인 때 반영한 것 되돌리기: 연차 차감 환원, 병가·공가 소멸분 환원, 캘린더 일정 삭제. */

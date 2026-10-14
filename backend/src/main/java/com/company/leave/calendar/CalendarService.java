@@ -1,5 +1,6 @@
 package com.company.leave.calendar;
 
+import com.company.leave.common.dto.DateSpan;
 import com.company.leave.calendar.domain.CalendarEvent;
 import com.company.leave.calendar.domain.CalendarEventScope;
 import com.company.leave.calendar.domain.CalendarEventSource;
@@ -96,6 +97,20 @@ public class CalendarService {
                 holidayNames.isEmpty() ? null : String.join(", ", holidayNames),
                 leaveRequestService.leavesOnDay(user.getId(), date),
                 events);
+    }
+
+    @Transactional
+    public List<CalendarDtos.EventResponse> createMany(CalendarDtos.CreateEvents req, UserPrincipal user) {
+        List<DateSpan> spans = DateSpan.normalize(req.spans());
+        List<CalendarDtos.EventResponse> created = new ArrayList<>();
+        for (DateSpan span : spans) {
+            try {
+                created.add(create(req.toCreate(span), user));
+            } catch (BusinessException ex) {
+                throw span.label(ex, spans.size());
+            }
+        }
+        return created;
     }
 
     @Transactional

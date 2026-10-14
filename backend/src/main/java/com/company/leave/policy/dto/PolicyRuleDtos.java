@@ -1,5 +1,8 @@
 package com.company.leave.policy.dto;
 
+import com.company.leave.common.dto.DateSpan;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import com.company.leave.leave.LeaveRequestService;
 import com.company.leave.leave.domain.LeaveRequest;
 import com.company.leave.leave.domain.LeaveRequestStatus;
@@ -73,6 +76,12 @@ public final class PolicyRuleDtos {
     public record BlackoutRequest(
             @NotNull LocalDate startDate,
             @NotNull LocalDate endDate,
+            @NotBlank String name) {
+    }
+
+    /** 달력에서 여러 날짜를 골라 금지 기간 등록: 이어진 묶음(spans)마다 금지 기간 하나(같은 명칭). */
+    public record BlackoutsRequest(
+            @NotEmpty @Size(max = DateSpan.MAX_SPANS) List<@Valid @NotNull DateSpan> spans,
             @NotBlank String name) {
     }
 
