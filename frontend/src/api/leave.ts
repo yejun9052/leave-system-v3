@@ -1,5 +1,6 @@
 import { api, unwrap } from "./client";
 import type { HalfDayPart, LeaveBalance, LeaveRequest, LeaveRequestStatus, LeaveType, Page } from "@/types";
+import { spanParam, type DateSpan } from "@/lib/dateSpans";
 
 export interface LeaveRequestCreate {
   leaveTypeId: number;
@@ -53,6 +54,25 @@ export interface LeaveEligibility {
   nextPeriodDeduction: number | null;
 }
 
+/** 달력에서 여러 날짜를 골라 신청: 이어진 묶음마다 신청 한 건(하나라도 걸리면 아무것도 신청하지 않음) */
+export type LeaveRequestCreateMany = Omit<LeaveRequestCreate, "startDate" | "endDate"> & { spans: DateSpan[] };
+export type LeaveRegisterMany = Omit<LeaveRegister, "startDate" | "endDate"> & { spans: DateSpan[] };
+
+/** 여러 묶음 미리보기: 묶음마다 미리보기(앞 묶음 차감을 결재 대기에 더해 계산). 걸린 묶음에서 멈추고 reason 에 날짜를 붙인다 */
+export interface LeaveManyEligibility {
+  allowed: boolean;
+  reason: string | null;
+  items: LeaveEligibility[];
+}
+
+export interface LeaveManyPreviewParams {
+  leaveTypeId: number;
+  spans: DateSpan[];
+  hours?: number;
+  specialRuleId?: number;
+  halfDayPart?: HalfDayPart;
+}
+
 export interface LeavePreviewParams {
   leaveTypeId: number;
   startDate: string;
@@ -101,6 +121,17 @@ export const leaveApi = {
 
   create: (body: LeaveRequestCreate) =>
     unwrap<LeaveRequest>(api.post("/leave-requests", body)),
+
+  createMany: (body: LeaveRequestCreateMany) =>
+    unwrap<LeaveRequest[]>(api.post("/leave-requests/batch", body)),
+
+  registerMany: (body: LeaveRegisterMany) =>
+    unwrap<LeaveRequest[]>(api.post("/leave-requests/batch/register", body)),
+
+  previewMany: ({ spans, ...params }: LeaveManyPreviewParams) =>
+    unwrap<LeaveManyEligibility>(
+      api.get("/leave-requests/eligibility/batch", { params: { ...params, spans: spans.map(spanParam).join(",") } }),
+    ),
 
   register: (body: LeaveRegister) =>
     unwrap<LeaveRequest>(api.post("/leave-requests/register", body)),

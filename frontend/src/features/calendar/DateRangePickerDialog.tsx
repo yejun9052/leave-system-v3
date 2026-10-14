@@ -18,56 +18,51 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import {
-  addDays,
-  formatDateWithWeekday,
-  isWeekend,
-  localDateString,
-  nextSelection,
-  todayString,
-  type DateSelection,
-} from "./useDateSelection";
+import { formatSpans, groupDates, useHolidaySet, type DateSpan } from "@/lib/dateSpans";
+import { addDays, isWeekend, localDateString, todayString, toggleDate } from "./useDateSelection";
 
 /** 공휴일·연차 제한 막대 색(캘린더와 같음) */
 const HOLIDAY_COLOR = "#ef4444";
 
 /**
- * 일정만 보이는 달력에서 기간을 고르는 창(블랙아웃 등록·휴가 직접 등록).
+ * 일정만 보이는 달력에서 날짜를 고르는 창(블랙아웃 등록·휴가 직접 등록·내 휴가 신청).
  * 공휴일·회사 일정·팀 일정·연차 제한 기간만 보여 주고 휴가는 빼서 날짜를 고르기 쉽게 한다.
  * 휴가 직접 등록이면 등록할 직원의 휴가(승인·취소 요청 중·결재 대기)만 함께 보여 겹치지 않게 고르게 한다.
- * 고르는 규칙은 캘린더 휴가 신청과 같다: 첫 클릭 시작일, 두 번째 클릭 종료일, 세 번째 클릭은 새로 시작.
+ * 고르는 규칙은 캘린더와 같다: 누를 때마다 그 날짜를 넣고 뺀다. 고른 날짜는 이어진 묶음으로 넘긴다.
  *
  * @param single      하루만 고른다(반차·시간차 등)
- * @param workdayStart 시작일은 근무일이어야 한다(휴가). 블랙아웃은 아무 날이나
+ * @param workdayOnly 근무일만 고른다(휴가). 블랙아웃은 아무 날이나
+ * @param bridge      묶음 규칙: "workday" 면 사이에 주말·공휴일만 있으면 이어진 것(휴가·금지 기간), "none" 이면 바로 이어진 날만
+ * @param oneSpan     이어진 묶음 하나만(금지 기간 수정)
  * @param excludeBlackoutId 수정 중인 금지 기간은 달력에 그리지 않는다
  * @param employee    휴가 직접 등록에서 고른 직원: 그 사람의 휴가를 함께 그린다
  */
 export default function DateRangePickerDialog({
   title,
-  initialStart,
-  initialEnd,
+  initialDates = [],
   single = false,
-  workdayStart = false,
+  workdayOnly = false,
+  bridge = "workday",
+  oneSpan = false,
   excludeBlackoutId,
   employee,
   onPick,
   onClose,
 }: {
   title: string;
-  initialStart?: string;
-  initialEnd?: string;
+  initialDates?: string[];
   single?: boolean;
-  workdayStart?: boolean;
+  workdayOnly?: boolean;
+  bridge?: "workday" | "none";
+  oneSpan?: boolean;
   excludeBlackoutId?: number;
   employee?: { id: number; name: string } | null;
-  onPick: (start: string, end: string) => void;
+  onPick: (dates: string[], spans: DateSpan[]) => void;
   onClose: () => void;
 }) {
   const { toast } = useToast();
   const [range, setRange] = useState<{ start: string; end: string } | null>(null);
-  const [selection, setSelection] = useState<DateSelection | null>(() =>
-    initialStart ? { start: initialStart, end: !single && initialEnd && initialEnd !== initialStart ? initialEnd : null } : null,
-  );
+  const [selected, setSelected] = useState<string[]>(() => [...new Set(initialDates)].sort());
 
   const { data: events = [] } = useQuery({
     queryKey: ["calendarEvents", range],
@@ -87,12 +82,29 @@ export default function DateRangePickerDialog({
     () => new Set(events.filter((e) => e.source === "HOLIDAY").map((e) => e.start)),
     [events],
   );
-  const isWorkday = useCallback((date: string) => !isWeekend(date) && !holidays.has(date), [holidays]);
+  // 묶음 사이의 공휴일은 보이는 달 밖일 수도 있어 고른 날짜의 연도 공휴일을 따로 받는다
+  const yearHolidays = useHolidaySet(selected);
+  const isWorkday = useCallback(
+    (date: string) => !isWeekend(date) && !holidays.has(date) && !yearHolidays.has(date),
+    [holidays, yearHolidays],
+  );
+  const spans = useMemo(
+    () => groupDates(selected, bridge === "workday" ? (d) => !isWorkday(d) : undefined),
+    [selected, bridge, isWorkday],
+  );
 
   const onDateClick = (arg: DateClickArg) => {
-    const result = nextSelection(selection, arg.dateStr, single, workdayStart ? isWorkday : () => true);
-    if (result.ok) setSelection(result.selection);
+    const result = toggleDate(selected, arg.dateStr, single, workdayOnly ? isWorkday : () => true);
+    if (result.ok) setSelected(result.dates);
     else toast({ title: result.message });
+  };
+
+  const pick = () => {
+    if (oneSpan && spans.length > 1) {
+      toast({ title: "이어진 기간 하나만 고를 수 있습니다.", variant: "destructive" });
+      return;
+    }
+    onPick(selected, spans);
   };
 
   const onDatesSet = (arg: DatesSetArg) => {
@@ -156,25 +168,21 @@ export default function DateRangePickerDialog({
       order: 1,
     });
   }
-  if (selection) {
+  // 고른 날짜는 묶음째 배경색으로(사이에 낀 주말·공휴일도 한 신청이라 같이 칠한다)
+  spans.forEach((s, i) => {
     calendarEvents.push({
-      id: "selection",
-      start: selection.start,
-      end: addDays(selection.end ?? selection.start, 1),
+      id: `selection-${i}`,
+      start: s.startDate,
+      end: addDays(s.endDate, 1),
       allDay: true,
       display: "background",
       backgroundColor: "#4f46e5",
     });
-  }
+  });
 
-  const end = selection ? (selection.end ?? selection.start) : null;
   const hint = single
     ? "날짜 하나를 누르세요."
-    : !selection
-      ? "시작일을 누르세요."
-      : selection.end === null
-        ? "종료일을 누르세요. 이대로 고르면 이 하루만입니다."
-        : "다른 날짜를 누르면 새로 고릅니다.";
+    : "날짜를 누를 때마다 넣고 뺍니다." + (oneSpan ? " 이어진 기간 하나만 고릅니다." : " 떨어진 날짜는 나눠서 따로 저장됩니다.");
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -189,7 +197,7 @@ export default function DateRangePickerDialog({
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
-          initialDate={initialStart ?? todayString()}
+          initialDate={selected[0] ?? todayString()}
           locale="ko"
           height={560}
           fixedWeekCount
@@ -206,16 +214,14 @@ export default function DateRangePickerDialog({
         />
         <DialogFooter className="items-center sm:justify-between">
           <p className="text-sm font-medium">
-            {selection
-              ? formatDateWithWeekday(selection.start) +
-                (end && end !== selection.start ? ` ~ ${formatDateWithWeekday(end)}` : "")
-              : "고른 날짜 없음"}
+            {spans.length > 0 ? formatSpans(spans) : "고른 날짜 없음"}
+            {spans.length > 1 && <span className="ml-2 text-xs text-muted-foreground">({spans.length}건)</span>}
           </p>
           <div className="flex gap-2">
             <Button variant="outline" onClick={onClose}>
               취소
             </Button>
-            <Button disabled={!selection} onClick={() => selection && onPick(selection.start, end ?? selection.start)}>
+            <Button disabled={selected.length === 0} onClick={pick}>
               이 날짜로
             </Button>
           </div>

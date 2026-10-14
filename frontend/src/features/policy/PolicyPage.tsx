@@ -20,7 +20,6 @@ import {
 import { ANNUAL_DEDUCTION_LABEL, type AnnualDeductionMode, type LeavePortion, type LeaveType } from "@/types";
 import { formatDays } from "@/lib/leaveFormat";
 import { useTableSort, type SortValue } from "@/lib/useTableSort";
-import { todayString } from "@/lib/dateFormat";
 import { useServerForm } from "@/lib/useServerForm";
 import { POLICY_TABS, sectionOf } from "@/lib/pageSections";
 import { useUnsavedChanges } from "@/lib/useUnsavedChanges";
@@ -59,6 +58,7 @@ import PromotionTab from "./PromotionTab";
 import SpecialRuleEditDialog from "./SpecialRuleEditDialog";
 import BlackoutSaveDialog from "./BlackoutSaveDialog";
 import DateRangePickerDialog from "@/features/calendar/DateRangePickerDialog";
+import { formatSpans, type DateSpan } from "@/lib/dateSpans";
 import AutomationTab from "./AutomationTab";
 import BackupTab from "./BackupTab";
 
@@ -867,14 +867,14 @@ function BlackoutTab() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const { data: rows = [] } = useQuery({ queryKey: ["blackouts"], queryFn: policyRulesApi.blackouts });
-  const today = todayString();
-  const [start, setStart] = useState(today);
-  const [end, setEnd] = useState(today);
+  /** 달력에서 고른 날짜와 그 이어진 묶음(묶음마다 금지 기간 하나) */
+  const [dates, setDates] = useState<string[]>([]);
+  const [spans, setSpans] = useState<DateSpan[]>([]);
   const [name, setName] = useState("");
-  /** 일정만 보이는 달력에서 기간 고르기 */
+  /** 일정만 보이는 달력에서 날짜 고르기 */
   const [picking, setPicking] = useState(false);
   /** 추가·수정 확인 창: 저장 전에 겹치는 휴가와 처리 결과를 보여 준다 */
-  const [saving, setSaving] = useState<{ editing?: Blackout; initial?: Omit<Blackout, "id"> } | null>(null);
+  const [saving, setSaving] = useState<{ editing?: Blackout; initial?: { spans: DateSpan[]; name: string } } | null>(null);
   const err = (e: unknown) => toast({ title: extractErrorMessage(e), variant: "destructive" });
 
   const del = useMutation({
@@ -888,24 +888,26 @@ function BlackoutTab() {
       <CardHeader><CardTitle className="text-base">연차 사용 금지 기간 (블랙아웃)</CardTitle></CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1"><Label htmlFor="blackout-start" className="text-xs">시작</Label>
-            <Input id="blackout-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} /></div>
-          <div className="space-y-1"><Label htmlFor="blackout-end" className="text-xs">종료</Label>
-            <Input id="blackout-end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
-          <Button size="sm" variant="outline" onClick={() => setPicking(true)}>
-            <CalendarRange className="h-4 w-4" /> 달력에서 고르기
-          </Button>
+          <div className="space-y-1">
+            <span className="text-xs font-medium">날짜</span>
+            <div className="flex h-9 items-center gap-2">
+              <span className="text-sm">{spans.length > 0 ? formatSpans(spans) : "고른 날짜 없음"}</span>
+              <Button size="sm" variant="outline" onClick={() => setPicking(true)}>
+                <CalendarRange className="h-4 w-4" /> 달력에서 고르기
+              </Button>
+            </div>
+          </div>
           <div className="space-y-1 flex-1"><Label htmlFor="blackout-name" className="text-xs">명칭</Label>
             <Input id="blackout-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 연말 결산 기간" /></div>
           <Button
             size="sm"
-            onClick={() => setSaving({ initial: { startDate: start, endDate: end, name: name.trim() } })}
-            disabled={!name.trim()}
+            onClick={() => setSaving({ initial: { spans, name: name.trim() } })}
+            disabled={!name.trim() || spans.length === 0}
           ><Plus className="h-4 w-4" /> 추가</Button>
         </div>
         <p className="text-xs text-muted-foreground">
           추가하거나 기간을 늘리면 겹치는 기존 휴가를 정책(연차 정책 탭 › 사용 통제)대로 처리합니다. 저장 전에 명단을 보여
-          드립니다.
+          드립니다. 떨어진 날짜를 고르면 같은 명칭으로 나눠서 등록합니다(사이에 주말·공휴일만 있으면 이어서 하나).
         </p>
         <RuleTable rows={rows.map((b) => ({ id: b.id, cells: [`${b.startDate} ~ ${b.endDate}`, b.name], values: [`${b.startDate} ${b.endDate}`, b.name] }))}
           headers={["기간", "명칭"]}
@@ -921,11 +923,11 @@ function BlackoutTab() {
       {picking && (
         <DateRangePickerDialog
           title="금지 기간 고르기"
-          initialStart={start || undefined}
-          initialEnd={end || undefined}
-          onPick={(s, e) => {
-            setStart(s);
-            setEnd(e);
+          initialDates={dates}
+          bridge="workday"
+          onPick={(picked, pickedSpans) => {
+            setDates(picked);
+            setSpans(pickedSpans);
             setPicking(false);
           }}
           onClose={() => setPicking(false)}
@@ -937,7 +939,11 @@ function BlackoutTab() {
           initial={saving.initial}
           // 취소·닫기로 돌아오면 입력한 명칭을 그대로 둔다
           onSaved={() => {
-            if (saving.initial) setName("");
+            if (saving.initial) {
+              setName("");
+              setDates([]);
+              setSpans([]);
+            }
           }}
           onClose={() => setSaving(null)}
         />

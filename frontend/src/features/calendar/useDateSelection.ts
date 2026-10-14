@@ -57,86 +57,70 @@ export function monthGridDates(month: string): string[] {
   return dates;
 }
 
-/** 캘린더 신청 선택. end 가 null 이면 시작일만 고른 상태(그대로 신청하면 그 하루). */
-export interface DateSelection {
-  start: string;
-  end: string | null;
-}
+/** 달력에서 고른 날짜들(정렬, 중복 없음). 이어진 묶음마다 신청 한 건이 된다(lib/dateSpans) */
+export type DateSelection = string[];
 
-export type SelectResult =
-  | { ok: true; selection: DateSelection }
-  | { ok: false; message: string };
+export type ToggleResult = { ok: true; dates: DateSelection } | { ok: false; message: string };
 
-export const NOT_WORKDAY_MESSAGE = "시작일은 근무일이어야 합니다.";
+export const NOT_WORKDAY_MESSAGE = "휴가는 근무일만 고를 수 있습니다(주말·공휴일 제외).";
 export const PARTIAL_ONE_DAY_MESSAGE = "반차·시간차는 하루만 신청할 수 있습니다.";
 
 /**
- * 날짜 클릭 규칙.
+ * 날짜 클릭 규칙(윈도우의 Ctrl+클릭과 같은 개념, 2026-10-14):
  * <ul>
- *   <li>첫 클릭: 시작일(그대로 신청하면 그 하루)</li>
- *   <li>두 번째 클릭: 종료일. 시작일보다 이르면 두 날짜를 바꿔 이른 쪽이 시작일</li>
- *   <li>세 번째 클릭: 그 날짜로 새로 시작</li>
- *   <li>부분 휴가(반차·시간차): 누를 때마다 그 하루만</li>
- *   <li>시작일이 될 날짜가 주말·공휴일이면 선택하지 않는다(서버 규칙과 같음)</li>
+ *   <li>누를 때마다 그 날짜를 넣고 뺀다. 드래그·범위 선택은 없다</li>
+ *   <li>하루만(반차·시간차): 누른 날짜 하나로 바꾼다. 이미 고른 그 날을 다시 누르면 뺀다</li>
+ *   <li>고를 수 없는 날(휴가는 주말·공휴일)은 넣지 않고 안내한다. 빼기는 언제나 된다</li>
  * </ul>
  */
-export function nextSelection(
-  prev: DateSelection | null,
+export function toggleDate(
+  prev: DateSelection,
   date: string,
-  partial: boolean,
-  isWorkday: (date: string) => boolean,
-): SelectResult {
-  const startFresh = (): SelectResult =>
-    isWorkday(date) ? { ok: true, selection: { start: date, end: null } } : { ok: false, message: NOT_WORKDAY_MESSAGE };
-
-  if (partial || !prev || prev.end !== null) {
-    return startFresh();
-  }
-  if (date < prev.start) {
-    // 거꾸로 누른 경우: 누른 날짜가 새 시작일이 된다
-    return isWorkday(date)
-      ? { ok: true, selection: { start: date, end: prev.start } }
-      : { ok: false, message: NOT_WORKDAY_MESSAGE };
-  }
-  return { ok: true, selection: { start: prev.start, end: date } };
+  single: boolean,
+  canPick: (date: string) => boolean,
+): ToggleResult {
+  if (prev.includes(date)) return { ok: true, dates: prev.filter((d) => d !== date) };
+  if (!canPick(date)) return { ok: false, message: NOT_WORKDAY_MESSAGE };
+  return { ok: true, dates: single ? [date] : [...prev, date].sort() };
 }
 
 /** 선택 상태와 규칙을 묶은 훅. 규칙 위반이면 onReject 로 안내 문구를 넘긴다. */
-export function useDateSelection(isWorkday: (date: string) => boolean, onReject: (message: string) => void) {
-  const [selection, setSelection] = useState<DateSelection | null>(null);
+export function useDateSelection(canPick: (date: string) => boolean, onReject: (message: string) => void) {
+  const [dates, setDates] = useState<DateSelection>([]);
 
-  const pick = useCallback(
-    (date: string, partial: boolean): boolean => {
-      const result = nextSelection(selection, date, partial, isWorkday);
+  /** 누른 날짜 넣기/빼기. 바뀐 뒤 고른 날짜를 돌려준다(안 바뀌면 null) */
+  const toggle = useCallback(
+    (date: string, single: boolean): DateSelection | null => {
+      const result = toggleDate(dates, date, single, canPick);
       if (!result.ok) {
         onReject(result.message);
-        return false;
+        return null;
       }
-      setSelection(result.selection);
-      return true;
+      setDates(result.dates);
+      return result.dates;
     },
-    [selection, isWorkday, onReject],
+    [dates, canPick, onReject],
   );
 
-  /** 그 날짜로 선택을 새로 시작(우클릭 "이 날짜로 신청하기", 모바일 "+ 신청"). */
+  /** 그 날짜 하나로 새로 고른다(우클릭 "이 날짜로 신청하기", 모바일 "+ 신청"). */
   const startAt = useCallback(
     (date: string): boolean => {
-      if (!isWorkday(date)) {
+      if (!canPick(date)) {
         onReject(NOT_WORKDAY_MESSAGE);
         return false;
       }
-      setSelection({ start: date, end: null });
+      setDates([date]);
       return true;
     },
-    [isWorkday, onReject],
+    [canPick, onReject],
   );
 
-  /** 부분 휴가로 바꾸면 시작일 하루로 줄인다. 줄였으면 true. */
-  const collapseToStart = useCallback((): boolean => {
-    if (!selection || selection.end === null || selection.end === selection.start) return false;
-    setSelection({ start: selection.start, end: null });
+  /** 하루만 신청하는 종류로 바꾸면 첫 날짜 하나만 남긴다. 줄였으면 true. */
+  const keepFirst = useCallback((): boolean => {
+    if (dates.length <= 1) return false;
+    setDates([dates[0]]);
     return true;
-  }, [selection]);
+  }, [dates]);
 
-  return { selection, setSelection, pick, startAt, collapseToStart, clear: () => setSelection(null) };
+  return { dates, setDates, toggle, startAt, keepFirst, clear: () => setDates([]) };
 }

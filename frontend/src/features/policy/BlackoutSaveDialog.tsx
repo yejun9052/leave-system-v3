@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { LEAVE_STATUS_LABEL } from "@/types";
+import { formatSpans, type DateSpan } from "@/lib/dateSpans";
 
 const ACTION_LABEL: Record<BlackoutImpactItem["action"], string> = {
   REJECT: "자동 반려",
@@ -39,9 +40,10 @@ const ACTION_LABEL: Record<BlackoutImpactItem["action"], string> = {
  *   <li>늘려 수정: 새로 늘어난 날짜와 겹치는 휴가만 처리. 원래 기간에 남은 휴가는 경고와 함께 명단만 보여 준다</li>
  * </ul>
  * 처리된 휴가마다 당사자에게 메일·알림이 간다(서버).
+ * 추가는 달력에서 고른 날짜의 이어진 묶음마다 금지 기간 하나(같은 명칭)를 만든다.
  *
- * @param editing 수정할 금지 기간(추가면 없음)
- * @param initial 추가할 때 입력한 값. 있으면 바로 확인 단계부터 보여 준다
+ * @param editing 수정할 금지 기간(추가면 없음). 수정은 이어진 기간 하나만
+ * @param initial 추가할 묶음과 명칭. 바로 확인 단계부터 보여 준다
  * @param onSaved 저장했을 때(취소·닫기와 구분: 추가 화면은 저장했을 때만 명칭 입력을 비운다)
  */
 export default function BlackoutSaveDialog({
@@ -51,14 +53,15 @@ export default function BlackoutSaveDialog({
   onClose,
 }: {
   editing?: Blackout;
-  initial?: Omit<Blackout, "id">;
+  initial?: { spans: DateSpan[]; name: string };
   onSaved?: () => void;
   onClose: () => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [startDate, setStartDate] = useState(editing?.startDate ?? initial?.startDate ?? "");
-  const [endDate, setEndDate] = useState(editing?.endDate ?? initial?.endDate ?? "");
+  const [startDate, setStartDate] = useState(editing?.startDate ?? "");
+  const [endDate, setEndDate] = useState(editing?.endDate ?? "");
+  const spans = initial?.spans ?? [];
   const [name, setName] = useState(editing?.name ?? initial?.name ?? "");
   const [impact, setImpact] = useState<BlackoutImpact | null>(null);
   const [checking, setChecking] = useState(false);
@@ -83,16 +86,28 @@ export default function BlackoutSaveDialog({
     }
   };
 
-  // 추가 화면에서 값을 넘겨받았으면 바로 영향을 확인한다(처음 한 번)
+  // 추가: 넘겨받은 묶음으로 바로 영향을 확인한다(처음 한 번)
   useEffect(() => {
-    if (initial) void check(initial.startDate, initial.endDate);
+    if (!initial) return;
+    setChecking(true);
+    policyRulesApi
+      .blackoutsImpact(initial.spans)
+      .then(setImpact)
+      .catch((err) => {
+        toast({ title: extractErrorMessage(err), variant: "destructive" });
+        onClose();
+      })
+      .finally(() => setChecking(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const save = useMutation({
-    mutationFn: () => {
-      const body = { startDate, endDate, name: name.trim() };
-      return editing ? policyRulesApi.updateBlackout(editing.id, body) : policyRulesApi.createBlackout(body);
+    mutationFn: async () => {
+      if (editing) {
+        await policyRulesApi.updateBlackout(editing.id, { startDate, endDate, name: name.trim() });
+      } else {
+        await policyRulesApi.createBlackouts(spans, name.trim());
+      }
     },
     onSuccess: () => {
       const rejected = impact?.affected.filter((a) => a.action === "REJECT").length ?? 0;
@@ -127,7 +142,11 @@ export default function BlackoutSaveDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {!impact ? (
+        {!impact && initial ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> 겹치는 휴가를 확인하는 중…
+          </p>
+        ) : !impact ? (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
               <div className="space-y-1">
@@ -151,12 +170,13 @@ export default function BlackoutSaveDialog({
             {picking && (
               <DateRangePickerDialog
                 title="금지 기간 고르기"
-                initialStart={startDate || undefined}
-                initialEnd={endDate || undefined}
+                initialDates={startDate && endDate ? datesBetween(startDate, endDate) : []}
+                oneSpan
+                bridge="none"
                 excludeBlackoutId={editing?.id}
-                onPick={(s, e) => {
-                  setStartDate(s);
-                  setEndDate(e);
+                onPick={(_, picked) => {
+                  setStartDate(picked[0].startDate);
+                  setEndDate(picked[0].endDate);
                   setPicking(false);
                 }}
                 onClose={() => setPicking(false)}
@@ -171,7 +191,10 @@ export default function BlackoutSaveDialog({
         ) : (
           <div className="space-y-4">
             <div className="rounded-md bg-muted px-3 py-2 text-sm">
-              <b>{name}</b> · {startDate} ~ {endDate}
+              <b>{name}</b> · {editing ? `${startDate} ~ ${endDate}` : formatSpans(spans)}
+              {!editing && spans.length > 1 && (
+                <span className="ml-1 text-muted-foreground">(금지 기간 {spans.length}개로 나눠 저장)</span>
+              )}
               <span className="ml-2 text-muted-foreground">정책: {BLACKOUT_CONFLICT_LABEL[impact.mode]}</span>
             </div>
 
@@ -228,7 +251,7 @@ export default function BlackoutSaveDialog({
               취소
             </Button>
           )}
-          {!impact ? (
+          {!impact && initial ? null : !impact ? (
             <Button onClick={() => check()} disabled={!name.trim() || checking}>
               다음
             </Button>
@@ -245,6 +268,16 @@ export default function BlackoutSaveDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** start ~ end 의 모든 날짜(달력에서 기존 기간을 미리 골라 둘 때) */
+function datesBetween(start: string, end: string): string[] {
+  const out: string[] = [];
+  for (let d = new Date(`${start}T00:00:00Z`); d.toISOString().slice(0, 10) <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    out.push(d.toISOString().slice(0, 10));
+    if (out.length > 400) break;
+  }
+  return out;
 }
 
 function ImpactTable({ items }: { items: BlackoutImpactItem[] }) {

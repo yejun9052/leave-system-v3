@@ -3,11 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
 import QueryError from "@/components/QueryError";
 import LeaveDetailDialog from "./LeaveDetailDialog";
-import { Plus, CalendarDays, X } from "lucide-react";
+import { Plus, CalendarDays, CalendarRange, X } from "lucide-react";
 import { leaveApi } from "@/api/leave";
 import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +36,8 @@ import { extractErrorMessage } from "@/api/client";
 import { useAuthStore } from "@/store/auth";
 import { formatDays, formatLeaveAmount, formatSpecialRule } from "@/lib/leaveFormat";
 import { LeaveRequestFields, useLeaveRequestForm } from "./LeaveRequestForm";
+import { formatSpans, type DateSpan } from "@/lib/dateSpans";
+import DateRangePickerDialog from "@/features/calendar/DateRangePickerDialog";
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, "default" | "success" | "warning" | "destructive" | "secondary"> = {
   PENDING: "warning",
@@ -312,15 +313,18 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   );
 }
 
-/** 휴가 신청 창(내 휴가·대시보드에서 연다). */
+/**
+ * 휴가 신청 창(내 휴가·대시보드에서 연다). 날짜는 일정만 보이는 달력에서 누를 때마다 넣고 빼며,
+ * 떨어진 날짜는 나눠서 여러 건으로 신청한다(캘린더 화면과 같은 규칙).
+ */
 export function LeaveRequestDialog({ onClose, onSaved }: {
   onClose: () => void;
   onSaved: (warning?: string | null) => void;
 }) {
-  const today = todayString();
-  const [start, setStart] = useState(today);
-  const [end, setEnd] = useState(today);
-  const form = useLeaveRequestForm({ start, end, onSaved });
+  const [dates, setDates] = useState<string[]>([]);
+  const [spans, setSpans] = useState<DateSpan[]>([]);
+  const [picking, setPicking] = useState(false);
+  const form = useLeaveRequestForm({ spans, onSaved });
   const { isPartial } = form;
 
   return (
@@ -333,22 +337,21 @@ export function LeaveRequestDialog({ onClose, onSaved }: {
         <LeaveRequestFields
           form={form}
           dates={
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="leave-request-start">{isPartial ? "날짜" : "시작일"}</Label>
-                <Input id="leave-request-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+            <div className="space-y-2">
+              <Label>날짜</Label>
+              <div className="flex items-center gap-2">
+                <p className="flex-1 text-sm font-medium">
+                  {form.sendSpans.length > 0 ? formatSpans(form.sendSpans) : "고른 날짜 없음"}
+                </p>
+                <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>
+                  <CalendarRange className="h-4 w-4" /> 달력에서 고르기
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="leave-request-end">종료일</Label>
-                <Input
-                  id="leave-request-end"
-                  type="date"
-                  value={isPartial ? start : end}
-                  min={start}
-                  disabled={isPartial}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
-              </div>
+              {form.sendSpans.length > 1 && (
+                <p className="text-xs text-primary">
+                  떨어진 날짜는 나눠서 {form.sendSpans.length}건으로 신청합니다. 결재는 건마다 따로 합니다.
+                </p>
+              )}
             </div>
           }
         />
@@ -357,10 +360,25 @@ export function LeaveRequestDialog({ onClose, onSaved }: {
             취소
           </Button>
           <Button onClick={form.submit} disabled={!form.canSubmit}>
-            신청
+            {form.sendSpans.length > 1 ? `${form.sendSpans.length}건 신청` : "신청"}
           </Button>
         </DialogFooter>
       </DialogContent>
+      {picking && (
+        <DateRangePickerDialog
+          title={isPartial ? "신청할 날짜 고르기" : "신청할 날짜 고르기 (여러 날 가능)"}
+          initialDates={isPartial ? dates.slice(0, 1) : dates}
+          single={isPartial}
+          workdayOnly
+          bridge="workday"
+          onPick={(picked, pickedSpans) => {
+            setDates(picked);
+            setSpans(pickedSpans);
+            setPicking(false);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
     </Dialog>
   );
 }

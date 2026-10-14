@@ -3,7 +3,7 @@ import { CalendarRange, GripHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { formatDateWithWeekday, type DateSelection } from "./useDateSelection";
+import { formatSpans, type DateSpan } from "@/lib/dateSpans";
 
 const PANEL_WIDTH = 400;
 
@@ -141,47 +141,43 @@ export default function EntryPanel({
 }
 
 /**
- * 패널의 "기간" 칸: 달력에서 고른 기간과 안내. 모바일은 "날짜 바꾸기"로 선택 모드에 들어간다.
+ * 패널의 "날짜" 칸: 달력에서 고른 날짜(이어진 묶음으로 "10/11 ~ 10/13, 10/15")와 안내. 모바일은 "날짜 바꾸기"로 선택 모드에 들어간다.
  *
- * @param single 하루만 쓰는 입력(반차·시간차 등)이면 종료일을 보이지 않는다
+ * @param single    하루만 쓰는 입력(반차·시간차 등)
+ * @param splitNote 묶음이 둘 이상일 때의 안내(예: "2건으로 나눠 신청합니다")
  */
 export function SelectionPeriod({
-  selection,
+  spans,
   single = false,
   sheet,
+  splitNote,
   onChangeDates,
 }: {
-  selection: DateSelection;
+  spans: DateSpan[];
   single?: boolean;
   sheet: boolean;
+  splitNote?: string;
   onChangeDates?: () => void;
 }) {
-  const { start, end } = selection;
   const hint = single
     ? sheet
       ? "하루만 고릅니다."
       : "하루만 고릅니다. 다른 날짜를 누르면 그 날로 바뀝니다."
     : sheet
-      ? end === null
-        ? "이대로 저장하면 이 하루만입니다."
-        : null
-      : end === null
-        ? "달력에서 종료일을 누르면 기간이 됩니다. 이대로 저장하면 이 하루만입니다."
-        : "다른 날짜를 누르면 새로 선택합니다.";
+      ? null
+      : "달력에서 날짜를 누를 때마다 넣고 뺍니다.";
   return (
     <div className="space-y-1">
-      <Label>기간</Label>
+      <Label>날짜</Label>
       <div className="flex items-center gap-2">
-        <p className="flex-1 text-sm font-medium">
-          {formatDateWithWeekday(start)}
-          {!single && end !== null && end !== start && ` ~ ${formatDateWithWeekday(end)}`}
-        </p>
+        <p className="flex-1 text-sm font-medium">{spans.length > 0 ? formatSpans(spans) : "고른 날짜 없음"}</p>
         {onChangeDates && (
           <Button type="button" size="sm" variant="outline" onClick={onChangeDates}>
             <CalendarRange className="h-4 w-4" /> 날짜 바꾸기
           </Button>
         )}
       </div>
+      {!single && spans.length > 1 && splitNote && <p className="text-xs text-primary">{splitNote}</p>}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateLeaveData } from "@/lib/invalidate";
-import { leaveApi, type ApprovalRoute, type LeaveRequestCreate } from "@/api/leave";
+import { leaveApi, type ApprovalRoute, type LeaveEligibility, type LeaveRequestCreateMany } from "@/api/leave";
 import { HALF_DAY_LABEL, type HalfDayPart, type LeaveType } from "@/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { extractErrorMessage } from "@/api/client";
 import { formatDays } from "@/lib/leaveFormat";
+import { spanParam, type DateSpan } from "@/lib/dateSpans";
 import { cn } from "@/lib/utils";
 
 /** 캘린더 패널에서 마지막으로 고른 휴가 종류(id 만 저장) */
@@ -85,8 +86,8 @@ export function HalfDayPartSelect({
 }
 
 export interface LeaveRequestFormOptions {
-  start: string;
-  end: string;
+  /** 고른 날짜의 이어진 묶음(묶음마다 신청 한 건). 반차·시간차는 첫 날짜 하나만 보낸다 */
+  spans: DateSpan[];
   /** 마지막으로 고른 휴가 종류를 브라우저에 기억해 기본값으로 쓴다(캘린더 패널) */
   rememberType?: boolean;
   /** warning: 신청은 됐지만 결재할 인사관리자가 없는 경우 등의 안내(없으면 null) */
@@ -97,9 +98,11 @@ export type LeaveRequestFormState = ReturnType<typeof useLeaveRequestForm>;
 
 /**
  * 휴가 신청 입력·검증 상태. "내 휴가" 신청 다이얼로그와 캘린더 신청 패널이 함께 쓴다.
- * 날짜(start/end)는 호출하는 쪽이 관리하고, 부분 휴가(반차·시간차)면 종료일을 시작일로 본다.
+ * 날짜(이어진 묶음)는 호출하는 쪽이 관리하고, 부분 휴가(반차·시간차)면 첫 날짜 하나만 보낸다.
+ * 묶음이 여럿이면 신청이 여러 건 생기고, 하나라도 규칙에 걸리면 아무것도 신청하지 않는다(서버).
  */
-export function useLeaveRequestForm({ start, end, rememberType, onSaved }: LeaveRequestFormOptions) {
+export function useLeaveRequestForm({ spans, rememberType, onSaved }: LeaveRequestFormOptions) {
+  const start = spans[0]?.startDate ?? "";
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: types = [] } = useQuery({ queryKey: ["leaveTypes", "active"], queryFn: leaveApi.activeTypes });
@@ -131,7 +134,8 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
   // 종일이 아닌 종류(반차·시간차)와 반일 규정은 하루만 신청할 수 있다
   const isPartial = (!!selectedType && selectedType.portion !== "FULL") || halfDayRule;
   const isHourly = selectedType?.portion === "HOURLY";
-  const endDate = isPartial ? start : end;
+  const sendSpans: DateSpan[] = isPartial ? (start ? [{ startDate: start, endDate: start }] : []) : spans;
+  const spansKey = sendSpans.map(spanParam).join(",");
   const sentHalfDay = halfDayRule && halfDayPart ? halfDayPart : undefined;
 
   // 기억해 둔 종류가 더 이상 쓸 수 없는 종류면(정책 변경 등) 선택하지 않은 상태로 둔다
@@ -173,14 +177,13 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
   // 시간차는 시간을 고르기 전에도 가장 짧은 1시간으로 미리 물어 날짜 때문에 안 되는 경우(겹침 등)를 바로 알려 준다.
   // 1시간에 안 되면 더 긴 시간도 안 된다. 차감 요약은 시간을 고른 뒤에만 보여 준다.
   const previewHours = isHourly ? Number(hours || "1") : undefined;
-  const previewEnabled = !!selectedType && !!start && !!endDate && (!halfDayRule || !!halfDayPart);
+  const previewEnabled = !!selectedType && sendSpans.length > 0 && (!halfDayRule || !!halfDayPart);
   const { data: preview, isFetching: previewLoading } = useQuery({
-    queryKey: ["leavePreview", typeId, start, endDate, previewHours, specialRuleId, sentHalfDay],
+    queryKey: ["leavePreview", typeId, spansKey, previewHours, specialRuleId, sentHalfDay],
     queryFn: () =>
-      leaveApi.preview({
+      leaveApi.previewMany({
         leaveTypeId: Number(typeId),
-        startDate: start,
-        endDate,
+        spans: sendSpans,
         hours: previewHours,
         specialRuleId: specialRuleId ? Number(specialRuleId) : undefined,
         halfDayPart: sentHalfDay,
@@ -189,7 +192,8 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     placeholderData: (prev) => prev,
   });
   const eligibility = previewEnabled ? preview : undefined;
-  const forfeitDays = eligibility?.forfeitDays ?? 0;
+  // 병가·공가의 소멸은 첫 승인 때 한 번이라 첫 묶음 기준으로 안내한다
+  const forfeitDays = eligibility?.items[0]?.forfeitDays ?? 0;
   const notAllowed = !!eligibility && !eligibility.allowed;
 
   // 시작일을 바꿔(연도가 달라지는 등) 선택해 둔 종류가 불가해지면 선택을 해제한다
@@ -209,34 +213,38 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
   // 종류·날짜가 바뀌면 소멸 안내 확인을 다시 받는다
   useEffect(() => {
     setForfeitAck(false);
-  }, [typeId, start]);
+  }, [typeId, spansKey]);
 
   const save = useMutation({
     mutationFn: () => {
-      const body: LeaveRequestCreate = {
+      const body: LeaveRequestCreateMany = {
         leaveTypeId: Number(typeId),
-        startDate: start,
-        endDate,
+        spans: sendSpans,
         reason: reason || undefined,
         hours: isHourly ? Number(hours) : undefined,
         forfeitAcknowledged: forfeitDays > 0 ? true : undefined,
         specialRuleId: needsRule ? Number(specialRuleId) : undefined,
         halfDayPart: sentHalfDay,
       };
-      return leaveApi.create(body);
+      return leaveApi.createMany(body);
     },
-    onSuccess: (response) => {
-      toast({ title: "휴가를 신청했습니다.", description: response.requestWarning ?? undefined,
-        variant: response.requestWarning ? "default" : "success" });
+    onSuccess: (created) => {
+      const warning = created.find((r) => r.requestWarning)?.requestWarning ?? null;
+      toast({
+        title: created.length > 1 ? `휴가 ${created.length}건을 신청했습니다.` : "휴가를 신청했습니다.",
+        description: warning ?? undefined,
+        variant: warning ? "default" : "success",
+      });
       // 신청한 화면(내 휴가·대시보드·캘린더)과 상관없이 같은 목록을 새로 받는다
       invalidateLeaveData(qc);
-      onSaved(response.requestWarning);
+      onSaved(warning);
     },
     onError: (e) => toast({ title: extractErrorMessage(e), variant: "destructive" }),
   });
 
   const canSubmit =
     !!selectedType &&
+    sendSpans.length > 0 &&
     !save.isPending &&
     !previewLoading &&
     !!eligibility &&
@@ -247,6 +255,7 @@ export function useLeaveRequestForm({ start, end, rememberType, onSaved }: Leave
     (forfeitDays <= 0 || forfeitAck);
 
   return {
+    sendSpans,
     usableTypes,
     typeId,
     setTypeId,
@@ -403,37 +412,51 @@ export function LeaveRequestFields({ form, dates }: { form: LeaveRequestFormStat
 }
 
 /**
- * 차감 요약: "연차 차감 2일 · 2026-07-05 ~ 2027-07-04 기간 잔여 15일 (대기 1일) → 신청 후 12일".
+ * 차감 요약: "근무일 3일 · 연차 3일 차감 (2건)" + 연차 기간마다 "2026-07-05 ~ 2027-07-04 기간 잔여 15일 (대기 1일) → 신청 후 12일".
+ * 여러 묶음이면 합계를 보이고, 잔여·대기는 그 기간 첫 묶음, 신청 후는 마지막 묶음 값(앞 묶음 차감이 이미 들어감)이다.
  * 휴가가 기산일을 걸치면 기산일부터의 날짜분은 다음 연차 기간에서 빠진다고 따로 알려 준다.
  */
 function DeductionSummary({ form }: { form: LeaveRequestFormState }) {
   const { eligibility, selectedType, isPartial } = form;
-  if (!eligibility || !selectedType) return null;
-  const deduction = eligibility.deduction ?? 0;
-  const pending = eligibility.pendingDays ?? 0;
-  const after = eligibility.remainingAfter ?? 0;
-  const nextPart = eligibility.nextPeriodDeduction ?? 0;
-  const period = eligibility.periodStart && eligibility.periodEnd
-    ? `${eligibility.periodStart} ~ ${eligibility.periodEnd} 기간 `
-    : "";
+  const items = eligibility?.items ?? [];
+  if (items.length === 0 || !selectedType) return null;
+  const sum = (pick: (e: LeaveEligibility) => number | null) => items.reduce((s, e) => s + (pick(e) ?? 0), 0);
+  const deduction = sum((e) => e.deduction);
+  const workdays = sum((e) => e.workdays);
+  const nextPart = sum((e) => e.nextPeriodDeduction);
+  const nextFrom = items.find((e) => (e.nextPeriodDeduction ?? 0) > 0)?.periodEnd;
+  const groups = new Map<string, LeaveEligibility[]>();
+  for (const e of items) {
+    const key = `${e.periodStart ?? ""}~${e.periodEnd ?? ""}`;
+    groups.set(key, [...(groups.get(key) ?? []), e]);
+  }
   return (
     <div className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm">
       <p>
-        {!isPartial && eligibility.workdays != null && <>근무일 {eligibility.workdays}일 · </>}
+        {!isPartial && <>근무일 {workdays}일 · </>}
         {deduction > 0 ? `연차 ${formatDays(deduction)}일 차감` : "연차 차감 없음"}
+        {items.length > 1 && <span className="text-muted-foreground"> ({items.length}건)</span>}
       </p>
-      {deduction > 0 && (
+      {deduction > 0 &&
+        [...groups.values()].map((group) => {
+          const first = group[0];
+          const last = group[group.length - 1];
+          const pending = first.pendingDays ?? 0;
+          const after = last.remainingAfter ?? 0;
+          const period = first.periodStart && first.periodEnd ? `${first.periodStart} ~ ${first.periodEnd} 기간 ` : "";
+          return (
+            <p key={`${first.periodStart}`} className="text-muted-foreground">
+              {period}잔여 {formatDays(first.remainingDays)}일
+              {pending > 0 && ` (대기 ${formatDays(pending)}일)`} → 신청 후{" "}
+              <span className={cn("font-semibold", after < 0 ? "text-destructive" : "text-foreground")}>
+                {formatDays(after)}일
+              </span>
+            </p>
+          );
+        })}
+      {nextPart > 0 && nextFrom && (
         <p className="text-muted-foreground">
-          {period}잔여 {formatDays(eligibility.remainingDays)}일
-          {pending > 0 && ` (대기 ${formatDays(pending)}일)`} → 신청 후{" "}
-          <span className={cn("font-semibold", after < 0 ? "text-destructive" : "text-foreground")}>
-            {formatDays(after)}일
-          </span>
-        </p>
-      )}
-      {nextPart > 0 && eligibility.periodEnd && (
-        <p className="text-muted-foreground">
-          그중 {formatDays(nextPart)}일은 다음 연차 기간({nextDay(eligibility.periodEnd)}부터)에서 차감됩니다.
+          그중 {formatDays(nextPart)}일은 다음 연차 기간({nextDay(nextFrom)}부터)에서 차감됩니다.
         </p>
       )}
     </div>

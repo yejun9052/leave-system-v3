@@ -41,7 +41,7 @@ export default function MobileMonthView({
   month,
   focused,
   picking,
-  pickRange,
+  pickSpans,
   marks,
   holidayNames,
   query,
@@ -57,8 +57,8 @@ export default function MobileMonthView({
   focused: string;
   /** 신청 시트의 "날짜 바꾸기" 선택 모드인지 */
   picking: boolean;
-  /** 선택 모드에서 칠할 시작~종료(아직 안 골랐으면 null) */
-  pickRange: { start: string; end: string } | null;
+  /** 선택 모드에서 칠할 고른 날짜의 이어진 묶음(사이에 낀 주말·공휴일도 칠한다) */
+  pickSpans: { startDate: string; endDate: string }[];
   marks: Map<string, DayMark[]>;
   /** 공휴일 이름(날짜 숫자 빨강·읽어 주기용) */
   holidayNames: Map<string, string>;
@@ -210,7 +210,7 @@ export default function MobileMonthView({
           const saturday = weekdayLabel(date) === "토";
           const isToday = date === today;
           const isFocused = !picking && date === focused;
-          const inPick = picking && !!pickRange && date >= pickRange.start && date <= pickRange.end;
+          const inPick = picking && pickSpans.some((s) => date >= s.startDate && date <= s.endDate);
           const [, m, d] = date.split("-").map(Number);
           const label =
             `${m}월 ${d}일 ${weekdayLabel(date)}요일` +

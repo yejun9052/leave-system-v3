@@ -26,15 +26,18 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { formatDays } from "@/lib/leaveFormat";
+import { formatSpans, type DateSpan } from "@/lib/dateSpans";
 import { HALF_DAY_LABEL, type Employee, type HalfDayPart } from "@/types";
 import DateRangePickerDialog from "@/features/calendar/DateRangePickerDialog";
 import { HalfDayPartSelect } from "./LeaveRequestForm";
 
 /**
- * 휴가 직접 등록 입력과 등록. 기간(start, end)은 부르는 쪽이 정한다(등록 창의 날짜 칸, 캘린더 선택).
- * 반차·시간차·반일 규정이면 isPartial 이 켜지고 종료일은 시작일과 같게 보낸다.
+ * 휴가 직접 등록 입력과 등록. 날짜(이어진 묶음)는 부르는 쪽이 정한다(등록 창의 달력, 캘린더 선택).
+ * 묶음마다 등록 한 건(바로 승인)이고, 하나라도 걸리면 아무것도 등록하지 않는다.
+ * 반차·시간차·반일 규정이면 isPartial 이 켜지고 첫 날짜 하나만 보낸다.
  */
-export function useLeaveRegisterForm({ start, end, onDone }: { start: string; end: string; onDone: () => void }) {
+export function useLeaveRegisterForm({ spans, onDone }: { spans: DateSpan[]; onDone: () => void }) {
+  const start = spans[0]?.startDate ?? "";
   const qc = useQueryClient();
   const { toast } = useToast();
   const confirm = useConfirm();
@@ -72,7 +75,7 @@ export function useLeaveRegisterForm({ start, end, onDone }: { start: string; en
   // 종일이 아닌 종류(반차·시간차)와 반일 규정은 하루만 등록한다
   const isPartial = (!!selectedType && selectedType.portion !== "FULL") || halfDayRule;
   const isHourly = selectedType?.portion === "HOURLY";
-  const endDate = isPartial ? start : end;
+  const sendSpans: DateSpan[] = isPartial ? (start ? [{ startDate: start, endDate: start }] : []) : spans;
 
   useEffect(() => {
     setSpecialRuleId("");
@@ -84,19 +87,23 @@ export function useLeaveRegisterForm({ start, end, onDone }: { start: string; en
 
   const register = useMutation({
     mutationFn: (limitAcknowledged: boolean) =>
-      leaveApi.register({
+      leaveApi.registerMany({
         employeeId: employee!.id,
         leaveTypeId: Number(typeId),
-        startDate: start,
-        endDate,
+        spans: sendSpans,
         reason: reason.trim() || undefined,
         hours: isHourly ? Number(hours) : undefined,
         specialRuleId: needsRule ? Number(specialRuleId) : undefined,
         halfDayPart: halfDayRule && halfDayPart ? halfDayPart : undefined,
         limitAcknowledged: limitAcknowledged || undefined,
       }),
-    onSuccess: () => {
-      toast({ title: "휴가를 등록했습니다. 바로 승인 상태입니다.", variant: "success" });
+    onSuccess: (created) => {
+      toast({
+        title: created.length > 1
+          ? `휴가 ${created.length}건을 등록했습니다. 바로 승인 상태입니다.`
+          : "휴가를 등록했습니다. 바로 승인 상태입니다.",
+        variant: "success",
+      });
       invalidateLeaveData(qc);
       onDone();
     },
@@ -120,9 +127,7 @@ export function useLeaveRegisterForm({ start, end, onDone }: { start: string; en
   const canSubmit =
     !!employee &&
     !!selectedType &&
-    !!start &&
-    !!endDate &&
-    endDate >= start &&
+    sendSpans.length > 0 &&
     (!isHourly || !!hours) &&
     (!needsRule || !!specialRuleId) &&
     (!halfDayRule || !!halfDayPart) &&
@@ -130,7 +135,7 @@ export function useLeaveRegisterForm({ start, end, onDone }: { start: string; en
 
   const submit = async () => {
     if (!employee || !selectedType) return;
-    const period = start === endDate ? start : `${start} ~ ${endDate}`;
+    const period = formatSpans(sendSpans) + (sendSpans.length > 1 ? ` (${sendSpans.length}건)` : "");
     const rule = needsRule ? specialRules.find((r) => String(r.id) === specialRuleId)?.name : null;
     const ok = await confirm({
       title: "휴가를 직접 등록할까요?",
@@ -165,7 +170,7 @@ export function useLeaveRegisterForm({ start, end, onDone }: { start: string; en
     setHalfDayPart,
     isPartial,
     isHourly,
-    endDate,
+    sendSpans,
     hours,
     setHours,
     reason,
@@ -344,14 +349,15 @@ export function LeaveRegisterFields({ form, dates }: { form: LeaveRegisterFormSt
 
 /**
  * 인사관리자·시스템 관리자의 휴가 직접 등록: 다른 직원의 휴가를 바로 승인 상태로 등록한다.
- * 지난 날짜도 가능하지만 시작일은 근무일이어야 하고, 블랙아웃·사전 신청 기한은 적용하지 않는다(서버 검사).
- * 날짜는 직접 입력하거나 일정만 보이는 달력에서 고른다. 캘린더 화면에서는 날짜를 눌러 등록하는 패널을 쓴다.
+ * 지난 날짜도 가능하지만 근무일만 고르고, 블랙아웃·사전 신청 기한은 적용하지 않는다(서버 검사).
+ * 날짜는 일정만 보이는 달력에서 누를 때마다 넣고 뺀다. 떨어진 날짜는 나눠서 여러 건으로 등록한다.
+ * 캘린더 화면에서는 날짜를 눌러 등록하는 패널을 쓴다.
  */
 export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }) {
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [spans, setSpans] = useState<DateSpan[]>([]);
+  const [dates, setDates] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
-  const form = useLeaveRegisterForm({ start, end, onDone: onClose });
+  const form = useLeaveRegisterForm({ spans, onDone: onClose });
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -359,7 +365,7 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
         <DialogHeader>
           <DialogTitle>휴가 직접 등록</DialogTitle>
           <DialogDescription>
-            다른 직원의 휴가를 바로 승인 상태로 등록합니다. 지난 날짜도 등록할 수 있고, 시작일은 근무일이어야 합니다.
+            다른 직원의 휴가를 바로 승인 상태로 등록합니다. 지난 날짜도 등록할 수 있고, 근무일만 고를 수 있습니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -367,26 +373,18 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
           form={form}
           dates={
             <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="leave-register-start">{form.isPartial ? "날짜" : "시작일"}</Label>
-                  <Input id="leave-register-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="leave-register-end">종료일</Label>
-                  <Input
-                    id="leave-register-end"
-                    type="date"
-                    value={form.endDate}
-                    min={start || undefined}
-                    disabled={form.isPartial}
-                    onChange={(e) => setEnd(e.target.value)}
-                  />
-                </div>
+              <Label>날짜</Label>
+              <div className="flex items-center gap-2">
+                <p className="flex-1 text-sm font-medium">
+                  {form.sendSpans.length > 0 ? formatSpans(form.sendSpans) : "고른 날짜 없음"}
+                </p>
+                <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>
+                  <CalendarRange className="h-4 w-4" /> 달력에서 고르기
+                </Button>
               </div>
-              <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>
-                <CalendarRange className="h-4 w-4" /> 달력에서 고르기
-              </Button>
+              {form.sendSpans.length > 1 && (
+                <p className="text-xs text-primary">떨어진 날짜는 나눠서 {form.sendSpans.length}건으로 등록합니다.</p>
+              )}
             </div>
           }
         />
@@ -396,21 +394,22 @@ export default function LeaveRegisterDialog({ onClose }: { onClose: () => void }
             닫기
           </Button>
           <Button onClick={form.submit} disabled={!form.canSubmit}>
-            {form.pending && <Loader2 className="h-4 w-4 animate-spin" />} 등록
+            {form.pending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {form.sendSpans.length > 1 ? `${form.sendSpans.length}건 등록` : "등록"}
           </Button>
         </DialogFooter>
       </DialogContent>
       {picking && (
         <DateRangePickerDialog
-          title={form.isPartial ? "등록할 날짜 고르기" : "등록할 기간 고르기"}
-          initialStart={start || undefined}
-          initialEnd={form.endDate || undefined}
+          title={form.isPartial ? "등록할 날짜 고르기" : "등록할 날짜 고르기 (여러 날 가능)"}
+          initialDates={form.isPartial ? dates.slice(0, 1) : dates}
           single={form.isPartial}
-          workdayStart
+          workdayOnly
+          bridge="workday"
           employee={form.employee}
-          onPick={(s, e) => {
-            setStart(s);
-            setEnd(e);
+          onPick={(picked, pickedSpans) => {
+            setDates(picked);
+            setSpans(pickedSpans);
             setPicking(false);
           }}
           onClose={() => setPicking(false)}

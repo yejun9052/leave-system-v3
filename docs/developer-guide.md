@@ -240,6 +240,26 @@ cron 은 6칸(초 분 시 일 월 요일)으로 쓴다. 예: `0 0 1 * * *` = 매
 
 관련 코드: `leave/LeaveRequestService`, `common/exception/GlobalExceptionHandler`
 
+## 11-1. 여러 날짜 골라 신청 (묶음 신청)
+
+**여러 날짜 신청 = 달력에서 날짜를 누를 때마다 넣고 빼고, 이어진 날짜 묶음마다 신청(일정·금지 기간) 한 건을 한 번에 저장하는 방식이다.**
+
+- **묶는 곳은 화면**: `lib/dateSpans.ts` 의 `groupDates` 가 고른 날짜를 묶음(`DateSpan`, 시작일~종료일)으로 나눈다.
+  - 휴가·블랙아웃은 사이에 주말·공휴일만 있으면 이어진 것으로 본다(금+월 → 한 건).
+  - 일정은 바로 이어진 날만 묶는다.
+  - 묶음 사이의 공휴일을 보려고 고른 날짜의 연도 공휴일을 따로 불러온다(`useHolidaySet`).
+- **서버는 묶음 목록을 받는다**: 묶음마다 기존 단건 검증·저장을 그대로 돌리고, 한 트랜잭션이라 하나라도 걸리면 전부 되돌린다. 걸린 묶음은 사유 앞에 날짜를 붙인다(`DateSpan.label`).
+  - 휴가: `POST /api/leave-requests/batch`, 강제 등록 `POST /api/leave-requests/batch/register`, 미리보기 `GET /api/leave-requests/eligibility/batch?spans=2026-10-11~2026-10-13,2026-10-15`
+  - 일정: `POST /api/calendar/events/batch`
+  - 블랙아웃: `POST /api/policy/blackouts/batch`, 미리보기 `GET /api/policy/blackouts/impact/batch`
+- **잔액은 차례로**: 신청은 앞 묶음이 결재 대기로 저장된 뒤 다음 묶음을 검사한다. 미리보기는 저장하지 않으므로 앞 묶음의 차감을 결재 대기에 더해 계산한다(`plan` 의 `extraPending`). 그래서 미리보기와 실제 신청 결과가 같다.
+- **하루만 / 하나만**: 반차·시간차·반일 규정, 경조사 규정은 묶음 하나만 받는다.
+- **DB 구조는 그대로**: 신청 한 건은 지금처럼 시작일~종료일이다. 결재·취소·알림·메일도 건마다 따로다.
+- **블랙아웃 겹침**: 여러 묶음에 걸친 휴가는 한 번만 처리하고, 다시 신청하라는 안내는 어느 묶음에도 없는 근무일이 있을 때만 쓴다(`planBlackouts`, `applyBlackouts`).
+- **화면 확인 (2026-10-14)**: 복사본 DB로 데스크톱 29개·휴대폰 7개 항목을 확인했다(묶음 표시, 주말 거부, 다시 누르면 빠짐, 2건 신청, 금·월 한 건, 걸린 날짜 안내 후 아무것도 저장 안 됨, 반차 하루, 일정 2개, 금지 기간 2개, 강제 등록 2건, 내 휴가 창).
+
+결정 기록: `docs/decisions/2026-10-14-multi-date-selection.md`. 관련 코드: `lib/dateSpans.ts`, `features/calendar/useDateSelection.ts`, `common/dto/DateSpan`, `LeaveRequestService#createMany`·`eligibilityMany`.
+
 ## 12. 메일과 알림
 
 **메일 = 데이터 저장이 끝난 뒤(커밋 후) 별도 스레드에서 보내는 방식이다.**

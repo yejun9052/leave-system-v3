@@ -19,7 +19,8 @@ import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import { flattenDepartments } from "@/lib/departmentTree";
 import EntryPanel, { SelectionPeriod } from "./EntryPanel";
-import { todayString, type DateSelection } from "./useDateSelection";
+import { todayString } from "./useDateSelection";
+import { formatSpans, type DateSpan } from "@/lib/dateSpans";
 
 /** 일정 범위 선택지의 Select 값: "COMPANY" 또는 "DEPARTMENT:3" */
 function scopeKey(scope: string, departmentId: number | null | undefined): string {
@@ -27,7 +28,8 @@ function scopeKey(scope: string, departmentId: number | null | undefined): strin
 }
 
 /**
- * 회사·팀 일정 입력(제목·범위·색상)과 저장. 기간은 부르는 쪽이 정한다(수정 창의 날짜 칸, 캘린더 선택).
+ * 회사·팀 일정 입력(제목·범위·색상)과 저장. 날짜는 부르는 쪽이 정한다(수정 창의 날짜 칸, 캘린더 선택).
+ * 캘린더에서 여러 날짜를 고르면 spans(달력 날짜가 바로 이어진 묶음)마다 일정 하나를 한 번에 추가한다.
  *
  * @param event 수정할 일정. 없으면 추가
  */
@@ -35,11 +37,13 @@ function useEventForm({
   event,
   startDate,
   endDate,
+  spans,
   onSaved,
 }: {
   event: CalendarEventDto | null;
   startDate: string;
   endDate: string;
+  spans?: DateSpan[];
   onSaved: () => void;
 }) {
   const { toast } = useToast();
@@ -86,7 +90,23 @@ function useEventForm({
   });
 
   const save = useMutation({
-    mutationFn: () => (isEdit && event ? calendarApi.update(Number(event.id.slice(1)), body()) : calendarApi.create(body())),
+    mutationFn: async () => {
+      if (isEdit && event) {
+        await calendarApi.update(Number(event.id.slice(1)), body());
+      } else if (spans) {
+        const b = body();
+        await calendarApi.createMany({
+          title: b.title,
+          allDay: b.allDay,
+          scope: b.scope,
+          departmentId: b.departmentId,
+          colorHex: b.colorHex,
+          spans,
+        });
+      } else {
+        await calendarApi.create(body());
+      }
+    },
     onSuccess: () => {
       toast({ title: "저장되었습니다.", variant: "success" });
       onSaved();
@@ -95,9 +115,11 @@ function useEventForm({
   });
 
   const submit = async () => {
+    const period = spans ? formatSpans(spans) : `${startDate}${endDate !== startDate ? ` ~ ${endDate}` : ""}`;
+    const many = !isEdit && !!spans && spans.length > 1;
     const ok = await confirm({
-      title: isEdit ? "일정을 수정할까요?" : "일정을 추가할까요?",
-      description: `${title.trim()} (${startDate}${endDate !== startDate ? ` ~ ${endDate}` : ""}, ${selectedScope?.label ?? ""})`,
+      title: isEdit ? "일정을 수정할까요?" : many ? `일정 ${spans!.length}개를 추가할까요?` : "일정을 추가할까요?",
+      description: `${title.trim()} (${period}, ${selectedScope?.label ?? ""})`,
       confirmText: isEdit ? "수정" : "추가",
     });
     if (ok) save.mutate();
@@ -116,7 +138,11 @@ function useEventForm({
     selectedScope,
     previousScopeMissing,
     scopeDepth,
-    canSubmit: !!title.trim() && !!selectedScope && !!startDate && endDate >= startDate && !save.isPending,
+    canSubmit:
+      !!title.trim() &&
+      !!selectedScope &&
+      (spans ? spans.length > 0 : !!startDate && endDate >= startDate) &&
+      !save.isPending,
     submit,
   };
 }
@@ -245,9 +271,9 @@ export function EventDialog({
   );
 }
 
-/** 캘린더에서 고른 기간으로 회사·팀 일정 추가(팀장·인사관리자·시스템 관리자) */
+/** 캘린더에서 고른 날짜로 회사·팀 일정 추가(팀장·인사관리자·시스템 관리자). 바로 이어진 날짜끼리 일정 하나 */
 export function EventEntryPanel({
-  selection,
+  spans,
   variant = "floating",
   hidden,
   onChangeDates,
@@ -255,7 +281,7 @@ export function EventEntryPanel({
   onSaved,
   heading,
 }: {
-  selection: DateSelection;
+  spans: DateSpan[];
   variant?: "floating" | "sheet";
   hidden?: boolean;
   onChangeDates?: () => void;
@@ -265,8 +291,9 @@ export function EventEntryPanel({
 }) {
   const form = useEventForm({
     event: null,
-    startDate: selection.start,
-    endDate: selection.end ?? selection.start,
+    startDate: spans[0]?.startDate ?? "",
+    endDate: spans[spans.length - 1]?.endDate ?? "",
+    spans,
     onSaved,
   });
   return (
@@ -282,14 +309,21 @@ export function EventEntryPanel({
             취소
           </Button>
           <Button onClick={form.submit} disabled={!form.canSubmit}>
-            추가
+            {spans.length > 1 ? `${spans.length}개 추가` : "추가"}
           </Button>
         </>
       }
     >
       <EventFields
         form={form}
-        dates={<SelectionPeriod selection={selection} sheet={variant === "sheet"} onChangeDates={onChangeDates} />}
+        dates={
+          <SelectionPeriod
+            spans={spans}
+            sheet={variant === "sheet"}
+            splitNote={`떨어진 날짜는 나눠서 일정 ${spans.length}개로 추가합니다.`}
+            onChangeDates={onChangeDates}
+          />
+        }
       />
     </EntryPanel>
   );

@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { CALENDAR_VIEWS } from "@/lib/pageSections";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useArrowKeyNavigation } from "@/lib/useArrowKeyNavigation";
+import { formatSpans, groupDates, useHolidaySet } from "@/lib/dateSpans";
 import LeaveEntryPanel from "./LeaveEntryPanel";
 import { BlackoutEntryPanel, RegisterEntryPanel } from "./AdminEntryPanels";
 import { EventDialog, EventEntryPanel } from "./EventForm";
@@ -32,7 +33,6 @@ import MobileMonthView, { type DayMark } from "./MobileMonthView";
 import {
   PARTIAL_ONE_DAY_MESSAGE,
   addDays,
-  formatDateWithWeekday,
   isWeekend,
   localDateString,
   monthGridDates,
@@ -50,12 +50,20 @@ const ENTRY_MODES: { key: EntryMode; label: string; menuLabel: string }[] = [
   { key: "LEAVE", label: "휴가 신청", menuLabel: "이 날짜로 신청하기" },
   { key: "EVENT", label: "일정 추가", menuLabel: "이 날짜로 일정 추가하기" },
   { key: "REGISTER", label: "강제 등록", menuLabel: "이 날짜로 강제 등록하기" },
-  { key: "BLACKOUT", label: "블랙아웃 등록", menuLabel: "이 날짜부터 블랙아웃 등록하기" },
+  { key: "BLACKOUT", label: "블랙아웃 등록", menuLabel: "이 날짜로 블랙아웃 등록하기" },
 ];
 
-/** 휴가(신청·강제 등록)는 시작일이 근무일이어야 한다. 일정·블랙아웃은 아무 날이나 */
+/** 휴가(신청·강제 등록)는 근무일만 고른다. 일정·블랙아웃은 아무 날이나 */
 function needsWorkdayStart(mode: EntryMode): boolean {
   return mode === "LEAVE" || mode === "REGISTER";
+}
+
+/**
+ * 고른 날짜를 신청 한 건으로 묶는 규칙: 휴가·블랙아웃은 사이에 주말·공휴일만 있으면 이어진 것(금+월 → 한 건),
+ * 일정은 달력 날짜가 바로 이어져야 한 건(주말에도 있을 수 있어서). docs/decisions/2026-10-14-multi-date-selection.md
+ */
+function bridgesNonWorkdays(mode: EntryMode): boolean {
+  return mode !== "EVENT";
 }
 
 /** 공휴일과 같은 빨간색(서버가 공휴일 일정에 주는 색) */
@@ -228,13 +236,23 @@ export default function CalendarPage() {
   );
   const [entryMode, setEntryModeState] = useState<EntryMode>("LEAVE");
   const mode: EntryMode = entryModes.some((m) => m.key === entryMode) ? entryMode : "LEAVE";
-  // 블랙아웃·일정은 주말·공휴일부터 시작해도 된다. 휴가(신청·강제 등록)는 시작일이 근무일이어야 한다
-  const canStartOn = useCallback(
+  // 블랙아웃·일정은 주말·공휴일도 고를 수 있다. 휴가(신청·강제 등록)는 근무일만
+  const canPick = useCallback(
     (date: string) => !needsWorkdayStart(mode) || isWorkday(date),
     [mode, isWorkday],
   );
-  const selector = useDateSelection(canStartOn, notify);
-  const { selection } = selector;
+  const selector = useDateSelection(canPick, notify);
+  const { dates } = selector;
+  // 고른 날짜를 이어진 묶음으로(묶음마다 신청 한 건). 사이의 공휴일은 보이는 달 밖일 수 있어 그해 공휴일도 본다
+  const yearHolidays = useHolidaySet(dates);
+  const spans = useMemo(
+    () =>
+      groupDates(
+        dates,
+        bridgesNonWorkdays(mode) ? (d) => isWeekend(d) || holidays.has(d) || yearHolidays.has(d) : undefined,
+      ),
+    [dates, mode, holidays, yearHolidays],
+  );
   const [panelOpen, setPanelOpen] = useState(false);
   // 패널에서 반차·시간차를 고른 상태면 누를 때마다 그 하루만 선택한다
   const [partial, setPartial] = useState(false);
@@ -245,20 +263,17 @@ export default function CalendarPage() {
   const [viewMonth, setViewMonth] = useState(() => todayString().slice(0, 7));
   const [focused, setFocused] = useState(todayString);
   const [picking, setPicking] = useState(false);
-  const pickSnapshot = useRef<DateSelection | null>(null);
-  // 선택 모드에 들어온 뒤 아직 한 번도 누르지 않았으면 첫 탭을 시작일로 본다
-  const [pickFresh, setPickFresh] = useState(false);
+  const pickSnapshot = useRef<DateSelection>([]);
   // 이름 검색(모바일 돋보기·데스크톱 검색 칸): 불러온 일정에서 이름(제목)으로 거른다(화면에서만)
   const [query, setQuery] = useState("");
 
-  /** 신청 기간 고르기(데스크톱 날짜 클릭, 모바일 선택 모드 탭) */
+  /** 날짜 넣기/빼기(데스크톱 날짜 클릭, 모바일 선택 모드 탭). 다 빼면 패널을 닫는다 */
   const pickDate = (date: string) => {
     if (!canApply) return;
-    if (picking && pickFresh) {
-      if (selector.startAt(date)) setPickFresh(false);
-      return;
-    }
-    if (selector.pick(date, partial) && !picking) setPanelOpen(true);
+    const next = selector.toggle(date, partial);
+    if (next === null || picking) return;
+    if (next.length > 0) setPanelOpen(true);
+    else closePanel();
   };
 
   const onDateClick = (arg: DateClickArg) => pickDate(arg.dateStr);
@@ -341,7 +356,7 @@ export default function CalendarPage() {
     setMenu({ date, x: e.clientX, y: e.clientY });
   };
 
-  /** 그 날짜를 시작일로 선택을 새로 시작하고 패널을 연다. */
+  /** 그 날짜 하나로 선택을 새로 시작하고 패널을 연다. */
   const applyFrom = (date: string) => {
     setMenu(null);
     setDetailDate(null);
@@ -350,18 +365,17 @@ export default function CalendarPage() {
 
   const onPartialChange = (next: boolean) => {
     setPartial(next);
-    if (next && selector.collapseToStart()) notify(PARTIAL_ONE_DAY_MESSAGE);
+    if (next && selector.keepFirst()) notify(PARTIAL_ONE_DAY_MESSAGE);
   };
 
   // 모바일 날짜 선택 모드: 들어가기 전 선택을 기억해 두고 취소하면 되돌린다
   const startPicking = () => {
-    pickSnapshot.current = selection;
-    setPickFresh(true);
+    pickSnapshot.current = dates;
     setPicking(true);
   };
   const finishPicking = () => setPicking(false);
   const cancelPicking = () => {
-    selector.setSelection(pickSnapshot.current);
+    selector.setDates(pickSnapshot.current);
     setPicking(false);
   };
 
@@ -377,14 +391,18 @@ export default function CalendarPage() {
 
   /**
    * 패널 제목의 드롭다운으로 할 일을 바꾼다. 고른 날짜는 그대로 두고 입력 칸만 바뀐다.
-   * 블랙아웃·일정에서 주말·공휴일부터 고른 기간은 휴가(신청·강제 등록)로 쓸 수 없어 선택을 지운다.
+   * 블랙아웃·일정에서 고른 주말·공휴일은 휴가(신청·강제 등록)로 쓸 수 없어 뺀다(다 빠지면 닫는다).
    */
   const setEntryMode = (next: EntryMode) => {
     if (next === mode) return;
     setPartial(false); // 휴가 쪽 패널은 열리면서 반차·시간차 여부를 다시 알려 준다
-    if (needsWorkdayStart(next) && selection && !isWorkday(selection.start)) {
-      notify("시작일이 근무일이 아니라 날짜를 다시 골라 주세요.");
-      closePanel();
+    if (needsWorkdayStart(next)) {
+      const workdays = dates.filter(isWorkday);
+      if (workdays.length < dates.length) {
+        notify("주말·공휴일은 휴가로 고를 수 없어 뺐습니다.");
+        if (workdays.length === 0) closePanel();
+        else selector.setDates(workdays);
+      }
     }
     setEntryModeState(next);
   };
@@ -448,17 +466,17 @@ export default function CalendarPage() {
       });
     }
   }
-  if (selection) {
-    // 신청할 기간을 배경색으로 강조(배경 이벤트는 날짜 클릭을 막지 않는다)
+  // 고른 날짜를 묶음째 배경색으로 강조(사이에 낀 주말·공휴일도 같은 신청이라 같이 칠한다. 배경 이벤트는 날짜 클릭을 막지 않는다)
+  spans.forEach((s, i) => {
     calendarEvents.push({
-      id: "selection",
-      start: selection.start,
-      end: addDays(selection.end ?? selection.start, 1),
+      id: `selection-${i}`,
+      start: s.startDate,
+      end: addDays(s.endDate, 1),
       allDay: true,
       display: "background",
       backgroundColor: mode === "BLACKOUT" ? HOLIDAY_COLOR : "#4f46e5",
     });
-  }
+  });
 
   // 모바일 월 격자: 날짜별 점(공휴일·연차 제한·휴가·회사 일정)과 공휴일 이름
   const holidayNames = useMemo(() => {
@@ -605,11 +623,7 @@ export default function CalendarPage() {
             month={viewMonth}
             focused={focused}
             picking={picking}
-            pickRange={
-              picking && selection && !pickFresh
-                ? { start: selection.start, end: selection.end ?? selection.start }
-                : null
-            }
+            pickSpans={picking ? spans : []}
             marks={marks}
             holidayNames={holidayNames}
             query={query}
@@ -727,9 +741,9 @@ export default function CalendarPage() {
         />
       )}
 
-      {panelOpen && selection && mode === "LEAVE" && (
+      {panelOpen && dates.length > 0 && mode === "LEAVE" && (
         <LeaveEntryPanel
-          selection={selection}
+          spans={spans}
           heading={modeSelect}
           variant={isMobile ? "sheet" : "floating"}
           hidden={picking}
@@ -739,9 +753,9 @@ export default function CalendarPage() {
           onPartialChange={onPartialChange}
         />
       )}
-      {panelOpen && selection && mode === "REGISTER" && (
+      {panelOpen && dates.length > 0 && mode === "REGISTER" && (
         <RegisterEntryPanel
-          selection={selection}
+          spans={spans}
           heading={modeSelect}
           variant={isMobile ? "sheet" : "floating"}
           hidden={picking}
@@ -751,9 +765,9 @@ export default function CalendarPage() {
           onPartialChange={onPartialChange}
         />
       )}
-      {panelOpen && selection && mode === "BLACKOUT" && (
+      {panelOpen && dates.length > 0 && mode === "BLACKOUT" && (
         <BlackoutEntryPanel
-          selection={selection}
+          spans={spans}
           heading={modeSelect}
           variant={isMobile ? "sheet" : "floating"}
           hidden={picking}
@@ -762,9 +776,9 @@ export default function CalendarPage() {
           onSaved={closePanel}
         />
       )}
-      {panelOpen && selection && mode === "EVENT" && (
+      {panelOpen && dates.length > 0 && mode === "EVENT" && (
         <EventEntryPanel
-          selection={selection}
+          spans={spans}
           heading={modeSelect}
           variant={isMobile ? "sheet" : "floating"}
           hidden={picking}
@@ -777,26 +791,24 @@ export default function CalendarPage() {
         />
       )}
 
-      {picking && selection && (
+      {picking && (
         <div className="fixed inset-x-0 bottom-0 z-40 space-y-2 border-t bg-background p-4 shadow-xl">
           <p className="text-sm font-medium">
-            {pickFresh
-              ? "달력에서 시작일을 누르세요"
-              : formatDateWithWeekday(selection.start) +
-                (!partial && selection.end !== null && selection.end !== selection.start
-                  ? ` ~ ${formatDateWithWeekday(selection.end)}`
-                  : "")}
+            {dates.length > 0 ? formatSpans(spans) : "달력에서 날짜를 누르세요"}
+            {spans.length > 1 && <span className="ml-1 text-xs text-muted-foreground">({spans.length}건)</span>}
           </p>
           <p className="text-xs text-muted-foreground">
             {partial
               ? "반차·시간차는 날짜 하나를 누르세요."
-              : "첫 탭은 시작일, 두 번째 탭은 종료일입니다. 한 번 더 누르면 새로 고릅니다."}
+              : "누를 때마다 날짜를 넣고 뺍니다. 떨어진 날짜는 나눠서 따로 저장됩니다."}
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={cancelPicking}>
               취소
             </Button>
-            <Button onClick={finishPicking}>완료</Button>
+            <Button onClick={finishPicking} disabled={dates.length === 0}>
+              완료
+            </Button>
           </div>
         </div>
       )}

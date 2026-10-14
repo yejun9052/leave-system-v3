@@ -1,4 +1,5 @@
 import { api, unwrap } from "./client";
+import type { DateSpan } from "@/lib/dateSpans";
 import type { HalfDayPart, LeavePortion, LeaveRequestStatus } from "@/types";
 
 export interface CalendarEventDto {
@@ -76,6 +77,9 @@ export const calendarApi = {
   day: (date: string) => unwrap<DayDetailDto>(api.get("/calendar/day", { params: { date } })),
   create: (body: CalendarEventInput) =>
     unwrap<CalendarEventDto>(api.post("/calendar/events", body)),
+  /** 달력에서 여러 날짜를 골라 추가: 이어진 묶음마다 일정 하나(하나라도 걸리면 아무것도 저장하지 않음) */
+  createMany: (body: Omit<CalendarEventInput, "startDate" | "endDate"> & { spans: DateSpan[] }) =>
+    unwrap<CalendarEventDto[]>(api.post("/calendar/events/batch", body)),
   update: (id: number, body: CalendarEventInput) =>
     unwrap<CalendarEventDto>(api.put(`/calendar/events/${id}`, body)),
   remove: (id: number) => unwrap<void>(api.delete(`/calendar/events/${id}`)),
