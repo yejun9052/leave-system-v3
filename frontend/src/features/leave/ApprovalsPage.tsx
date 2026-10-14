@@ -391,8 +391,8 @@ function DecisionDialog({
             />
           </div>
         )}
-        {/* 결재 버튼은 왼쪽, 닫기는 오른쪽 끝에 따로(승인과 닫기를 헷갈려 누르지 않게) */}
-        <DialogFooter className="sm:justify-between">
+        {/* 결재 버튼은 왼쪽, 닫기는 오른쪽 끝에 따로(승인과 닫기를 헷갈려 누르지 않게). 휴대폰에서는 승인·반려 아래 맨 끝 */}
+        <DialogFooter className="flex-col sm:justify-between">
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             {rejecting ? (
               <Button variant="destructive" onClick={onReject} disabled={busy}>
