@@ -56,6 +56,18 @@ class LicenseEnforcementFilterTest {
     }
 
     @Test
+    void 경로를_인코딩해도_API로_보고_막는다() throws Exception {
+        when(licenseService.valid()).thenReturn(false);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(요청("/%61pi/employees"), response, chain);
+
+        assertThat(chain.getRequest()).isNull();
+        assertThat(response.getStatus()).isEqualTo(403);
+    }
+
+    @Test
     void 라이선스가_유효하지_않아도_라이선스_상태_조회는_통과시킨다() throws Exception {
         lenient().when(licenseService.valid()).thenReturn(false);
         MockFilterChain chain = new MockFilterChain();

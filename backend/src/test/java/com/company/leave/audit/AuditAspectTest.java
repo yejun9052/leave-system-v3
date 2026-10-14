@@ -224,6 +224,24 @@ class AuditAspectTest {
     }
 
     @Test
+    void 경로를_인코딩한_내보내기도_디코딩한_경로로_export로_남긴다() throws Throwable {
+        요청("GET", "/api/employees/%65xport");
+
+        aspect.aroundGet(pjp);
+
+        verify(auditService).record("export", "employees", null, "/api/employees/export", true);
+    }
+
+    @Test
+    void 경로를_인코딩한_변경도_디코딩한_경로의_동작과_대상으로_남긴다() throws Throwable {
+        요청("POST", "/%61pi/leave-requests/5/%61pprove");
+
+        aspect.around(pjp);
+
+        verify(auditService).record("approve", "leave-requests", "5", "/api/leave-requests/5/approve", true);
+    }
+
+    @Test
     void 내보내기가_아닌_조회는_남기지_않는다() throws Throwable {
         요청("GET", "/api/employees");
         when(pjp.proceed()).thenReturn("목록");

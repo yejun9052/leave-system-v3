@@ -1,5 +1,6 @@
 package com.company.leave.audit;
 
+import com.company.leave.common.web.RequestPaths;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -56,7 +57,8 @@ public class AuditAspect {
     @Around("postMapping() || putMapping() || patchMapping() || deleteMapping()")
     public Object around(ProceedingJoinPoint pjp) throws Throwable {
         HttpServletRequest request = currentRequest();
-        String uri = request != null ? request.getRequestURI() : pjp.getSignature().toShortString();
+        // 디코딩한 경로로 동작·대상을 정한다(/%65xport 처럼 인코딩해 기록 방식을 바꾸지 못하게)
+        String uri = request != null ? RequestPaths.of(request) : pjp.getSignature().toShortString();
         String httpMethod = request != null ? request.getMethod() : "CALL";
         boolean auth = uri.startsWith("/api/auth/");
         // 복원은 감사 로그 표도 되돌리므로 RestoreService 가 복원이 끝난 뒤 직접 기록한다
@@ -72,11 +74,11 @@ public class AuditAspect {
     @Around("getMapping()")
     public Object aroundGet(ProceedingJoinPoint pjp) throws Throwable {
         HttpServletRequest request = currentRequest();
-        String action = request == null ? null : fileActionOf(request.getRequestURI());
+        String action = request == null ? null : fileActionOf(RequestPaths.of(request));
         if (action == null) {
             return pjp.proceed();
         }
-        String uri = request.getRequestURI();
+        String uri = RequestPaths.of(request);
         String query = request.getQueryString();
         String detail = query == null ? uri : uri + "?" + URLDecoder.decode(query, StandardCharsets.UTF_8);
         return proceedAndRecord(pjp, action, uri, detail, true);

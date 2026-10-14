@@ -2,6 +2,7 @@ package com.company.leave.license;
 
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.common.web.RequestPaths;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -37,7 +38,7 @@ public class LicenseEnforcementFilter extends OncePerRequestFilter {
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain)
             throws ServletException, IOException {
-        String path = request.getRequestURI();
+        String path = RequestPaths.of(request); // 디코딩한 경로(인코딩으로 검사를 피하지 못하게)
         boolean apiCall = path.startsWith("/api/");
         boolean whitelisted = path.startsWith("/api/license");
 

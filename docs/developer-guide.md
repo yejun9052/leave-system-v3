@@ -23,8 +23,9 @@
 - **CSRF 방지**: 서버가 준 `XSRF-TOKEN` 쿠키 값을 화면이 `X-XSRF-TOKEN` 헤더에 실어 보낸다. 다른 사이트가 몰래 요청을 보내도 통과하지 못한다.
 - **세션 고정 방지**: 로그인할 때 이전 세션을 버리고 세션 ID와 CSRF 토큰을 새로 발급한다.
 - **역할 재확인**: 역할·재직 상태는 세션에 저장된 값을 믿지 않고 요청마다 DB에서 다시 읽는다(`AccountStateFilter`). 역할을 바꾸면 다음 요청부터 바로 적용된다.
+- **경로 판단은 디코딩한 값으로**: 필터·감사 기록·실시간 신호가 "어느 API인지" 볼 때는 `common/web/RequestPaths.of(request)`를 쓴다. `getRequestURI()`는 디코딩 전 값이라 `/%61pi/...`처럼 한 글자만 인코딩해도 `/api/`가 아닌 것으로 보여 검사를 건너뛴다(2026-10-14 점검 H1). 그에 더해 경로에 영문·숫자·`-._~`를 인코딩한 요청은 `security/EncodedPathRejectFilter`가 400으로 막는다(한글·쿼리는 그대로).
 
-관련 코드: `config/SecurityConfig`, `auth/AuthService`, `security/AccountStateFilter`
+관련 코드: `config/SecurityConfig`, `auth/AuthService`, `security/AccountStateFilter`, `security/EncodedPathRejectFilter`, `common/web/RequestPaths`
 
 ## 2. 로그인 세션 만료 (자동 로그아웃)
 

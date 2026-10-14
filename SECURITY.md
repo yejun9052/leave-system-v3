@@ -122,6 +122,7 @@ cp backend/build/libs/backend-obf.jar backend/app.jar   # 배포용 jar 를 난�
   - **재설정 링크**: 토큰은 SHA-256 해시만 저장, 30분 유효·1회용, 새 토큰 발급 시 이전 토큰 무효화, 비밀번호 찾기 응답은 계정 존재 여부와 무관하게 동일(계정 존재 비노출), 이메일당 1시간 3회 제한
   - **새 비밀번호 규칙**(내 비밀번호 변경·재설정 링크, `PasswordPolicy`, 화면 `passwordSchema.ts` 도 같은 규칙): 8자 이상, UTF-8 72바이트 이하(BCrypt 한도, 한글 24자. 넘으면 500 대신 안내), 영문·숫자·그 밖의 문자 중 2종류 이상, 아이디(이메일 @ 앞부분) 포함 금지. 이미 쓰고 있는 비밀번호는 다시 검사하지 않는다. 규칙에 안 맞으면 재설정 링크를 쓰지 않은 채로 둔다
   - 비밀번호 변경·재설정 시 **다른 세션 종료**(변경 시 현재 세션 ID 재발급, 재설정 시 해당 사용자의 모든 세션 종료)
+- **경로 인코딩 우회 방지**: 계정 상태·라이선스·점검 필터와 감사 기록·실시간 신호는 디코딩한 경로(`RequestPaths`)로 판단한다. 경로에 영문·숫자·`-._~` 를 퍼센트 인코딩한 요청(`/%61pi/...`, `/%65xport`)은 400(`EncodedPathRejectFilter`)
 - **로그인 브루트포스 방어**: 접속 IP당 10회 연속 실패 시 그 IP의 로그인 시도를 15분 차단(HTTP 429, 남은 시간 안내). 계정은 잠그지 않아 다른 사람이 남의 아이디로 일부러 틀려도 본인 로그인은 막히지 않는다. IP 는 Caddy 의 X-Forwarded-For 기준이며 서버 재시작 시 기록이 지워진다. 마지막 실패 뒤 15분 동안 더 틀리지 않으면 실패 횟수를 잊는다. 로그인에 성공하면 그 아이디로 틀린 횟수만 지운다(다른 아이디로 틀린 횟수는 남아, 남의 비밀번호를 틀리다가 자기 계정으로 로그인해 횟수를 지우는 우회를 막는다)
   - 접속 IP 판단: `forward-headers-strategy: native`(Tomcat RemoteIpValve)라 사설망 프록시(Caddy)가 보낸 X-Forwarded-For 만 믿는다. 클라이언트가 넣은 `Forwarded` 헤더는 쓰지 않고, Caddy 도 지운다(`header_up -Forwarded`) — IP 를 바꿔 가며 차단을 피하거나 남의 IP 를 잠그는 것을 막는다
 - **보안 응답 헤더**: Content-Security-Policy, Referrer-Policy, Permissions-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff

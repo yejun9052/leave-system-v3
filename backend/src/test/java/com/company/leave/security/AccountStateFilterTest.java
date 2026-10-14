@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.EmployeeStatus;
+import com.company.leave.employee.domain.Role;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -95,6 +96,37 @@ class AccountStateFilterTest {
         실행("GET", "/api/leave-requests/me", chain);
 
         assertThat(chain.getRequest()).isNotNull();
+    }
+
+    @Test
+    void 경로를_인코딩해도_디코딩한_경로로_보고_비밀번호_변경_전이면_막는다() throws Exception {
+        세션_로그인(직원(EmployeeStatus.ACTIVE, true));
+
+        MockFilterChain chain = new MockFilterChain();
+        MockHttpServletResponse response = 실행("GET", "/%61pi/employees", chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString(StandardCharsets.UTF_8)).contains("PASSWORD_CHANGE_REQUIRED");
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
+    void 경로를_인코딩해도_역할을_DB에서_다시_읽어_강등이_바로_반영된다() throws Exception {
+        // 로그인할 때는 인사관리자, 지금 DB 에서는 사원
+        Employee atLogin = 직원(EmployeeStatus.ACTIVE, false);
+        atLogin.changeRole(Role.HR_ADMIN);
+        UserPrincipal sessionPrincipal = UserPrincipal.from(atLogin);
+        SecurityContextHolder.getContext().setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                sessionPrincipal, null, sessionPrincipal.getAuthorities()));
+        when(userDetailsService.loadById(EMPLOYEE_ID)).thenReturn(UserPrincipal.from(직원(EmployeeStatus.ACTIVE, false)));
+
+        MockFilterChain chain = new MockFilterChain();
+        실행("GET", "/%61pi/employees", chain);
+
+        assertThat(chain.getRequest()).isNotNull();
+        assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
+                .extracting(Object::toString)
+                .doesNotContain("ROLE_HR_ADMIN");
     }
 
     @Test

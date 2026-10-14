@@ -1,6 +1,7 @@
 package com.company.leave.security;
 
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.common.web.RequestPaths;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -54,8 +55,8 @@ public class AccountStateFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        // 정적 자원(SPA)은 세션 조회가 필요 없음
-        return !request.getRequestURI().startsWith("/api/");
+        // 정적 자원(SPA)은 세션 조회가 필요 없음. 디코딩한 경로로 본다(/%61pi/... 로 이 검사를 건너뛰지 못하게)
+        return !RequestPaths.of(request).startsWith("/api/");
     }
 
     @Override
@@ -82,7 +83,7 @@ public class AccountStateFilter extends OncePerRequestFilter {
         }
 
         if (fresh.isPasswordChangeRequired()
-                && !ALLOWED_BEFORE_PASSWORD_CHANGE.contains(request.getMethod() + " " + request.getRequestURI())) {
+                && !ALLOWED_BEFORE_PASSWORD_CHANGE.contains(request.getMethod() + " " + RequestPaths.of(request))) {
             authEntryPoints.write(response, ErrorCode.PASSWORD_CHANGE_REQUIRED);
             return;
         }

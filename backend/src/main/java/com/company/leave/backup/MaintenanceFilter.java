@@ -2,6 +2,7 @@ package com.company.leave.backup;
 
 import com.company.leave.common.dto.ApiResponse;
 import com.company.leave.common.exception.ErrorCode;
+import com.company.leave.common.web.RequestPaths;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,7 +16,6 @@ import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.UrlPathHelper;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -31,8 +31,6 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class MaintenanceFilter extends OncePerRequestFilter {
 
-    private static final UrlPathHelper PATHS = new UrlPathHelper();
-
     static final String STATUS_PATH = "/api/backups/status";
 
     private final MaintenanceMode maintenance;
@@ -47,7 +45,7 @@ public class MaintenanceFilter extends OncePerRequestFilter {
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
                                     @NonNull FilterChain chain) throws ServletException, IOException {
         // 디코딩한 경로로 판단한다(인코딩한 /%61pi/... 로 점검 모드를 피하지 못하게)
-        String path = PATHS.getPathWithinApplication(request);
+        String path = RequestPaths.of(request);
         if (!path.startsWith("/api/")) {
             chain.doFilter(request, response);
             return;

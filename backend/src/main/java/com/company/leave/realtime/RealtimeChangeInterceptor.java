@@ -1,5 +1,6 @@
 package com.company.leave.realtime;
 
+import com.company.leave.common.web.RequestPaths;
 import com.company.leave.security.SecurityUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -36,7 +37,7 @@ public class RealtimeChangeInterceptor implements HandlerInterceptor {
             return;
         }
         String origin = request.getHeader(CLIENT_ID_HEADER);
-        String path = request.getRequestURI();
+        String path = RequestPaths.of(request);
         if (PERSONAL.stream().anyMatch(path::startsWith)) {
             Long me = currentEmployeeIdOrNull();
             if (me != null) {
