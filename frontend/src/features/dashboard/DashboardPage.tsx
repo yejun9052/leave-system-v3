@@ -22,7 +22,7 @@ import { leaveApi } from "@/api/leave";
 import { holidayApi, type Holiday } from "@/api/holidays";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
-import { formatDays, formatLeaveAmount } from "@/lib/leaveFormat";
+import { formatDays, formatGrantSummary, formatLeaveAmount } from "@/lib/leaveFormat";
 import { LEAVE_STATUS_LABEL, type LeaveRequest, type LeaveRequestStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,7 +103,9 @@ function PersonalSection() {
   const dDay = nextStart ? daysFromToday(nextStart) : null;
   const pending = data?.pendingCount ?? 0;
   const team = data?.teamOnLeaveToday ?? 0;
+  // 이번 기간에 쓸 수 있는 연차: 부여 + 이월(지난 기간에 당겨쓴 연차가 있으면 이월이 음수라 그만큼 줄어든다)
   const granted = (b?.granted ?? 0) + (b?.carriedOver ?? 0);
+  const borrowed = Math.max(-(b?.carriedOver ?? 0), 0);
 
   // 실패하면 잔여 0일·대기 0건이 정상 값처럼 보이고 팀 일정이 계속 "불러오는 중…"이라, 따로 불러오는 카드만 두고 오류를 알린다
   if (isError) {
@@ -122,7 +124,7 @@ function PersonalSection() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi icon={CalendarCheck2} label="잔여 연차" value={`${formatDays(b?.remaining)}일`} accent
-          sub={`이번 기간 부여 ${formatDays(granted)}일`} />
+          sub={formatGrantSummary({ granted: b?.granted ?? 0, carriedOver: b?.carriedOver ?? 0 })} />
         <Kpi icon={Inbox} label="결재 대기" value={`${pending}건`}
           sub={pending > 0 ? <><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" />내 새 신청 승인 대기</> : "대기 중인 새 신청이 없어요"} />
         <Kpi icon={CalendarClock} label="기산일 D-DAY" valueClassName="text-primary"
@@ -135,7 +137,7 @@ function PersonalSection() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <RecentRequests className="lg:col-span-3" />
         <UsageDonut className="lg:col-span-2" used={b?.used ?? 0} remaining={b?.remaining ?? 0}
-          expired={b?.expired ?? 0} granted={granted} periodEnd={b?.periodEnd} />
+          expired={b?.expired ?? 0} granted={granted} borrowed={borrowed} periodEnd={b?.periodEnd} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
@@ -266,12 +268,14 @@ function RecentRequests({ className }: { className?: string }) {
   );
 }
 
-function UsageDonut({ className, used, remaining, expired, granted, periodEnd }: {
+function UsageDonut({ className, used, remaining, expired, granted, borrowed, periodEnd }: {
   className?: string;
   used: number;
   remaining: number;
   expired: number;
   granted: number;
+  /** 지난 기간에 당겨써서 이번 기간에서 갚은 연차(0이면 표시 안 함) */
+  borrowed: number;
   periodEnd?: string;
 }) {
   const rate = granted > 0 ? Math.round((used / granted) * 100) : 0;
@@ -308,6 +312,9 @@ function UsageDonut({ className, used, remaining, expired, granted, periodEnd }:
             <Legend color="bg-primary" label="사용" value={used} />
             <Legend color="bg-primary/15" label="잔여" value={remaining} />
             {expired > 0 && <Legend color="bg-muted-foreground/35" label="소멸" value={expired} />}
+            {borrowed > 0 && (
+              <p className="text-xs text-muted-foreground">총 부여에서 당겨쓴 연차 {formatDays(borrowed)}일을 뺐습니다</p>
+            )}
             <div className="border-t pt-3">
               <p className="text-sm text-muted-foreground">연차 사용률</p>
               <p className="text-3xl font-bold text-primary">{rate}%</p>

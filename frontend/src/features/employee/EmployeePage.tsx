@@ -12,6 +12,8 @@ import {
   Download,
 } from "lucide-react";
 import { employeeApi, type EmployeeCreate } from "@/api/employees";
+import { leaveApi } from "@/api/leave";
+import { formatDays } from "@/lib/leaveFormat";
 import { departmentApi } from "@/api/departments";
 import DepartmentFilter from "@/components/DepartmentFilter";
 import { flattenDepartments, type DepartmentOption } from "@/lib/departmentTree";
@@ -326,9 +328,15 @@ export default function EmployeePage() {
                             variant="ghost"
                             title="퇴사 처리"
                             onClick={async () => {
+                              // 당겨쓴 연차(잔여 음수)가 남아 있으면 알린다. 시스템은 표시만 하고 정산은 따로(막지 않음)
+                              const balance = await leaveApi.employeeBalance(e.id).catch(() => null);
                               const ok = await confirm({
                                 title: `${e.name} 님을 퇴사 처리할까요?`,
                                 description: "퇴사 처리하면 즉시 로그아웃되고 더 이상 로그인할 수 없습니다.",
+                                warning:
+                                  balance && balance.remaining < 0
+                                    ? `당겨쓴 연차 ${formatDays(-balance.remaining)}일이 남아 있습니다. 급여 정산 등은 따로 처리해 주세요.`
+                                    : undefined,
                                 confirmText: "퇴사 처리",
                                 destructive: true,
                               });

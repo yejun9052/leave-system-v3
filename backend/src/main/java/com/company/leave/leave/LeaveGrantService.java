@@ -147,12 +147,22 @@ public class LeaveGrantService {
      * 두 번 이월되지 않고, 지난 기간 휴가가 취소돼 돌아온 연차는 한도까지 이월에 더해지고 나머지는 소멸한다.
      * 지난 기간 날짜로 결재 대기 중인 신청의 몫은 이월·소멸하지 않고 남겨 둔다: 기산일 뒤에 승인돼도 잔여가 있어야 한다.
      * 반려·취소되면 그 몫이 다음 배치에서 이월·소멸된다.
+     *
+     * <p>당겨쓴 연차(마이너스 잔여)는 이번 기간 carriedOver 에 음수로 넣어 갚는다. 이월 허용·한도, 마이너스 허용 정책과
+     * 상관없이 항상(docs/decisions/2026-10-13-negative-leave-repayment.md). 지난 기간 기록은 그대로 음수로 남아(양수 이월과
+     * 같은 방식) 매일 다시 계산해도 두 번 빠지지 않는다. 판단은 승인된 것만 본다(결재 대기는 승인된 뒤 다음 배치에서).
+     * carriedOver 는 경우마다 덮어쓴다: 지난 기간 휴가가 취소돼 갚을 것이 없어지면 0 또는 양수 이월로 돌아간다.
      */
     private void applyCarryOver(Long employeeId, int year, LeavePolicy policy, LeaveBalance current) {
         balanceRepository.findByEmployeeIdAndYear(employeeId, year - 1).ifPresent(prev -> {
+            if (prev.remaining().signum() < 0) {
+                current.setCarriedOver(prev.remaining());
+                return;
+            }
             BigDecimal pending = requestRepository.sumPendingDeductedDays(employeeId, year - 1).max(BigDecimal.ZERO);
             BigDecimal settle = prev.remaining().subtract(pending);
             if (settle.signum() <= 0) {
+                current.setCarriedOver(BigDecimal.ZERO);
                 return;
             }
             if (policy.isCarryOverEnabled()) {

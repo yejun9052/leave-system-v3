@@ -206,6 +206,20 @@ class LeaveRequestServicePeriodTest {
     }
 
     @Test
+    void 지금_기간에_당겨쓴_연차가_있으면_다음_기간_예약_가능_일수도_그만큼_줄어든다() {
+        // 지금 기간 잔여 -2(마이너스 허용을 켰다가 끈 경우 등): 다음 기간이 시작되면 2일을 갚으므로 예상 16일 중 14일만
+        잔액(지금_기간).setGranted(new BigDecimal("15"));
+        잔액(지금_기간).addUsed(new BigDecimal("17"));
+        잔액(지금_기간 + 1).addUsed(new BigDecimal("14"));
+
+        assertThatThrownBy(() -> 신청(화, 화))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INSUFFICIENT_LEAVE_BALANCE);
+                    assertThat(ex.getMessage()).contains("예약 가능 0일");
+                });
+    }
+
+    @Test
     void 다음_기간이_끝난_뒤의_날짜는_신청할_수_없다() {
         LocalDate 다다음_기간 = 기산일.plusYears(1).plusDays(1); // 화요일 근처, 시작일 검사보다 범위 검사가 먼저
 

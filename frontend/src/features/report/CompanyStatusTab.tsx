@@ -161,6 +161,9 @@ function EmployeeUsageTable() {
                       {r.carriedOver > 0 && (
                         <span className="text-muted-foreground"> + {formatDays(r.carriedOver)}일</span>
                       )}
+                      {r.carriedOver < 0 && (
+                        <span className="text-muted-foreground"> − 당겨쓴 {formatDays(-r.carriedOver)}일</span>
+                      )}
                     </TableCell>
                     <TableCell>{formatDays(r.used)}일</TableCell>
                     <TableCell className="font-medium">{formatDays(r.remaining)}일</TableCell>

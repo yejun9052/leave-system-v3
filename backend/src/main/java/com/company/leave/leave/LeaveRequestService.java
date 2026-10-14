@@ -1207,7 +1207,7 @@ public class LeaveRequestService {
 
     /**
      * year 연차 기간에서 쓸 수 있는 연차(결재 대기는 빼지 않음). 지난·지금 기간은 잔액,
-     * 아직 시작 전인 다음 기간은 예상 부여 일수(이월 제외)에서 이미 승인된 예약분을 뺀 값.
+     * 아직 시작 전인 다음 기간은 예상 부여 일수(이월 제외, 지금 기간에 당겨쓴 연차는 뺌)에서 이미 승인된 예약분을 뺀 값.
      * 입사일이 없으면 기간을 예측할 수 없어 잔액으로 본다.
      */
     private BigDecimal available(Employee employee, int year, LeavePolicy policy) {
@@ -1215,7 +1215,11 @@ public class LeaveRequestService {
         if (hireDate == null || year <= periods.currentYear(hireDate, policy)) {
             return balanceService.getOrCreate(employee.getId(), year).remaining();
         }
-        BigDecimal expected = periods.entitlement(hireDate, year, policy);
+        // 지금 기간에 당겨쓴 연차(마이너스 잔여)가 있으면 그 기간이 시작될 때 갚으므로 예상치에서 미리 뺀다
+        BigDecimal borrowed = balanceService.find(employee.getId(), year - 1)
+                .map(b -> b.remaining().min(BigDecimal.ZERO))
+                .orElse(BigDecimal.ZERO);
+        BigDecimal expected = periods.entitlement(hireDate, year, policy).add(borrowed);
         return balanceService.find(employee.getId(), year)
                 .map(b -> expected.subtract(b.getUsed()).subtract(b.getExpired()))
                 .orElse(expected);

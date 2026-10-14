@@ -22,7 +22,7 @@ import {
 import { useAuthStore } from "@/store/auth";
 import { useRealtime } from "@/lib/useRealtime";
 import { dashboardApi } from "@/api/dashboard";
-import { formatDays } from "@/lib/leaveFormat";
+import { formatDays, formatGrantSummary } from "@/lib/leaveFormat";
 import { ROLE_LABEL, type Role } from "@/types";
 import { cn } from "@/lib/utils";
 import {
@@ -208,7 +208,7 @@ function SidebarSummary({ onNavigate }: { onNavigate: () => void }) {
           <p className="text-xs text-muted-foreground">잔여 연차</p>
           <p className="text-lg font-bold leading-tight text-primary">{formatDays(b.remaining)}일</p>
           <p className="truncate text-xs text-muted-foreground">
-            이번 기간 부여 {formatDays(b.granted + b.carriedOver)}일
+            {formatGrantSummary(b)}
           </p>
         </div>
       </Link>

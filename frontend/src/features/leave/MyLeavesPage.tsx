@@ -143,6 +143,7 @@ export default function MyLeavesPage() {
       {balance?.periodStart && (
         <p className="-mt-2 text-sm text-muted-foreground">
           연차 사용 기간 {balance.periodStart} ~ {balance.periodEnd}
+          {balance.carriedOver < 0 && ` · 지난 기간에 당겨쓴 연차 ${formatDays(-balance.carriedOver)}일 차감`}
           {balance.nextPeriodReserved > 0 && ` · 다음 기간 예약 ${formatDays(balance.nextPeriodReserved)}일`}
         </p>
       )}

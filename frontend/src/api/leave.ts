@@ -136,6 +136,10 @@ export const leaveApi = {
     unwrap<LeaveBalance>(api.get("/leave-requests/balances/me", { params: { year } })),
   myBalanceHistory: () =>
     unwrap<LeaveBalance[]>(api.get("/leave-requests/balances/me/history")),
+
+  /** 직원의 지금 연차 기간 잔액(인사관리자·시스템 관리자, 퇴사 처리 경고 등) */
+  employeeBalance: (employeeId: number) =>
+    unwrap<LeaveBalance>(api.get(`/leave-requests/balances/${employeeId}`)),
 };
 
 export const notificationApi = {

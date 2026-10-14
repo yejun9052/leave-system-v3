@@ -211,6 +211,120 @@ class LeaveGrantServicePeriodTest {
         assertThat(지난.getExpired()).isEqualByComparingTo("2");
     }
 
+    // --- 당겨쓴 연차(마이너스 잔여) 갚기 ---
+
+    @Test
+    void 기념일에_지난_기간에_당겨쓴_연차는_새_기간_이월에_음수로_넘어가_잔여가_줄어든다() {
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "18"); // -2
+
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-2");
+        assertThat(잔액(지금_기간).remaining()).isEqualByComparingTo("14");
+        assertThat(지난.remaining()).as("지난 기간 기록은 그대로").isEqualByComparingTo("-2");
+        assertThat(지난.getExpired()).isZero();
+    }
+
+    @Test
+    void 배치를_여러_번_돌려도_당겨쓴_연차는_한_번만_빠진다() {
+        사용(지금_기간 - 1, "16", "18");
+
+        service.grantCurrentPeriods();
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-2");
+        assertThat(잔액(지금_기간).remaining()).isEqualByComparingTo("14");
+    }
+
+    @Test
+    void 이월을_끄거나_이월_한도가_작아도_당겨쓴_연차는_그대로_갚는다() {
+        ReflectionTestUtils.setField(policy, "carryOverEnabled", true);
+        ReflectionTestUtils.setField(policy, "maxCarryOverDays", new BigDecimal("1"));
+        사용(지금_기간 - 1, "16", "19"); // -3
+
+        service.grantCurrentPeriods();
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-3");
+
+        ReflectionTestUtils.setField(policy, "carryOverEnabled", false);
+        service.grantCurrentPeriods();
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-3");
+    }
+
+    @Test
+    void 마이너스_연차_허용을_꺼도_이미_당겨쓴_연차는_갚는다() {
+        ReflectionTestUtils.setField(policy, "allowNegative", false);
+        사용(지금_기간 - 1, "16", "18");
+
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-2");
+    }
+
+    @Test
+    void 기산일_뒤_지난_기간_휴가가_취소돼_잔여가_양수가_되면_갚을_것이_없어지고_양수_이월로_돌아간다() {
+        ReflectionTestUtils.setField(policy, "carryOverEnabled", true);
+        ReflectionTestUtils.setField(policy, "maxCarryOverDays", new BigDecimal("5"));
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "18"); // -2
+        service.grantCurrentPeriods();
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-2");
+
+        지난.restoreUsed(new BigDecimal("3")); // 3일 휴가 취소 → 지난 기간 잔여 +1
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("1");
+        assertThat(잔액(지금_기간).remaining()).isEqualByComparingTo("17");
+    }
+
+    @Test
+    void 지난_기간_휴가가_취소돼_잔여가_0이_되면_이월도_0으로_돌아간다() {
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "18");
+        service.grantCurrentPeriods();
+
+        지난.restoreUsed(new BigDecimal("2"));
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isZero();
+        assertThat(잔액(지금_기간).remaining()).isEqualByComparingTo("16");
+    }
+
+    @Test
+    void 결재_대기는_갚을_몫에_넣지_않고_승인된_뒤_다음_배치에서_갚는다() {
+        // 잔여 1 + 결재 대기 3: 아직 갚을 것이 없다(대기 몫은 남겨 둔다)
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "15");
+        when(requestRepository.sumPendingDeductedDays(10L, 지금_기간 - 1)).thenReturn(new BigDecimal("3"));
+        service.grantCurrentPeriods();
+        assertThat(잔액(지금_기간).getCarriedOver()).isZero();
+        assertThat(지난.remaining()).isEqualByComparingTo("1");
+
+        지난.addUsed(new BigDecimal("3")); // 기산일 뒤에 승인 → 잔여 -2(음수면 결재 대기는 보지 않는다)
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-2");
+    }
+
+    @Test
+    void 이월받은_연차를_다_쓰고_더_당겨쓰면_그만큼만_다음_기간에서_갚는다() {
+        // 지난 기간도 그 전에 당겨쓴 2일을 갚은 상태(이월 -2)에서 다시 1일을 당겨씀 → 지금 기간 이월 -1
+        LeaveBalance 지난 = 사용(지금_기간 - 1, "16", "15");
+        지난.setCarriedOver(new BigDecimal("-2"));
+
+        service.grantCurrentPeriods();
+
+        assertThat(지난.remaining()).isEqualByComparingTo("-1");
+        assertThat(잔액(지금_기간).getCarriedOver()).isEqualByComparingTo("-1");
+    }
+
+    @Test
+    void 회계연도_기준에서도_회계_시작일_경계에서_당겨쓴_연차가_넘어간다() {
+        ReflectionTestUtils.setField(policy, "grantBasis", com.company.leave.policy.domain.GrantBasis.FISCAL_YEAR);
+        int 회계_지금 = PERIODS.currentYear(입사, policy);
+        사용(회계_지금 - 1, "15", "17");
+
+        service.grantCurrentPeriods();
+
+        assertThat(잔액(회계_지금).getCarriedOver()).isEqualByComparingTo("-2");
+    }
+
     @Test
     void 한_명이_실패해도_다른_직원은_부여되고_실패를_알린다() {
         Employee 다른 = Employee.builder().email("other@company.com").passwordHash("h").name("김실패").hireDate(입사).build();

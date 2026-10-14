@@ -1,6 +1,16 @@
 import { HALF_DAY_LABEL, type HalfDayPart, type LeavePortion } from "@/types";
 
 /** 일수를 소수 셋째 자리까지, 불필요한 0 은 제거해 표시한다(0.125 → "0.125"). */
+/**
+ * 이번 기간 부여 안내: "이번 기간 부여 15일", 남은 연차 이월이 있으면 더해서, 지난 기간에 당겨쓴 연차(이월이 음수)는
+ * 따로 "· 당겨쓴 연차 2일"로 붙인다(새 기간이 시작될 때 갚은 몫).
+ */
+export function formatGrantSummary(b: { granted: number; carriedOver: number }): string {
+  const carried = b.carriedOver ?? 0;
+  const base = `이번 기간 부여 ${formatDays(b.granted + Math.max(carried, 0))}일`;
+  return carried < 0 ? `${base} · 당겨쓴 연차 ${formatDays(-carried)}일` : base;
+}
+
 export function formatDays(n: number | null | undefined): string {
   return String(Number((n ?? 0).toFixed(3)));
 }
