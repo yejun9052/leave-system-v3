@@ -249,8 +249,9 @@ export default function BlackoutSaveDialog({
 
 function ImpactTable({ items }: { items: BlackoutImpactItem[] }) {
   return (
-    <div className="max-h-60 overflow-y-auto rounded-md border">
-      <table className="w-full text-sm">
+    // 휴대폰 폭에서는 칸을 한 줄로 두고 좌우로 밀어 본다(목록 표와 같게)
+    <div className="max-h-60 overflow-auto rounded-md border">
+      <table className="w-full text-sm max-sm:whitespace-nowrap">
         <thead className="sticky top-0 bg-muted text-xs text-muted-foreground">
           <tr>
             <th className="px-3 py-1.5 text-left font-medium">이름</th>

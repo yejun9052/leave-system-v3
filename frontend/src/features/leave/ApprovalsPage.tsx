@@ -22,7 +22,9 @@ import {
   TableHeader,
   TableRow,
   SortableTableHead,
+  TABLE_WRAP_TEXT,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { useTableSort } from "@/lib/useTableSort";
 import {
   Dialog,
@@ -213,7 +215,7 @@ export default function ApprovalsPage() {
                             )}
                           </div>
                           {r.approvalWarning && (
-                            <p className="mt-1 text-xs text-amber-700">⚠ {r.approvalWarning}</p>
+                            <p className={cn("mt-1 text-xs text-amber-700", TABLE_WRAP_TEXT)}>⚠ {r.approvalWarning}</p>
                           )}
                         </TableCell>
                         <TableCell className="font-medium">{r.employeeName}</TableCell>

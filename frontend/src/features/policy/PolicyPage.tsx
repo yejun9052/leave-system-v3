@@ -724,7 +724,8 @@ function RulesTab() {
   });
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    // 칸(카드)이 안의 표 너비만큼 늘어나 화면 밖으로 나가지 않게 min-w-0: 표는 카드 안에서 좌우로 밀린다
+    <div className="grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
       <Card>
         <CardHeader><CardTitle className="text-base">장기근속 포상휴가</CardTitle></CardHeader>
         <CardContent className="space-y-3">

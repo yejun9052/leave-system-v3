@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TABLE_WRAP_TEXT, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 
@@ -259,7 +259,7 @@ function JobList({ jobs }: { jobs: AutomationJob[] }) {
               <TableRow key={j.key}>
                 <TableCell>
                   <p className="font-medium">{j.name}</p>
-                  <p className="text-xs text-muted-foreground">{j.description}</p>
+                  <p className={cn("text-xs text-muted-foreground", TABLE_WRAP_TEXT)}>{j.description}</p>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{j.schedule}</TableCell>
                 <TableCell>
@@ -272,7 +272,9 @@ function JobList({ jobs }: { jobs: AutomationJob[] }) {
                         <span className="text-muted-foreground">{formatDateTime(j.lastStartedAt)}</span>
                         <LastResult job={j} />
                       </p>
-                      {j.lastMessage && <p className="text-xs text-muted-foreground">{j.lastMessage}</p>}
+                      {j.lastMessage && (
+                        <p className={cn("text-xs text-muted-foreground", TABLE_WRAP_TEXT)}>{j.lastMessage}</p>
+                      )}
                     </div>
                   ) : (
                     <span className="text-muted-foreground">아직 실행 기록이 없습니다.</span>
@@ -314,8 +316,8 @@ function EventMails() {
           <TableBody>
             {EVENT_MAILS.map((m) => (
               <TableRow key={m.when}>
-                <TableCell className="font-medium">{m.when}</TableCell>
-                <TableCell className="text-muted-foreground">{m.to}</TableCell>
+                <TableCell className={cn("font-medium", TABLE_WRAP_TEXT)}>{m.when}</TableCell>
+                <TableCell className={cn("text-muted-foreground", TABLE_WRAP_TEXT)}>{m.to}</TableCell>
               </TableRow>
             ))}
           </TableBody>
