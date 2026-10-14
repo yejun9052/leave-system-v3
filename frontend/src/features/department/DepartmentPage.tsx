@@ -206,7 +206,9 @@ export default function DepartmentPage() {
           ) : tree.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">등록된 부서가 없습니다.</p>
           ) : (
-            <ul className="space-y-1">
+            // 휴대폰 폭에서는 이름·팀장을 줄이지 않고 한 줄로 두고 목록만 좌우로 밀어 본다(표와 같은 방식)
+            <div className="overflow-x-auto">
+            <ul className="space-y-1 max-sm:min-w-max">
               {tree.map((d) => (
                 <DeptNode
                   key={d.id}
@@ -222,6 +224,7 @@ export default function DepartmentPage() {
                 />
               ))}
             </ul>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -340,21 +343,21 @@ function DeptNode({
           type="button"
           title="눌러서 부서 명단 보기"
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-2 self-stretch rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "flex min-w-0 flex-1 items-center gap-2 self-stretch rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring max-sm:flex-none",
             !drag && "cursor-pointer",
           )}
           onClick={() => onOpen(dept)}
         >
-          <Building2 className="h-4 w-4 text-primary" />
-          <span className="min-w-0 truncate font-medium">{dept.name}</span>
+          <Building2 className="h-4 w-4 shrink-0 text-primary" />
+          <span className="min-w-0 truncate font-medium max-sm:overflow-visible">{dept.name}</span>
           {dept.leadName && (
-            <Badge variant="secondary" className="gap-1">
+            <Badge variant="secondary" className="shrink-0 gap-1 whitespace-nowrap">
               팀장 {dept.leadName}
             </Badge>
           )}
           <Badge
             variant="outline"
-            className="gap-1 text-muted-foreground"
+            className="shrink-0 gap-1 whitespace-nowrap text-muted-foreground"
             title={`하위 부서 포함 ${dept.memberCount}명 · 직속 ${dept.directMemberCount}명`}
           >
             <Users className="h-3 w-3" /> {dept.memberCount}
