@@ -208,9 +208,27 @@ class PasswordResetServiceTest {
     void 동시에_두_번_제출되면_먼저_사용된_쪽만_성공한다() {
         PasswordResetToken token = 토큰(NOW.plusSeconds(60));
         when(tokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(token));
+        when(employeeRepository.findById(EMPLOYEE_ID)).thenReturn(Optional.of(직원(EmployeeStatus.ACTIVE)));
         when(tokenRepository.markUsed(eq(token.getId()), eq(NOW))).thenReturn(0); // 다른 요청이 먼저 사용
 
         재설정이_거부되는지_확인("raw");
+    }
+
+    @Test
+    void 새_비밀번호가_규칙에_맞지_않으면_바꾸지_않고_링크도_쓰지_않은_채로_둔다() {
+        Employee employee = 직원(EmployeeStatus.ACTIVE);
+        PasswordResetToken token = 토큰(NOW.plusSeconds(60));
+        when(tokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(token));
+        when(employeeRepository.findById(EMPLOYEE_ID)).thenReturn(Optional.of(employee));
+
+        assertThatThrownBy(() -> service.confirm("raw", "abcdefgh"))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
+                    assertThat(ex.getMessage()).contains("2종류 이상");
+                });
+        verify(tokenRepository, never()).markUsed(anyLong(), any());
+        verifyNoInteractions(passwordEncoder, sessionTerminator);
+        assertThat(employee.getPasswordHash()).isEqualTo("old-hash");
     }
 
     @Test

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
@@ -7,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConfirm } from "@/components/ui/confirm";
-import { changePasswordSchema, type ChangePasswordValues } from "./passwordSchema";
+import { useAuthStore } from "@/store/auth";
+import { changePasswordSchema, PASSWORD_RULE_HINT, type ChangePasswordValues } from "./passwordSchema";
 
 /**
  * 내 비밀번호 변경 폼. 성공하면 서버가 현재 세션 ID 를 재발급하고 다른 기기 로그인을 종료한다.
@@ -23,6 +25,9 @@ export function ChangePasswordForm({
   onChanged: () => void | Promise<void>;
 }) {
   const confirm = useConfirm();
+  // 아이디(이메일 @ 앞부분)를 넣었는지도 화면에서 먼저 본다
+  const loginId = useAuthStore((s) => s.user?.email);
+  const schema = useMemo(() => changePasswordSchema(loginId), [loginId]);
   const {
     register,
     handleSubmit,
@@ -30,7 +35,7 @@ export function ChangePasswordForm({
     setError,
     formState: { errors, isSubmitting },
   } = useForm<ChangePasswordValues>({
-    resolver: zodResolver(changePasswordSchema),
+    resolver: zodResolver(schema),
     defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
   });
 
@@ -65,9 +70,19 @@ export function ChangePasswordForm({
         )}
       </div>
       <div className="space-y-2">
-        <Label htmlFor="newPassword">새 비밀번호 (8~72자)</Label>
-        <Input id="newPassword" type="password" autoComplete="new-password" {...register("newPassword")} />
-        {errors.newPassword && <p className="text-sm text-destructive">{errors.newPassword.message}</p>}
+        <Label htmlFor="newPassword">새 비밀번호</Label>
+        <Input
+          id="newPassword"
+          type="password"
+          autoComplete="new-password"
+          aria-describedby="newPassword-hint"
+          {...register("newPassword")}
+        />
+        {errors.newPassword ? (
+          <p className="text-sm text-destructive">{errors.newPassword.message}</p>
+        ) : (
+          <p id="newPassword-hint" className="text-xs text-muted-foreground">{PASSWORD_RULE_HINT}</p>
+        )}
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirmPassword">새 비밀번호 확인</Label>

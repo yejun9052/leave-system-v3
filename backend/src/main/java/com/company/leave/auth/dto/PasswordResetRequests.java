@@ -13,7 +13,7 @@ public final class PasswordResetRequests {
     public record Request(@NotBlank @Email String email) {
     }
 
-    /** 재설정 링크로 새 비밀번호 설정. 비밀번호 규칙은 기존과 동일(8~72자). */
+    /** 재설정 링크로 새 비밀번호 설정. 세부 규칙은 PasswordPolicy(2종류 이상·72바이트 이하 등). */
     public record Confirm(
             @NotBlank String token,
             @NotBlank @Size(min = 8, max = 72) String newPassword) {

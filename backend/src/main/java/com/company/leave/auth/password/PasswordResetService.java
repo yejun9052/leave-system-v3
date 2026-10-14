@@ -129,12 +129,14 @@ public class PasswordResetService {
         PasswordResetToken token = tokenRepository.findByTokenHash(sha256Hex(rawToken))
                 .filter(t -> t.isUsable(now))
                 .orElseThrow(() -> new BusinessException(ErrorCode.PASSWORD_RESET_TOKEN_INVALID));
-        if (tokenRepository.markUsed(token.getId(), now) != 1) {
-            throw new BusinessException(ErrorCode.PASSWORD_RESET_TOKEN_INVALID); // 동시에 먼저 사용됨
-        }
         Employee employee = employeeRepository.findById(token.getEmployeeId())
                 .filter(Employee::isActive)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PASSWORD_RESET_TOKEN_INVALID));
+        // 규칙에 안 맞으면 링크를 쓰지 않은 채로 둬서 같은 링크로 다시 시도할 수 있게
+        PasswordPolicy.check(newPassword, employee.getEmail());
+        if (tokenRepository.markUsed(token.getId(), now) != 1) {
+            throw new BusinessException(ErrorCode.PASSWORD_RESET_TOKEN_INVALID); // 동시에 먼저 사용됨
+        }
         employee.setOwnPassword(passwordEncoder.encode(newPassword));
         sessionTerminator.terminateAll(employee.getId());
         auditService.record(employee.getId(), employee.getName(), "PASSWORD_RESET", "auth", null,
