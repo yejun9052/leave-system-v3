@@ -39,6 +39,31 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const remove = (id: number) => setItems((prev) => prev.filter((t) => t.id !== id));
 
+  /**
+   * 알림은 마우스를 올리거나 알림이 포커스를 가지면 사라지는 시간을 멈춘다(Radix). 휴대폰에서 알림을 손가락으로 건드리면
+   * 알림이 포커스를 잡은 채 남아 멈춤이 풀리지 않아 계속 떠 있었다. 터치로 누른 뒤에는 포커스를 놓아 시간이 다시 흐르게 한다.
+   */
+  const viewportRef = React.useRef<HTMLOListElement>(null);
+  React.useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    let lastPointer = "mouse";
+    const onPointerDown = (e: PointerEvent) => {
+      lastPointer = e.pointerType;
+    };
+    const onClick = () => {
+      if (lastPointer === "mouse") return;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && el.contains(active)) active.blur();
+    };
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("click", onClick);
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("click", onClick);
+    };
+  }, []);
+
   return (
     <ToastContext.Provider value={{ toast }}>
       <ToastPrimitive.Provider swipeDirection="right" duration={4000}>
@@ -71,7 +96,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         ))}
-        <ToastPrimitive.Viewport className="fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:top-auto sm:bottom-0 sm:right-0 sm:w-96" />
+        <ToastPrimitive.Viewport ref={viewportRef} className="fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:top-auto sm:bottom-0 sm:right-0 sm:w-96" />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
   );
