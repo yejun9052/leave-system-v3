@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { CalendarDays, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { monthGridDates, shiftMonth, todayString, weekdayLabel } from "./useDateSelection";
 
 /** 칸 아래 점·읽어 주기용 일정 표시. 점 색: 공휴일·연차 제한 빨강, 휴가 primary, 회사 일정 주황 */
@@ -24,11 +25,17 @@ const WEEK_HEADER = ["일", "월", "화", "수", "목", "금", "토"];
 const LONG_PRESS_MS = 500;
 const SWIPE_MIN_PX = 50;
 const TAP_SLOP_PX = 10;
+/** 손을 뗀 뒤 격자가 밀려 나가는 시간(그다음 새 달이 반대쪽에서 들어온다) */
+const LEAVE_MS = 160;
+/** 덜 밀고 놓았을 때 제자리로 돌아오는 시간 */
+const SETTLE_MS = 220;
 
 interface TouchGesture {
   x: number;
   y: number;
   moved: boolean;
+  /** 처음 움직인 방향이 가로였는지(가로면 격자가 손가락을 따라 움직이고 놓으면 달 이동) */
+  horizontal: boolean;
   longPressed: boolean;
   timer: number;
 }
@@ -36,6 +43,8 @@ interface TouchGesture {
 /**
  * 모바일 전용 월 격자(폭 640px 미만). 칸 안에 제목 글자를 넣지 않고 점으로만 표시한다.
  * 탭은 날짜 선택(아래 요약이 바뀜), 길게 누르기는 날짜 메뉴, 좌우로 밀면 이전·다음 달.
+ * 미는 동안 격자가 손가락을 따라 움직이고, 놓으면 밀던 쪽으로 빠져나간 뒤 새 달이 반대쪽에서 미끄러져 들어온다.
+ * 덜 밀면 제자리로 돌아온다. 달이 바뀌는 다른 경우(오늘 버튼·키보드)도 같은 방향으로 들어온다. 움직임 줄이기 설정이면 애니메이션 없이 바로 바꾼다.
  */
 export default function MobileMonthView({
   month,
@@ -71,6 +80,20 @@ export default function MobileMonthView({
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const touch = useRef<TouchGesture | null>(null);
+  const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const gridRef = useRef<HTMLDivElement>(null);
+  /** 손가락을 따라 옮긴 거리(px). 0 이면 제자리 */
+  const [offset, setOffset] = useState(0);
+  /** 놓은 뒤 제자리로 돌아오거나 밀려 나가는 중(이때만 transition 을 켠다) */
+  const [settling, setSettling] = useState(false);
+  const leaving = useRef(false);
+  // 새 달이 들어올 방향: 다음 달이면 오른쪽에서, 이전 달이면 왼쪽에서(렌더 중에 계산해 첫 화면부터 애니메이션이 맞게)
+  const prevMonth = useRef(month);
+  const enterFrom = useRef<"right" | "left" | null>(null);
+  if (prevMonth.current !== month) {
+    enterFrom.current = month > prevMonth.current ? "right" : "left";
+    prevMonth.current = month;
+  }
   const today = todayString();
   const dates = monthGridDates(month);
   const [year, mon] = month.split("-").map(Number);
@@ -80,10 +103,18 @@ export default function MobileMonthView({
     target instanceof Element ? (target.closest("[data-date]")?.getAttribute("data-date") ?? null) : null;
 
   const onTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return;
+    if (e.touches.length !== 1 || leaving.current) return;
     const target = e.target;
     const p = e.touches[0];
-    const gesture: TouchGesture = { x: p.clientX, y: p.clientY, moved: false, longPressed: false, timer: 0 };
+    setSettling(false);
+    const gesture: TouchGesture = {
+      x: p.clientX,
+      y: p.clientY,
+      moved: false,
+      horizontal: false,
+      longPressed: false,
+      timer: 0,
+    };
     gesture.timer = window.setTimeout(() => {
       const date = dateOf(target);
       if (!date) return;
@@ -95,12 +126,36 @@ export default function MobileMonthView({
 
   const onTouchMove = (e: React.TouchEvent) => {
     const t = touch.current;
-    if (!t || t.moved) return;
+    if (!t || t.longPressed) return;
     const p = e.touches[0];
-    if (Math.abs(p.clientX - t.x) > TAP_SLOP_PX || Math.abs(p.clientY - t.y) > TAP_SLOP_PX) {
+    const dx = p.clientX - t.x;
+    const dy = p.clientY - t.y;
+    if (!t.moved && (Math.abs(dx) > TAP_SLOP_PX || Math.abs(dy) > TAP_SLOP_PX)) {
       t.moved = true;
+      t.horizontal = Math.abs(dx) > Math.abs(dy);
       window.clearTimeout(t.timer);
     }
+    // 가로로 밀기 시작했으면 격자가 손가락을 따라온다(세로 스크롤은 브라우저 몫)
+    if (t.horizontal && !reduceMotion) setOffset(dx);
+  };
+
+  /** 밀던 쪽으로 격자를 빼낸 뒤 달을 바꾼다(새 달은 반대쪽에서 들어온다) */
+  const swipeTo = (dir: 1 | -1) => {
+    const next = shiftMonth(month, dir);
+    if (reduceMotion) {
+      onMonthChange(next);
+      return;
+    }
+    const width = gridRef.current?.offsetWidth ?? 360;
+    leaving.current = true;
+    setSettling(true);
+    setOffset(-dir * width);
+    window.setTimeout(() => {
+      leaving.current = false;
+      setSettling(false);
+      setOffset(0);
+      onMonthChange(next);
+    }, LEAVE_MS);
   };
 
   const onTouchEnd = (e: React.TouchEvent) => {
@@ -110,9 +165,12 @@ export default function MobileMonthView({
     const p = e.changedTouches[0];
     const dx = p.clientX - t.x;
     const dy = p.clientY - t.y;
-    // 가로 이동이 세로보다 크고 50px 이상일 때만 달 이동(세로 스크롤은 그대로)
+    // 가로 이동이 세로보다 크고 50px 이상일 때만 달 이동(세로 스크롤은 그대로). 덜 밀었으면 제자리로
     if (!t.longPressed && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) >= SWIPE_MIN_PX) {
-      onMonthChange(shiftMonth(month, dx < 0 ? 1 : -1));
+      swipeTo(dx < 0 ? 1 : -1);
+    } else if (t.horizontal) {
+      setSettling(true);
+      setOffset(0);
     }
     // 이 터치 뒤에 오는 click 까지 판단한 뒤 비운다
     window.setTimeout(() => {
@@ -191,15 +249,32 @@ export default function MobileMonthView({
         ))}
       </div>
 
-      {/* touch-pan-y: 가로 밀기는 달 이동에 쓰고 브라우저의 뒤로 가기 제스처로 넘기지 않는다(세로 스크롤은 그대로) */}
+      {/* touch-pan-y: 가로 밀기는 달 이동에 쓰고 브라우저의 뒤로 가기 제스처로 넘기지 않는다(세로 스크롤은 그대로).
+          overflow-hidden: 미는 동안 격자가 화면 밖으로 나가도 페이지가 옆으로 넓어지지 않게 */}
+      <div className="-m-1 overflow-hidden p-1">
       <div
-        className="grid touch-pan-y select-none grid-cols-7 gap-1.5 [-webkit-touch-callout:none]"
+        key={month}
+        ref={gridRef}
+        className={cn(
+          "grid touch-pan-y select-none grid-cols-7 gap-1.5 [-webkit-touch-callout:none]",
+          !reduceMotion && enterFrom.current === "right" && "animate-in fade-in-50 slide-in-from-right-1/3 duration-300 ease-out",
+          !reduceMotion && enterFrom.current === "left" && "animate-in fade-in-50 slide-in-from-left-1/3 duration-300 ease-out",
+        )}
+        style={{
+          transform: offset ? `translateX(${offset}px)` : undefined,
+          opacity: offset ? 1 - Math.min(Math.abs(offset) / (gridRef.current?.offsetWidth || 360), 1) * 0.5 : undefined,
+          transition: settling
+            ? `transform ${leaving.current ? LEAVE_MS : SETTLE_MS}ms ease-out, opacity ${leaving.current ? LEAVE_MS : SETTLE_MS}ms ease-out`
+            : "none",
+        }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onTouchCancel={() => {
           if (touch.current) window.clearTimeout(touch.current.timer);
           touch.current = null;
+          setSettling(true);
+          setOffset(0);
         }}
       >
         {dates.map((date) => {
@@ -259,6 +334,7 @@ export default function MobileMonthView({
             </button>
           );
         })}
+      </div>
       </div>
     </section>
   );
