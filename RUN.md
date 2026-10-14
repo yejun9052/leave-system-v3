@@ -58,6 +58,9 @@ cd C:\alwork\frontend
 npm run dev
 ```
 - 확인: http://localhost:5173  (로그인 `admin` / `admin1234!`)
+- 휴대폰 테스트: 같은 와이파이(공유기)에 연결한 휴대폰에서 `http://<PC의 IP 주소>:5173` (Vite 실행 시 `Network:` 줄에 나오는 주소).
+  안 열리면 Windows 방화벽이 막은 것이므로 "Windows 보안 경고" 창에서 **개인 네트워크** 허용, 또는 관리자 PowerShell에서
+  `New-NetFirewallRule -DisplayName "Vite 5173 (개발)" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private`
 
 ---
 
