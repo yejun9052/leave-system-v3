@@ -284,10 +284,12 @@ export default function CalendarPage() {
   const onDateClick = (arg: DateClickArg) => pickDate(arg.dateStr);
 
   // 모바일은 FullCalendar 가 없어 보고 있는 달의 격자 범위로 일정을 불러온다
+  // 밀어서 넘길 때 옆 달도 보이므로 앞뒤 달 격자까지 함께 불러온다
   useEffect(() => {
     if (!isMobile) return;
-    const grid = monthGridDates(viewMonth);
-    const next = { start: grid[0], end: addDays(grid[grid.length - 1], 1) };
+    const prevGrid = monthGridDates(shiftMonth(viewMonth, -1));
+    const nextGrid = monthGridDates(shiftMonth(viewMonth, 1));
+    const next = { start: prevGrid[0], end: addDays(nextGrid[nextGrid.length - 1], 1) };
     setRange((prev) => (prev.start === next.start && prev.end === next.end ? prev : next));
   }, [isMobile, viewMonth]);
 
@@ -495,9 +497,10 @@ export default function CalendarPage() {
   const marks = useMemo(() => {
     const map = new Map<string, DayMark[]>();
     if (!isMobile) return map;
-    const grid = monthGridDates(viewMonth);
-    const first = grid[0];
-    const last = grid[grid.length - 1];
+    // 앞뒤 달 격자까지(밀어서 넘길 때 옆 달의 점도 보이게)
+    const first = monthGridDates(shiftMonth(viewMonth, -1))[0];
+    const nextGrid = monthGridDates(shiftMonth(viewMonth, 1));
+    const last = nextGrid[nextGrid.length - 1];
     const add = (start: string, endInclusive: string, mark: DayMark) => {
       for (let d = start < first ? first : start; d <= endInclusive && d <= last; d = addDays(d, 1)) {
         map.set(d, [...(map.get(d) ?? []), mark]);
