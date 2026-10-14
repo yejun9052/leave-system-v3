@@ -133,6 +133,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 ## Docs to keep in sync
 
 - `docs/policy-overview.md`: plain-language Korean summary of every leave rule. Update it when rules change.
+- `docs/developer-guide.md`: Korean onboarding guide for developers (setup, structure, domain flows, conventions). Update it when the structure or conventions change.
 - `docs/developer-notes.md`: how and when things run, with the numbers. Covers job schedules, session and login limits, and realtime behavior with its load measurements. Update it when those values change.
 - `docs/decisions/YYYY-MM-DD-topic.md`: decision records (❓ marks open items).
 - `DEPLOY.md`: production install, backup and restore. Also `SECURITY.md`, `README.md`, `RUN.md`.
