@@ -106,7 +106,6 @@ export default function MobileMonthView({
   }
   const today = todayString();
   const [year, mon] = month.split("-").map(Number);
-  const currentYear = Number(today.slice(0, 4));
 
   const dateOf = (target: EventTarget | null): string | null =>
     target instanceof Element ? (target.closest("[data-date]")?.getAttribute("data-date") ?? null) : null;
@@ -295,7 +294,7 @@ export default function MobileMonthView({
     <section aria-label="월간 캘린더" className="space-y-3">
       <div className="flex items-center gap-2">
         <h1 className="flex-1 text-3xl font-bold text-foreground">
-          {year !== currentYear && <span className="mr-1.5 text-lg font-semibold text-muted-foreground">{year}년</span>}
+          <span className="mr-1.5 text-lg font-semibold text-muted-foreground">{year}년</span>
           {mon}월
         </h1>
         <button
