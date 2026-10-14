@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import NotificationBell, { useUnreadNotifications } from "@/components/NotificationBell";
 import LicenseBanner from "@/features/license/LicenseBanner";
 import ForcePasswordChangeDialog from "@/features/auth/ForcePasswordChangeDialog";
+import IdleLogoutWarning from "@/components/IdleLogoutWarning";
 import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
 interface NavItem {
@@ -83,6 +84,7 @@ export default function AppLayout() {
     return (
       <div className="min-h-dvh bg-muted/30">
         <ForcePasswordChangeDialog />
+        <IdleLogoutWarning timeoutSeconds={user.idleTimeoutSeconds} />
       </div>
     );
   }
@@ -151,6 +153,7 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      <IdleLogoutWarning timeoutSeconds={user?.idleTimeoutSeconds} />
     </div>
   );
 }

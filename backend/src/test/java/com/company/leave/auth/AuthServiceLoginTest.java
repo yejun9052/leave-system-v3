@@ -48,7 +48,6 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
-import org.springframework.session.security.web.authentication.SpringSessionRememberMeServices;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
@@ -172,48 +171,29 @@ class AuthServiceLoginTest {
     }
 
     @Test
-    void 로그인_유지를_체크하면_세션을_30일로_늘리고_세션_쿠키를_브라우저를_닫아도_남게_한다() {
+    void 로그인_응답에_화면이_쓸_자동_로그아웃_시간을_담는다() {
         인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
 
-        authService.login(new LoginRequest(EMAIL, PASSWORD, true), request, response);
+        MeResponse me = authService.login(new LoginRequest(EMAIL, PASSWORD), request, response);
 
-        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(30 * 24 * 60 * 60);
-        assertThat(request.getSession(false).getAttribute("rememberMeUntil")).isInstanceOf(Long.class);
-        assertThat(request.getAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR)).isEqualTo(true);
+        assertThat(me.idleTimeoutSeconds()).isEqualTo(10 * 60);
         verify(auditService).record(eq(EMPLOYEE_ID), anyString(), eq("LOGIN"), eq("auth"), isNull(),
-                eq("로그인 성공(로그인 유지 30일)"), eq(true));
+                eq("로그인 성공"), eq(true));
     }
 
     @Test
-    void 로그인_유지를_체크하지_않으면_세션은_기본_만료를_따른다() {
+    void 같은_브라우저에_앞사람_세션이_남아_있으면_버리고_새로_만든다() {
         인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
-        int defaultInterval = new MockHttpSession().getMaxInactiveInterval();
-
-        authService.login(new LoginRequest(EMAIL, PASSWORD, null), request, response);
-
-        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(defaultInterval);
-        assertThat(request.getSession(false).getAttribute("rememberMeUntil")).isNull();
-        assertThat(request.getAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR)).isNull();
-    }
-
-    @Test
-    void 같은_브라우저에_남은_로그인_유지_세션이_있어도_유지_없이_로그인하면_넘어오지_않는다() {
-        인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
-        // 공용 PC: 앞사람이 로그인 유지로 쓰던 세션이 남아 있고, 이 요청에서 필터가 쿠키 유지 표시를 켜 둠
+        // 공용 PC: 앞사람이 쓰던 세션이 남아 있다
         MockHttpSession 앞사람 = new MockHttpSession();
-        앞사람.setAttribute("rememberMeUntil", System.currentTimeMillis() + 86_400_000L);
-        앞사람.setMaxInactiveInterval(30 * 24 * 3600);
+        앞사람.setAttribute("앞사람_속성", "x");
         request.setSession(앞사람);
-        request.setAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR, true);
-        int defaultInterval = new MockHttpSession().getMaxInactiveInterval();
 
-        authService.login(new LoginRequest(EMAIL, PASSWORD, false), request, response);
+        authService.login(new LoginRequest(EMAIL, PASSWORD), request, response);
 
         assertThat(앞사람.isInvalid()).isTrue();
         assertThat(request.getSession(false)).isNotSameAs(앞사람);
-        assertThat(request.getSession(false).getAttribute("rememberMeUntil")).isNull();
-        assertThat(request.getSession(false).getMaxInactiveInterval()).isEqualTo(defaultInterval);
-        assertThat(request.getAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR)).isNull();
+        assertThat(request.getSession(false).getAttribute("앞사람_속성")).isNull();
     }
 
     @Test

@@ -22,6 +22,8 @@ public class RealtimeChangeInterceptor implements HandlerInterceptor {
 
     private static final Set<String> MUTATING = Set.of("POST", "PUT", "PATCH", "DELETE");
     private static final List<String> PERSONAL = List.of("/api/notifications", "/api/employees/me/password");
+    /** 데이터를 바꾸지 않는 요청: 신호를 보내지 않는다(자리를 비운 사람마다 자동 로그아웃 때 모든 화면이 다시 불러오지 않게) */
+    private static final List<String> SILENT = List.of("/api/auth/login", "/api/auth/logout", "/api/auth/idle-logout");
 
     private final RealtimeHub hub;
 
@@ -37,6 +39,9 @@ public class RealtimeChangeInterceptor implements HandlerInterceptor {
         }
         String origin = request.getHeader(CLIENT_ID_HEADER);
         String path = request.getRequestURI();
+        if (SILENT.contains(path)) {
+            return;
+        }
         if (PERSONAL.stream().anyMatch(path::startsWith)) {
             Long me = currentEmployeeIdOrNull();
             if (me != null) {
