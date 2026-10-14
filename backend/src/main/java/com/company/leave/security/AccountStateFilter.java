@@ -37,6 +37,7 @@ public class AccountStateFilter extends OncePerRequestFilter {
             "GET /api/auth/csrf",
             "GET /api/auth/me",
             "POST /api/auth/logout",
+            "POST /api/auth/idle-logout",
             "PATCH /api/employees/me/password",
             "GET /api/license");
 

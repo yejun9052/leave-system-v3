@@ -10,7 +10,9 @@ interface AuthState {
   initialized: boolean;
   /** 앱을 열 때 로그인 확인이 401 이 아닌 오류(서버 오류·네트워크)로 실패했으면 안내 문구. 로그인 화면으로 보내지 않고 다시 시도하게 한다 */
   loadError: string | null;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  /** 로그인 화면에 보여 줄 안내(예: 자동 로그아웃됨). 다시 로그인하면 지운다 */
+  signedOutNotice: string | null;
+  login: (email: string, password: string) => Promise<void>;
   loadMe: () => Promise<void>;
   /** 로그인한 채로 내 정보(이름·부서·권한)만 다시 받는다. 실패하면 그대로 둔다(세션이 끊겼으면 다음 요청이 로그인 화면으로 보냄) */
   refreshMe: () => Promise<void>;
@@ -27,12 +29,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   initialized: false,
   loadError: null,
+  signedOutNotice: null,
 
-  login: async (email, password, rememberMe = false) => {
+  login: async (email, password) => {
     await authApi.csrf();
-    const user = await authApi.login(email, password, rememberMe);
+    const user = await authApi.login(email, password);
     await authApi.csrf();
-    set({ user, initialized: true, loadError: null });
+    set({ user, initialized: true, loadError: null, signedOutNotice: null });
   },
 
   loadMe: async () => {

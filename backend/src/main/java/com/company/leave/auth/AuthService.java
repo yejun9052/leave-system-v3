@@ -7,14 +7,15 @@ import com.company.leave.common.exception.BusinessException;
 import com.company.leave.common.exception.ErrorCode;
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.repository.EmployeeRepository;
-import com.company.leave.security.RememberMeSessionFilter;
 import com.company.leave.security.UserPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
-import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AccountStatusException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -33,7 +34,6 @@ import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CsrfLogoutHandler;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
-import org.springframework.session.security.web.authentication.SpringSessionRememberMeServices;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,8 +55,11 @@ public class AuthService {
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SecurityContextLogoutHandler securityContextLogoutHandler = new SecurityContextLogoutHandler();
     private final CsrfLogoutHandler csrfLogoutHandler;
-    private final Clock clock = Clock.systemDefaultZone();
+    /** 자동 로그아웃 시간 = 서버 세션 미사용 만료(spring.session.timeout). 화면에 알려 같은 시간으로 로그아웃하게 한다 */
+    private final Duration idleTimeout;
+    static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofMinutes(10);
 
+    /** 테스트용: 자동 로그아웃 시간은 기본값 */
     public AuthService(AuthenticationManager authenticationManager,
                        EmployeeRepository employeeRepository,
                        AuditService auditService,
@@ -65,6 +68,21 @@ public class AuthService {
                        CsrfTokenRepository csrfTokenRepository,
                        SessionTerminator sessionTerminator,
                        PasswordEncoder passwordEncoder) {
+        this(authenticationManager, employeeRepository, auditService, loginAttemptService, securityContextRepository,
+                csrfTokenRepository, sessionTerminator, passwordEncoder, DEFAULT_IDLE_TIMEOUT);
+    }
+
+    @Autowired
+    public AuthService(AuthenticationManager authenticationManager,
+                       EmployeeRepository employeeRepository,
+                       AuditService auditService,
+                       LoginAttemptService loginAttemptService,
+                       SecurityContextRepository securityContextRepository,
+                       CsrfTokenRepository csrfTokenRepository,
+                       SessionTerminator sessionTerminator,
+                       PasswordEncoder passwordEncoder,
+                       @Value("${spring.session.timeout:10m}") Duration idleTimeout) {
+        this.idleTimeout = idleTimeout;
         this.authenticationManager = authenticationManager;
         this.employeeRepository = employeeRepository;
         this.auditService = auditService;
@@ -86,9 +104,9 @@ public class AuthService {
         String clientIp = httpRequest.getRemoteAddr();
         java.util.Optional<java.time.Duration> locked = loginAttemptService.lockRemaining(clientIp);
         if (locked.isPresent()) {
-            String who = loginIdForLog(request.email());
-            auditService.record(null, who, "LOGIN", "auth", null,
-                    "로그인 차단(시도 과다): " + who + " · IP " + clientIp, false);
+            LoginLog who = loginIdForLog(request.email());
+            auditService.record(null, who.actor(), "LOGIN", "auth", null,
+                    "로그인 차단(시도 과다): " + who.label() + " · IP " + clientIp, false);
             long minutes = Math.max(1, (locked.get().toSeconds() + 59) / 60);
             throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS,
                     "이 PC에서 로그인에 여러 번 실패해 잠시 막혔습니다. " + minutes + "분 후 다시 시도하세요.");
@@ -99,10 +117,10 @@ public class AuthService {
                     UsernamePasswordAuthenticationToken.unauthenticated(request.email(), request.password()));
         } catch (AuthenticationException ex) {
             equalizeTiming(ex, request.password());
-            loginAttemptService.loginFailed(clientIp);
-            String who = loginIdForLog(request.email());
-            auditService.record(null, who, "LOGIN", "auth", null,
-                    "로그인 실패: " + who + " · IP " + clientIp, false);
+            loginAttemptService.loginFailed(clientIp, request.email());
+            LoginLog who = loginIdForLog(request.email());
+            auditService.record(null, who.actor(), "LOGIN", "auth", null,
+                    "로그인 실패: " + who.label() + " · IP " + clientIp, false);
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         Employee employee = employeeRepository.findByEmail(request.email())
@@ -110,14 +128,10 @@ public class AuthService {
         if (!employee.isActive()) {
             throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
         }
-        loginAttemptService.loginSucceeded(clientIp);
-        auditService.record(employee.getId(), employee.getName(), "LOGIN", "auth", null,
-                request.rememberMe() ? "로그인 성공(로그인 유지 30일)" : "로그인 성공", true);
+        loginAttemptService.loginSucceeded(clientIp, request.email());
+        auditService.record(employee.getId(), employee.getName(), "LOGIN", "auth", null, "로그인 성공", true);
         establishSession(authentication, employee.getId(), httpRequest, httpResponse);
-        if (request.rememberMe()) {
-            RememberMeSessionFilter.start(httpRequest, clock);
-        }
-        return MeResponse.from(employee);
+        return MeResponse.from(employee, idleTimeout);
     }
 
     /**
@@ -131,23 +145,38 @@ public class AuthService {
     }
 
     /**
-     * 로그인 실패 기록에 남길 아이디. 있는 계정이면 그대로, 없는 아이디면 앞 두 글자만 남기고 가린다:
+     * 로그인 실패·차단 기록의 사용자 칸(actor)과 내용에 넣을 이름(label).
+     * @param actor 사용자 칸: 있는 계정이면 "이름 (아이디)", 없는 아이디면 가린 값
+     * @param label 내용 문구: 있는 계정이면 "이름 계정", 없는 아이디면 가린 값
+     */
+    record LoginLog(String actor, String label) {
+    }
+
+    /**
+     * 로그인 실패 기록에 남길 이름. 실제로 누가 입력했는지 모르므로 그 직원이 한 것으로 연결하지 않고(actorId 없음)
+     * "어느 계정에 대한 시도인지"만 이름과 아이디로 보여 준다. 없는 아이디면 앞 두 글자만 남기고 가린다:
      * 아이디 칸에 비밀번호를 잘못 넣은 경우 평문 비밀번호가 이벤트 로그에 남지 않게.
      */
-    String loginIdForLog(String typed) {
+    LoginLog loginIdForLog(String typed) {
         String id = typed == null ? "" : typed.trim();
-        if (!id.isEmpty() && employeeRepository.findByEmail(id).isPresent()) {
-            return id;
+        if (!id.isEmpty()) {
+            java.util.Optional<Employee> account = employeeRepository.findByEmail(id);
+            if (account.isPresent()) {
+                String name = account.get().getName();
+                String actor = name + " (" + id + ")";
+                // audit_logs.actor_name 은 100자
+                return new LoginLog(actor.length() > 100 ? actor.substring(0, 100) : actor, name + " 계정");
+            }
         }
         int at = id.indexOf('@');
         String local = at >= 0 ? id.substring(0, at) : id;
         String masked = local.substring(0, Math.min(2, local.length())) + "***";
-        return at >= 0 ? masked + id.substring(at) : masked + " (없는 아이디)";
+        String hidden = at >= 0 ? masked + id.substring(at) : masked + " (없는 아이디)";
+        return new LoginLog(hidden, hidden);
     }
 
-    /** 현재 세션 삭제 + CSRF 토큰 폐기. */
     /**
-     * 로그아웃: 이 브라우저뿐 아니라 그 사람의 모든 기기·브라우저 로그인(로그인 유지 포함)을 끊는다.
+     * 로그아웃: 이 브라우저뿐 아니라 그 사람의 모든 기기·브라우저 로그인을 끊는다.
      * 다른 기기의 열린 화면은 실시간 신호로 바로 로그인 화면으로 간다.
      */
     public void logout(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
@@ -161,11 +190,25 @@ public class AuthService {
         securityContextLogoutHandler.logout(httpRequest, httpResponse, authentication);
     }
 
+    /**
+     * 자동 로그아웃(화면에서 클릭·키보드·스크롤 입력 없이 idleTimeout 이 지남): 이 브라우저의 세션만 끝낸다.
+     * 자리를 비운 PC 때문에 다른 기기(휴대폰 등)에서 쓰던 로그인까지 끊지 않는다.
+     */
+    public void idleLogout(HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        Authentication authentication = contextHolderStrategy.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
+            auditService.record(principal.getId(), principal.getName(), "LOGOUT", "auth", null,
+                    "자동 로그아웃(" + idleTimeout.toMinutes() + "분 동안 사용 없음)", true);
+        }
+        csrfLogoutHandler.logout(httpRequest, httpResponse, authentication);
+        securityContextLogoutHandler.logout(httpRequest, httpResponse, authentication);
+    }
+
     @Transactional(readOnly = true)
     public MeResponse me(Long employeeId) {
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND));
-        return MeResponse.from(employee);
+        return MeResponse.from(employee, idleTimeout);
     }
 
     /**
@@ -176,13 +219,12 @@ public class AuthService {
      */
     private void establishSession(Authentication authentication, Long employeeId,
                                   HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
-        // 같은 브라우저에 남아 있던 세션(먼저 로그인한 사람 등)은 버리고 새로 만든다: "로그인 유지" 같은 속성이
-        // 새 로그인에 넘어오지 않게. 이 요청에서 이전 세션을 보고 켜 둔 쿠키 유지 표시도 지운다
+        // 같은 브라우저에 남아 있던 세션(먼저 로그인한 사람 등)은 버리고 새로 만든다: 앞사람의 세션 속성이
+        // 새 로그인에 넘어오지 않게
         HttpSession previous = httpRequest.getSession(false);
         if (previous != null) {
             previous.invalidate();
         }
-        httpRequest.removeAttribute(SpringSessionRememberMeServices.REMEMBER_ME_LOGIN_ATTR);
         sessionAuthenticationStrategy.onAuthentication(authentication, httpRequest, httpResponse);
         SecurityContext context = contextHolderStrategy.createEmptyContext();
         context.setAuthentication(authentication);

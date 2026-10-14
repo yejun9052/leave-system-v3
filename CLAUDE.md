@@ -19,6 +19,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 ```
 
 - There is no frontend test runner, and no ESLint config even though `npm run lint` exists.
+- If the repo path contains non-ASCII (e.g. Korean) characters, Gradle test workers fail with `ClassNotFoundException`. Run tests through an ASCII junction (see README).
 - `scripts/smoke-test.ps1` / `smoke-cleanup.ps1` run an end-to-end smoke test against a running app. Use them only on local or test DBs.
 - **Default profile is `prod`** (`application.yml`). Running the jar directly without `SPRING_PROFILES_ACTIVE=local` uses the prod config.
   - Local secrets (holiday API key, SMTP) live in the gitignored `backend/application-secret.yml`.
@@ -44,6 +45,14 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
   - The admin can take leave like an employee, but is excluded from report Excel, the user Excel export and license counts.
   - The README's `SUPER_ADMIN` is outdated.
 - Use `SecurityUtils.currentEmployeeId()` in controllers.
+- Session lifetime is one value, `SESSION_TIMEOUT` (`spring.session.timeout`, default `10m`), sent to the frontend as `MeResponse.idleTimeoutSeconds`.
+  - `lib/useIdleLogout.ts` counts only human input (not polling or SSE) and calls `POST /api/auth/idle-logout`, which ends just this browser's session. The normal logout ends all of the user's sessions.
+  - There is no "remember me". The login screen only remembers the ID in `localStorage`.
+- Login throttling is per IP in memory (`auth/LoginAttemptService`). A successful login clears only that ID's failures.
+- New-password rules live in `auth/password/PasswordPolicy` and are mirrored in `frontend/src/features/auth/passwordSchema.ts`. Change both together.
+- `license/LicenseEnforcementFilter` blocks every API except license status when there is no valid signed license key.
+  - `application-local.yml` carries a localhost dev key.
+  - `:backend:bootJarObf` builds the obfuscated release jar (`OBFUSCATION.md`, `LICENSING.md`).
 
 **Audit log**
 - `audit/AuditAspect` records every POST/PUT/PATCH/DELETE under `/api/**`, plus GET `.../export`.
@@ -57,6 +66,9 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
   - `LeaveAccrualCalculator` computes the entitlement.
   - `LeavePeriodCalculator` handles leave periods: hire-date or fiscal-year anniversaries, and leave that spans an anniversary (`nextPeriodDeduction`).
   - `WorkdayCalculator` computes days (weekends and holidays excluded) and deductions.
+- Balance: `remaining = granted + carriedOver − used − expired`.
+  - `LeaveGrantService` (the daily 01:00 batch) grants the current period. When a new period starts, it carries over or expires the previous remainder.
+  - A negative previous remainder (borrowed leave) becomes a negative `carriedOver`, i.e. it is repaid from the new period.
 - `LeaveCharges` charges and restores balances per period. A leave can split between `appliedYear` and `appliedYear + 1` (`next_period_deducted_days`).
 - `LeaveMessenger` creates in-app notifications (`notification/`). Mail is sent after commit via events and `@TransactionalEventListener` in `mail/*MailService`.
   - Notification `type` and `link` drive the frontend bell (action button, title color).
@@ -64,6 +76,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 **Realtime refresh (`realtime/`)**
 - `RealtimeHub` keeps SSE connections (`GET /api/realtime`). Signals carry no data, only the origin tab ID (`X-Client-Id`).
 - `RealtimeChangeInterceptor` broadcasts after every successful POST/PUT/PATCH/DELETE under `/api/**`. Personal ones (notifications, own password) go only to the actor. `JobRunRecorder.run` broadcasts after each scheduled job.
+- `/api/auth/**` and `/api/realtime` never broadcast (`RealtimeConfig`).
 - New endpoints need nothing extra. New background work that changes data outside a request or job should call `RealtimeHub.broadcast(null)`.
 - Deleting sessions goes through `auth/SessionTerminator`, which calls `RealtimeHub.signOut`; open tabs then re-check `/auth/me` and go to login if the session is gone. Logout ends **all** of that user's sessions.
 
@@ -120,6 +133,7 @@ cd frontend; npm run build                     # `tsc && vite build`; this is th
 ## Docs to keep in sync
 
 - `docs/policy-overview.md`: plain-language Korean summary of every leave rule. Update it when rules change.
+- `docs/developer-guide.md`: the developer document. One entry per technical mechanism, each starting "X = 어떤 방식이다", followed by values, reasons, verification results (e.g. the SSE load test) and related code. Covers cron jobs, session expiry, login limits, SSE, backup and restore. Add or update an entry when a mechanism or its values change.
 - `docs/decisions/YYYY-MM-DD-topic.md`: decision records (❓ marks open items).
 - `DEPLOY.md`: production install, backup and restore. Also `SECURITY.md`, `README.md`, `RUN.md`.
 - `SESSION.md`, if present, is a temporary hand-off note for continuing work.

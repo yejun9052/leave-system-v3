@@ -2,6 +2,7 @@ package com.company.leave.auth.dto;
 
 import com.company.leave.employee.domain.Employee;
 import com.company.leave.employee.domain.Role;
+import java.time.Duration;
 import java.time.LocalDate;
 
 public record MeResponse(
@@ -18,9 +19,11 @@ public record MeResponse(
         Role role,
         boolean passwordChangeRequired,
         /** 관리 전용 계정(직원 아님): 휴가 신청·연차 부여 대상이 아니다. */
-        boolean systemAccount) {
+        boolean systemAccount,
+        /** 자동 로그아웃 시간(초). 화면은 이만큼 클릭·키보드·스크롤 입력이 없으면 로그아웃한다(서버 세션 만료와 같은 값) */
+        long idleTimeoutSeconds) {
 
-    public static MeResponse from(Employee e) {
+    public static MeResponse from(Employee e, Duration idleTimeout) {
         return new MeResponse(
                 e.getId(),
                 e.getEmail(),
@@ -32,6 +35,7 @@ public record MeResponse(
                 e.getHireDate(),
                 e.getRole(),
                 e.isPasswordChangeRequired(),
-                e.isSystemAccount());
+                e.isSystemAccount(),
+                idleTimeout.toSeconds());
     }
 }

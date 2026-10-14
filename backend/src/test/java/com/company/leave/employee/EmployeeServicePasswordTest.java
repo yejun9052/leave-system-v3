@@ -174,6 +174,26 @@ class EmployeeServicePasswordTest {
     }
 
     @Test
+    void 새_비밀번호가_규칙에_맞지_않으면_바꾸지_않고_이유를_알린다() {
+        Employee employee = 직원(passwordEncoder.encode("Temp#Pass123"));
+        employee.requirePasswordChange();
+        String before = employee.getPasswordHash();
+        when(employeeRepository.findById(5L)).thenReturn(Optional.of(employee));
+
+        assertThatThrownBy(() -> service.changeMyPassword(5L, "Temp#Pass123", "12345678"))
+                .isInstanceOfSatisfying(BusinessException.class, ex -> {
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_INPUT);
+                    assertThat(ex.getMessage()).contains("2종류 이상");
+                });
+        // 한글 25자(75바이트)는 서버 오류(500) 대신 길이 안내
+        assertThatThrownBy(() -> service.changeMyPassword(5L, "Temp#Pass123", "가".repeat(25)))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getMessage()).contains("너무 깁니다"));
+        assertThat(employee.getPasswordHash()).isEqualTo(before);
+        assertThat(employee.isPasswordChangeRequired()).isTrue();
+    }
+
+    @Test
     void 현재_비밀번호를_다섯_번_틀리면_맞혀도_잠시_막힌다() {
         Employee employee = 직원(passwordEncoder.encode("Temp#Pass123"));
         when(employeeRepository.findById(5L)).thenReturn(Optional.of(employee));

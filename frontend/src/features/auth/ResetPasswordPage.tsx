@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { newPasswordSchema, type NewPasswordValues } from "./passwordSchema";
+import { newPasswordSchema, PASSWORD_RULE_HINT, type NewPasswordValues } from "./passwordSchema";
 
 /**
  * 메일 링크(/reset-password?token=...)로 들어와 새 비밀번호를 정하는 화면(로그인 불필요).
@@ -76,9 +76,19 @@ export default function ResetPasswordPage() {
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
               <div className="space-y-2">
-                <Label htmlFor="newPassword">새 비밀번호 (8~72자)</Label>
-                <Input id="newPassword" type="password" autoComplete="new-password" {...register("newPassword")} />
-                {errors.newPassword && <p className="text-sm text-destructive">{errors.newPassword.message}</p>}
+                <Label htmlFor="newPassword">새 비밀번호</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  aria-describedby="newPassword-hint"
+                  {...register("newPassword")}
+                />
+                {errors.newPassword ? (
+                  <p className="text-sm text-destructive">{errors.newPassword.message}</p>
+                ) : (
+                  <p id="newPassword-hint" className="text-xs text-muted-foreground">{PASSWORD_RULE_HINT}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">새 비밀번호 확인</Label>
