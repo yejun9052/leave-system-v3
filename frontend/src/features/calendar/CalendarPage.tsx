@@ -242,8 +242,13 @@ export default function CalendarPage() {
   // 모바일(폭 640px 미만): FullCalendar 대신 전용 월 격자. 탭은 날짜 선택 + 아래 요약,
   // 신청 기간은 신청 시트의 "날짜 바꾸기" 선택 모드에서 고른다
   const isMobile = useMediaQuery("(max-width: 639px)");
-  const [viewMonth, setViewMonth] = useState(() => todayString().slice(0, 7));
-  const [focused, setFocused] = useState(todayString);
+  // ?date=2026-11-24 로 열면 그 달을 보여 주고 그날을 고른다(대시보드 "기산일 D-DAY" 카드)
+  const [startDate] = useState(() => {
+    const d = params.get("date");
+    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : todayString();
+  });
+  const [viewMonth, setViewMonth] = useState(() => startDate.slice(0, 7));
+  const [focused, setFocused] = useState(startDate);
   const [picking, setPicking] = useState(false);
   const pickSnapshot = useRef<DateSelection | null>(null);
   // 선택 모드에 들어온 뒤 아직 한 번도 누르지 않았으면 첫 탭을 시작일로 본다

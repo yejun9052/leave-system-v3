@@ -103,6 +103,8 @@ function PersonalSection() {
   const dDay = nextStart ? daysFromToday(nextStart) : null;
   const pending = data?.pendingCount ?? 0;
   const team = data?.teamOnLeaveToday ?? 0;
+  // 결재 대기 카드: 결재할 수 있는 사람은 결재함, 아니면 내 휴가(결재함에 들어갈 수 없다)
+  const canApprove = useAuthStore((s) => s.hasAnyRole("TEAM_LEAD", "HR_ADMIN", "SYSTEM_ADMIN"));
   // 이번 기간에 쓸 수 있는 연차: 부여 + 이월(지난 기간에 당겨쓴 연차가 있으면 이월이 음수라 그만큼 줄어든다)
   const granted = (b?.granted ?? 0) + (b?.carriedOver ?? 0);
   const borrowed = Math.max(-(b?.carriedOver ?? 0), 0);
@@ -123,14 +125,16 @@ function PersonalSection() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi icon={CalendarCheck2} label="잔여 연차" value={`${formatDays(b?.remaining)}일`} accent
+        {/* 카드를 누르면 그 내용을 자세히 보는 화면으로 */}
+        <Kpi icon={CalendarCheck2} label="잔여 연차" value={`${formatDays(b?.remaining)}일`} accent to="/my-leaves"
           sub={formatGrantSummary({ granted: b?.granted ?? 0, carriedOver: b?.carriedOver ?? 0 })} />
-        <Kpi icon={Inbox} label="결재 대기" value={`${pending}건`}
+        <Kpi icon={Inbox} label="결재 대기" value={`${pending}건`} to={canApprove ? "/approvals" : "/my-leaves"}
           sub={pending > 0 ? <><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-amber-500" />내 새 신청 승인 대기</> : "대기 중인 새 신청이 없어요"} />
         <Kpi icon={CalendarClock} label="기산일 D-DAY" valueClassName="text-primary"
+          to={nextStart ? `/calendar?date=${nextStart}` : "/calendar"}
           value={dDayLabel(dDay)}
           sub={nextStart ? `다음 기산일 ${monthDay(nextStart)}` : "연차 기간 정보 없음"} />
-        <Kpi icon={Users} label="오늘 팀 부재" value={`${team}명`}
+        <Kpi icon={Users} label="오늘 팀 부재" value={`${team}명`} to="/calendar?view=department"
           sub={team === 0 ? "오늘은 모두 함께해요" : `팀원 ${team}명이 휴가 중이에요`} />
       </div>
 
