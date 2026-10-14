@@ -115,7 +115,7 @@ class AuthServiceLoginTest {
         ArgumentCaptor<SecurityContext> saved = ArgumentCaptor.forClass(SecurityContext.class);
         verify(securityContextRepository).saveContext(saved.capture(), eq(request), eq(response));
         assertThat(saved.getValue().getAuthentication()).isSameAs(authenticated);
-        verify(loginAttemptService).loginSucceeded(IP);
+        verify(loginAttemptService).loginSucceeded(IP, EMAIL);
         verify(auditService).record(eq(EMPLOYEE_ID), anyString(), eq("LOGIN"), eq("auth"), isNull(),
                 anyString(), eq(true));
     }
@@ -206,7 +206,7 @@ class AuthServiceLoginTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
 
-        verify(loginAttemptService).loginFailed(IP);
+        verify(loginAttemptService).loginFailed(IP, EMAIL);
         verify(securityContextRepository, never()).saveContext(any(), any(), any());
         assertThat(request.getSession(false)).isNull();
         verify(auditService).record(isNull(), eq("테스트사원 (" + EMAIL + ")"), eq("LOGIN"), eq("auth"), isNull(),
@@ -286,7 +286,7 @@ class AuthServiceLoginTest {
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.ACCOUNT_INACTIVE));
 
         verify(securityContextRepository, never()).saveContext(any(), any(), any());
-        verify(loginAttemptService, never()).loginSucceeded(anyString());
+        verify(loginAttemptService, never()).loginSucceeded(anyString(), anyString());
         assertThat(request.getSession(false)).isNull();
     }
 

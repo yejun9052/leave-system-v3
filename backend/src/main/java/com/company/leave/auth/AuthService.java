@@ -117,7 +117,7 @@ public class AuthService {
                     UsernamePasswordAuthenticationToken.unauthenticated(request.email(), request.password()));
         } catch (AuthenticationException ex) {
             equalizeTiming(ex, request.password());
-            loginAttemptService.loginFailed(clientIp);
+            loginAttemptService.loginFailed(clientIp, request.email());
             LoginLog who = loginIdForLog(request.email());
             auditService.record(null, who.actor(), "LOGIN", "auth", null,
                     "로그인 실패: " + who.label() + " · IP " + clientIp, false);
@@ -128,7 +128,7 @@ public class AuthService {
         if (!employee.isActive()) {
             throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
         }
-        loginAttemptService.loginSucceeded(clientIp);
+        loginAttemptService.loginSucceeded(clientIp, request.email());
         auditService.record(employee.getId(), employee.getName(), "LOGIN", "auth", null, "로그인 성공", true);
         establishSession(authentication, employee.getId(), httpRequest, httpResponse);
         return MeResponse.from(employee, idleTimeout);
