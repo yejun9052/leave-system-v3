@@ -8,6 +8,10 @@
 	# 실시간 갱신 연결(SSE)은 압축하면 신호가 모였다가 늦게 가므로 뺀다
 	@compress not path /api/realtime
 	encode @compress zstd gzip
+	# 요청 본문은 10MB 까지(엑셀 업로드 5MB 여유). 넘으면 앱까지 보내지 않고 413. 앱은 업로드가 아닌 요청을 1MB 로 따로 막는다
+	request_body {
+		max_size 10MB
+	}
 	reverse_proxy backend:8080 {
 		# 접속 IP 는 Caddy 가 쓰는 X-Forwarded-For 로만 알린다. 클라이언트가 넣은 Forwarded 는 지운다(IP 위조 방지)
 		header_up -Forwarded

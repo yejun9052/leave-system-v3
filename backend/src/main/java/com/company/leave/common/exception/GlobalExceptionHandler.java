@@ -1,6 +1,7 @@
 package com.company.leave.common.exception;
 
 import com.company.leave.common.dto.ApiResponse;
+import com.company.leave.common.web.RequestBodyLimitFilter;
 import com.company.leave.leave.domain.LeaveRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.LinkedHashMap;
@@ -108,11 +109,22 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONTENT_TOO_LARGE, ErrorCode.INVALID_INPUT, "파일이 너무 큽니다(최대 5MB). 나눠서 올려 주세요.");
     }
 
+    /** 파일 업로드가 아닌 요청 본문이 1MB 를 넘음(길이를 미리 알리지 않고 보낸 요청을 읽다가 끊음). */
+    @ExceptionHandler(RequestBodyLimitFilter.TooLargeException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBodyTooLarge() {
+        ErrorCode code = ErrorCode.REQUEST_TOO_LARGE;
+        return error(code.status(), code, code.defaultMessage());
+    }
+
     /** 요청 형식 오류: 본문 JSON·값 형식·필수 값·범위(@Min 등). 사용자 입력 실수이므로 400. */
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
             MissingServletRequestParameterException.class, MissingServletRequestPartException.class,
             ConstraintViolationException.class, HandlerMethodValidationException.class})
     public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception ex) {
+        // 본문을 읽다가 1MB 를 넘어 끊긴 경우(JSON 변환이 감싸 보낸다)
+        if (RequestBodyLimitFilter.isTooLarge(ex)) {
+            return handleBodyTooLarge();
+        }
         log.debug("잘못된 요청: {}", ex.getMessage());
         return error(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_INPUT, "요청 값이 올바르지 않습니다. 입력을 확인해 주세요.");
     }

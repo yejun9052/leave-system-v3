@@ -23,6 +23,7 @@
 | **web** | 주소(HTTP/HTTPS) 종단 + 프록시 | Caddy가 인증서 자동발급, 모든 요청을 backend 로 전달 |
 
 > **프론트엔드는 백엔드 jar 에 포함**되어 있어 서버에서 프론트를 따로 빌드하지 않습니다. Caddy 는 TLS(https)와 프록시만 담당합니다.
+> Caddy 는 요청 본문을 **10MB 까지만** 앱으로 넘깁니다(`Caddyfile` 의 `request_body`). 엑셀 업로드(최대 5MB)보다 크게 잡은 값이니 5MB 아래로 줄이지 마세요.
 > **서버엔 Docker만 설치하면 됩니다.** 자바(JRE)·PostgreSQL·Node는 상자 안/jar에 이미 반영되어 따로 설치하지 않습니다.
 
 ---

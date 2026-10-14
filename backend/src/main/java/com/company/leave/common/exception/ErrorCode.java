@@ -12,6 +12,8 @@ public enum ErrorCode {
     NOT_FOUND(HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
     CONFLICT(HttpStatus.CONFLICT, "요청이 현재 상태와 충돌합니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
+    /** 파일 업로드가 아닌 요청 본문이 1MB 를 넘음({@link com.company.leave.common.web.RequestBodyLimitFilter}) */
+    REQUEST_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "요청이 너무 큽니다. 입력한 내용을 줄여 다시 시도해 주세요."),
 
     // 인증/인가
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),

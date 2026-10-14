@@ -74,6 +74,20 @@
 
 관련 코드: `auth/LoginAttemptService`, `AuthService#loginIdForLog`
 
+## 4-1. 요청 크기 제한
+
+**요청 크기 제한 = 파일 업로드가 아닌 요청 본문은 앱이 1MB 까지만 받고, 그 앞의 Caddy 가 모든 요청을 10MB 까지만 넘기는 방식이다.**
+
+- **앱(1MB)**: `RequestBodyLimitFilter` 가 로그인 전 요청까지 포함해 모든 요청에 건다(세션·보안 필터보다 앞).
+  - Content-Length 가 1MB 를 넘으면 본문을 읽기 전에 413 `REQUEST_TOO_LARGE` "요청이 너무 큽니다…" 로 거절한다.
+  - 길이를 미리 알리지 않는 요청(chunked)은 읽으면서 세다가 1MB 를 넘는 순간 끊고 같은 413 을 준다.
+  - 화면이 보내는 JSON 은 길어야 수십 KB 라 1MB 는 넉넉하다.
+- **엑셀 업로드(multipart)**: 이 필터를 건너뛰고 기존 제한(파일 5MB, 요청 8MB, `spring.servlet.multipart`)을 따른다.
+- **Caddy(10MB)**: `frontend/Caddyfile` 의 `request_body { max_size 10MB }`. 넘으면 앱까지 보내지 않는다.
+- **이유**: 전에는 JSON 본문 크기 제한이 없어, 로그인하지 않은 사람도 로그인 요청 하나에 약 100MB(Jackson 문자열 한도)를 서버 메모리에 올릴 수 있었다. 여러 개를 동시에 보내면 메모리 부족으로 서비스가 멈출 수 있었다(2026-10-14 고침).
+
+관련 코드: `common/web/RequestBodyLimitFilter`, `GlobalExceptionHandler#handleBodyTooLarge`
+
 ## 5. 비밀번호 암호화·규칙·재설정
 
 **비밀번호 암호화 = BCrypt 해시 방식이다.** 비밀번호를 되돌릴 수 없는 값(해시)으로 바꿔 저장하고, 로그인할 때는 입력한 비밀번호를 같은 방식으로 바꿔 비교한다.
