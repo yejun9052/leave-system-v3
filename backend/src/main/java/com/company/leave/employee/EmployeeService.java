@@ -1,6 +1,7 @@
 package com.company.leave.employee;
 
 import com.company.leave.auth.SessionTerminator;
+import com.company.leave.auth.password.PasswordPolicy;
 import com.company.leave.auth.password.PasswordResetService;
 import com.company.leave.auth.password.TemporaryPasswordGenerator;
 import com.company.leave.common.exception.BusinessException;
@@ -232,6 +233,7 @@ public class EmployeeService {
         if (newPassword.equals(currentPassword)) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "현재 비밀번호와 다른 비밀번호를 입력하세요.");
         }
+        PasswordPolicy.check(newPassword, employee.getEmail());
         employee.setOwnPassword(passwordEncoder.encode(newPassword));
     }
 

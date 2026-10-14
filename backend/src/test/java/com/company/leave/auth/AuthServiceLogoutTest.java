@@ -140,6 +140,30 @@ class AuthServiceLogoutTest {
     }
 
     @Test
+    void 자동_로그아웃은_이_브라우저의_세션만_끝내고_다른_기기_로그인은_남긴다() {
+        MockHttpSession session = new MockHttpSession();
+        request.setSession(session);
+        request.setCookies(new Cookie("XSRF-TOKEN", "token"));
+        로그인된_상태(직원(false));
+
+        authService.idleLogout(request, response);
+
+        assertThat(session.isInvalid()).isTrue();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        assertThat(response.getCookie("XSRF-TOKEN").getMaxAge()).isZero();
+        verifyNoInteractions(sessionTerminator);
+        verify(auditService).record(eq(EMPLOYEE_ID), eq("테스트사원"), eq("LOGOUT"), eq("auth"), isNull(),
+                eq("자동 로그아웃(10분 동안 사용 없음)"), eq(true));
+    }
+
+    @Test
+    void 이미_세션이_끝난_뒤의_자동_로그아웃은_오류_없이_끝나고_감사_로그는_남기지_않는다() {
+        authService.idleLogout(request, response);
+
+        verifyNoInteractions(auditService, sessionTerminator);
+    }
+
+    @Test
     void 내_정보는_직원_ID로_조회하고_입사일과_비밀번호_변경_필요_여부를_포함한다() {
         when(employeeRepository.findById(EMPLOYEE_ID)).thenReturn(Optional.of(직원(true)));
 
@@ -150,6 +174,7 @@ class AuthServiceLogoutTest {
         assertThat(me.hireDate()).isEqualTo(LocalDate.of(2021, 7, 5));
         assertThat(me.role()).isEqualTo(Role.TEAM_LEAD);
         assertThat(me.passwordChangeRequired()).isTrue();
+        assertThat(me.idleTimeoutSeconds()).isEqualTo(10 * 60);
     }
 
     @Test
