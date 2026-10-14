@@ -61,11 +61,6 @@ class RealtimeTest {
         String dashboard() {
             return "ok";
         }
-
-        @PostMapping({"/api/auth/login", "/api/auth/logout", "/api/auth/idle-logout"})
-        String auth() {
-            return "ok";
-        }
     }
 
     private RealtimeHub hub;
@@ -131,20 +126,6 @@ class RealtimeTest {
         로그인(사원);
         mvc.perform(post("/api/leave-requests/2/approve"));
         mvc.perform(get("/api/dashboard"));
-        mvc.perform(post("/api/leave-requests/1/approve"));
-
-        기다림(() -> 내용(mine).contains("event:change"));
-        assertThat(신호_수(mine)).isEqualTo(1);
-    }
-
-    @Test
-    void 로그인_로그아웃_자동_로그아웃은_데이터를_바꾸지_않아_신호를_보내지_않는다() throws Exception {
-        MvcResult mine = 연결(사원);
-
-        로그인(사원);
-        mvc.perform(post("/api/auth/login"));
-        mvc.perform(post("/api/auth/idle-logout"));
-        mvc.perform(post("/api/auth/logout"));
         mvc.perform(post("/api/leave-requests/1/approve"));
 
         기다림(() -> 내용(mine).contains("event:change"));

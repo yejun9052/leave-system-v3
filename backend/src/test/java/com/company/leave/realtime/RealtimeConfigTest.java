@@ -40,6 +40,7 @@ class RealtimeConfigTest {
     @CsvSource({
             "POST, /api/auth/login, false",
             "POST, /api/auth/logout, false",
+            "POST, /api/auth/idle-logout, false",
             "POST, /api/auth/password-reset/request, false",
             "POST, /api/auth/password-reset/confirm, false",
             "GET, /api/realtime, false",
