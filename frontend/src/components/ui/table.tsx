@@ -87,11 +87,22 @@ function SortableTableHead<K extends string>({
   );
 }
 
+/**
+ * 표 칸. 휴대폰 폭(640px 미만)에서는 줄바꿈하지 않는다: 좁은 화면에 표를 욱여넣으면 날짜·이름이 글자마다 꺾이므로
+ * 한 줄로 두고 표를 좌우로 밀어 본다(Table 이 가로 스크롤을 감싼다).
+ * 설명처럼 긴 글은 그 요소에 TABLE_WRAP_TEXT 를 붙여 일정 폭 안에서 줄바꿈한다.
+ */
 const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(
   ({ className, ...props }, ref) => (
-    <td ref={ref} className={cn("p-3 align-middle", className)} {...props} />
+    <td ref={ref} className={cn("p-3 align-middle max-sm:whitespace-nowrap", className)} {...props} />
   ),
 );
+
+/**
+ * 한 줄로 두지 않을 긴 글(작업 설명·경고 등): 이 폭 안에서 줄바꿈한다.
+ * 칸(TableCell)에 바로 붙여도 휴대폰 폭의 한 줄 규칙을 덮도록 max-sm 도 함께 둔다.
+ */
+const TABLE_WRAP_TEXT = "min-w-[220px] whitespace-normal max-sm:whitespace-normal";
 TableCell.displayName = "TableCell";
 
-export { Table, TableHeader, TableBody, TableRow, TableHead, SortableTableHead, TableCell };
+export { Table, TableHeader, TableBody, TableRow, TableHead, SortableTableHead, TableCell, TABLE_WRAP_TEXT };
