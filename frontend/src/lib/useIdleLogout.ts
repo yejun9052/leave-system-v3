@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { create } from "zustand";
 import { authApi } from "@/api/auth";
 import { useAuthStore } from "@/store/auth";
 import { useUnsavedChangesStore } from "@/store/unsavedChanges";
@@ -14,6 +15,9 @@ const RECORD_EVERY_MS = 1_000;
 const KEEPALIVE_EVERY_MS = 2 * 60_000;
 /** 로그아웃 전에 안내를 띄우는 시간 */
 export const IDLE_WARNING_SECONDS = 60;
+
+/** 자동 로그아웃까지 남은 초. 상단 타이머와 안내 창이 함께 본다(꺼져 있으면 null) */
+export const useIdleCountdown = create<{ secondsLeft: number | null }>(() => ({ secondsLeft: null }));
 
 export const IDLE_LOGOUT_NOTICE = "오랫동안 사용하지 않아 자동으로 로그아웃되었습니다. 다시 로그인해 주세요.";
 
@@ -33,6 +37,10 @@ function writeShared(key: string, value: number) {
   }
 }
 
+function setSecondsLeft(secondsLeft: number | null) {
+  useIdleCountdown.setState({ secondsLeft });
+}
+
 /**
  * 자동 로그아웃: 마우스·키보드·터치 입력이 timeoutSeconds 동안 없으면 이 브라우저의 로그인을 끊고 로그인 화면으로 보낸다.
  * <ul>
@@ -43,11 +51,9 @@ function writeShared(key: string, value: number) {
  *   <li>쓰고 있는 동안에는 2분마다 서버에 알려 서버 세션(같은 시간)이 먼저 끝나지 않게 한다.</li>
  * </ul>
  * 저장하지 않은 입력은 저장할 수 없으니 묻지 않고 버린다(마지막 1분 동안 안내를 띄운다).
- *
- * @returns 로그아웃까지 남은 초(안내를 띄울 때만, 아니면 null)
+ * 남은 시간은 1초마다 {@link useIdleCountdown} 에 적는다.
  */
-export function useIdleLogout(timeoutSeconds: number | undefined): number | null {
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+export function useIdleLogout(timeoutSeconds: number | undefined) {
   const lastActivity = useRef(Date.now());
   const lastKeepalive = useRef(Date.now());
 
@@ -58,6 +64,7 @@ export function useIdleLogout(timeoutSeconds: number | undefined): number | null
     lastActivity.current = Date.now();
     lastKeepalive.current = Date.now();
     writeShared(ACTIVITY_KEY, lastActivity.current);
+    setSecondsLeft(timeoutSeconds);
 
     const toLogin = () => {
       if (done) return;
@@ -78,7 +85,7 @@ export function useIdleLogout(timeoutSeconds: number | undefined): number | null
       if (now - lastActivity.current < RECORD_EVERY_MS) return;
       lastActivity.current = now;
       writeShared(ACTIVITY_KEY, now);
-      setSecondsLeft(null);
+      setSecondsLeft(timeoutSeconds); // 다음 1초를 기다리지 않고 타이머를 바로 다시 채운다
       if (now - lastKeepalive.current >= KEEPALIVE_EVERY_MS) {
         lastKeepalive.current = now;
         void authApi.me().catch(() => undefined);
@@ -91,7 +98,7 @@ export function useIdleLogout(timeoutSeconds: number | undefined): number | null
       if (left <= 0) {
         logout();
       } else {
-        setSecondsLeft(left <= IDLE_WARNING_SECONDS * 1000 ? Math.ceil(left / 1000) : null);
+        setSecondsLeft(Math.ceil(left / 1000));
       }
     };
 
@@ -110,6 +117,4 @@ export function useIdleLogout(timeoutSeconds: number | undefined): number | null
       setSecondsLeft(null);
     };
   }, [timeoutSeconds]);
-
-  return secondsLeft;
 }

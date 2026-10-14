@@ -37,7 +37,7 @@ import { Button } from "@/components/ui/button";
 import NotificationBell, { useUnreadNotifications } from "@/components/NotificationBell";
 import LicenseBanner from "@/features/license/LicenseBanner";
 import ForcePasswordChangeDialog from "@/features/auth/ForcePasswordChangeDialog";
-import IdleLogoutWarning from "@/components/IdleLogoutWarning";
+import IdleLogoutWarning, { SessionTimer } from "@/components/IdleLogoutWarning";
 import { useUnsavedChangesStore } from "@/store/unsavedChanges";
 
 interface NavItem {
@@ -140,13 +140,18 @@ export default function AppLayout() {
             <UnreadNotice onOpen={() => setBellOpen(true)} />
           </div>
           <NotificationBell open={bellOpen} onOpenChange={setBellOpen} />
-          {/* 모바일에서는 이름·부서 칸 폭을 묶어 긴 부서 이름이 알림 안내를 밀어내지 않게 */}
-          <div className="max-w-28 text-right sm:max-w-none">
+          {/* 휴대폰에서는 타이머·로그아웃 자리를 위해 이름·부서를 숨긴다(메뉴 아래쪽에 있음) */}
+          <div className="hidden min-w-0 max-w-40 text-right sm:block">
             <p className="truncate text-sm font-medium leading-tight">{user?.name}</p>
             <p className="truncate text-xs text-muted-foreground leading-tight">
               {user?.departmentName ?? "-"}
             </p>
           </div>
+          <SessionTimer />
+          <Button variant="ghost" size="sm" className="shrink-0 px-2" onClick={onLogout} aria-label="로그아웃" title="로그아웃">
+            <LogOut className="h-4 w-4" />
+            <span className="hidden md:inline">로그아웃</span>
+          </Button>
         </header>
         <LicenseBanner />
         <main className="p-4 lg:p-8">
