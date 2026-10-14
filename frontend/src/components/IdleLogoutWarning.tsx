@@ -43,16 +43,16 @@ export default function IdleLogoutWarning({ timeoutSeconds }: { timeoutSeconds: 
   );
 }
 
-/** 상단 바의 자동 로그아웃 타이머(남은 분:초). 마지막 1분은 주황색 */
+/** 상단 바의 세션 만료 타이머(남은 시간 "세션 만료 09:10"). 마지막 1분은 주황색 */
 export function SessionTimer() {
   const secondsLeft = useIdleCountdown((s) => s.secondsLeft);
   if (secondsLeft == null) return null;
   const warn = secondsLeft <= IDLE_WARNING_SECONDS;
-  const time = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
+  const time = `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(secondsLeft % 60).padStart(2, "0")}`;
   return (
     <div
       role="timer"
-      aria-label={`자동 로그아웃까지 ${time}`}
+      aria-label={`세션 만료까지 ${time}`}
       title="마우스·키보드 입력이 없으면 이 시간이 지난 뒤 자동으로 로그아웃됩니다. 입력하면 다시 시작됩니다."
       className={cn(
         "flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm",
@@ -60,7 +60,7 @@ export function SessionTimer() {
       )}
     >
       <Clock className={cn("h-4 w-4", warn && "text-amber-600")} />
-      <span className="hidden xl:inline">자동 로그아웃</span>
+      <span className="hidden xl:inline">세션 만료</span>
       <span className="tabular-nums">{time}</span>
     </div>
   );
