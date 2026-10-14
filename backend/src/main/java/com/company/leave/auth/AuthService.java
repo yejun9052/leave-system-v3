@@ -35,7 +35,10 @@ import org.springframework.security.web.csrf.CsrfLogoutHandler;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class AuthService {
@@ -58,6 +61,8 @@ public class AuthService {
     /** 자동 로그아웃 시간 = 서버 세션 미사용 만료(spring.session.timeout). 화면에 알려 같은 시간으로 로그아웃하게 한다 */
     private final Duration idleTimeout;
     static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofMinutes(10);
+    /** 로그인 성공 뒤 내 정보(부서 이름 등 지연 로딩)를 읽는 짧은 읽기 전용 트랜잭션. {@link #login} 참고 */
+    private final TransactionOperations readOnlyTx;
 
     /** 테스트용: 자동 로그아웃 시간은 기본값 */
     public AuthService(AuthenticationManager authenticationManager,
@@ -69,7 +74,8 @@ public class AuthService {
                        SessionTerminator sessionTerminator,
                        PasswordEncoder passwordEncoder) {
         this(authenticationManager, employeeRepository, auditService, loginAttemptService, securityContextRepository,
-                csrfTokenRepository, sessionTerminator, passwordEncoder, DEFAULT_IDLE_TIMEOUT);
+                csrfTokenRepository, sessionTerminator, passwordEncoder, DEFAULT_IDLE_TIMEOUT,
+                TransactionOperations.withoutTransaction());
     }
 
     @Autowired
@@ -81,8 +87,30 @@ public class AuthService {
                        CsrfTokenRepository csrfTokenRepository,
                        SessionTerminator sessionTerminator,
                        PasswordEncoder passwordEncoder,
-                       @Value("${spring.session.timeout:10m}") Duration idleTimeout) {
+                       @Value("${spring.session.timeout:10m}") Duration idleTimeout,
+                       PlatformTransactionManager transactionManager) {
+        this(authenticationManager, employeeRepository, auditService, loginAttemptService, securityContextRepository,
+                csrfTokenRepository, sessionTerminator, passwordEncoder, idleTimeout, readOnly(transactionManager));
+    }
+
+    private static TransactionOperations readOnly(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setReadOnly(true);
+        return template;
+    }
+
+    AuthService(AuthenticationManager authenticationManager,
+                EmployeeRepository employeeRepository,
+                AuditService auditService,
+                LoginAttemptService loginAttemptService,
+                SecurityContextRepository securityContextRepository,
+                CsrfTokenRepository csrfTokenRepository,
+                SessionTerminator sessionTerminator,
+                PasswordEncoder passwordEncoder,
+                Duration idleTimeout,
+                TransactionOperations readOnlyTx) {
         this.idleTimeout = idleTimeout;
+        this.readOnlyTx = readOnlyTx;
         this.authenticationManager = authenticationManager;
         this.employeeRepository = employeeRepository;
         this.auditService = auditService;
@@ -97,17 +125,25 @@ public class AuthService {
         this.csrfLogoutHandler = new CsrfLogoutHandler(csrfTokenRepository);
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * 로그인. 전체를 트랜잭션으로 묶지 않는다: 묶으면 비밀번호 비교(BCrypt) 동안 DB 연결을 쥐고, 그 안에서
+     * 감사 기록(REQUIRES_NEW)이 연결을 하나 더 기다려, 틀린 로그인을 동시에 많이 보내는 것만으로 연결 풀이
+     * 바닥나 앱 전체가 멈췄다. 이제 조회·기록은 각자 짧은 트랜잭션으로 하고 한 번에 연결 하나만 쓴다.
+     */
     public MeResponse login(LoginRequest request, HttpServletRequest httpRequest,
                             HttpServletResponse httpResponse) {
-        // 브루트포스 방어: 계정이 아니라 접속한 PC(IP)에서 연속 실패가 많으면 그 IP의 로그인 시도를 잠시 막는다
+        // 브루트포스 방어: 같은 PC(IP)에서 연속 실패가 많으면 그 IP의 로그인 시도를 잠시 막는다.
+        // 비밀번호를 비교하기 전에 실패로 먼저 센다(한꺼번에 보내도 10번까지만). 맞으면 아래에서 되돌린다
         String clientIp = httpRequest.getRemoteAddr();
-        java.util.Optional<java.time.Duration> locked = loginAttemptService.lockRemaining(clientIp);
-        if (locked.isPresent()) {
-            LoginLog who = loginIdForLog(request.email());
-            auditService.record(null, who.actor(), "LOGIN", "auth", null,
-                    "로그인 차단(시도 과다): " + who.label() + " · IP " + clientIp, false);
-            long minutes = Math.max(1, (locked.get().toSeconds() + 59) / 60);
+        java.util.Optional<LoginAttemptService.Block> blocked = loginAttemptService.tryAcquire(clientIp, request.email());
+        if (blocked.isPresent()) {
+            // 막힌 동안의 요청은 DB 를 쓰지 않는다. 감사 기록은 IP·차단 기간마다 처음 한 번만
+            if (blocked.get().firstInLock()) {
+                LoginLog who = loginIdForLog(request.email());
+                auditService.record(null, who.actor(), "LOGIN", "auth", null,
+                        "로그인 차단(시도 과다): " + who.label() + " · IP " + clientIp, false);
+            }
+            long minutes = Math.max(1, (blocked.get().remaining().toSeconds() + 59) / 60);
             throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS,
                     "이 PC에서 로그인에 여러 번 실패해 잠시 막혔습니다. " + minutes + "분 후 다시 시도하세요.");
         }
@@ -117,21 +153,24 @@ public class AuthService {
                     UsernamePasswordAuthenticationToken.unauthenticated(request.email(), request.password()));
         } catch (AuthenticationException ex) {
             equalizeTiming(ex, request.password());
-            loginAttemptService.loginFailed(clientIp, request.email());
             LoginLog who = loginIdForLog(request.email());
             auditService.record(null, who.actor(), "LOGIN", "auth", null,
                     "로그인 실패: " + who.label() + " · IP " + clientIp, false);
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
-        Employee employee = employeeRepository.findByEmail(request.email())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
-        if (!employee.isActive()) {
-            throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
-        }
+        // 부서 이름(지연 로딩)까지 읽어야 해서 짧은 읽기 전용 트랜잭션 안에서(open-in-view 꺼짐)
+        MeResponse me = readOnlyTx.execute(status -> {
+            Employee employee = employeeRepository.findByEmail(request.email())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+            if (!employee.isActive()) {
+                throw new BusinessException(ErrorCode.ACCOUNT_INACTIVE);
+            }
+            return MeResponse.from(employee, idleTimeout);
+        });
         loginAttemptService.loginSucceeded(clientIp, request.email());
-        auditService.record(employee.getId(), employee.getName(), "LOGIN", "auth", null, "로그인 성공", true);
-        establishSession(authentication, employee.getId(), httpRequest, httpResponse);
-        return MeResponse.from(employee, idleTimeout);
+        auditService.record(me.id(), me.name(), "LOGIN", "auth", null, "로그인 성공", true);
+        establishSession(authentication, me.id(), httpRequest, httpResponse);
+        return me;
     }
 
     /**

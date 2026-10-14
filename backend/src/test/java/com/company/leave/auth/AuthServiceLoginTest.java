@@ -6,8 +6,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.company.leave.audit.AuditService;
@@ -31,6 +33,7 @@ import org.junit.jupiter.api.DisplayNameGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -206,7 +209,9 @@ class AuthServiceLoginTest {
                 .isInstanceOfSatisfying(BusinessException.class,
                         ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.INVALID_CREDENTIALS));
 
-        verify(loginAttemptService).loginFailed(IP, EMAIL);
+        // 비교 전에 실패로 먼저 셌고(tryAcquire), 틀렸으니 되돌리지 않는다
+        verify(loginAttemptService).tryAcquire(IP, EMAIL);
+        verify(loginAttemptService, never()).loginSucceeded(anyString(), anyString());
         verify(securityContextRepository, never()).saveContext(any(), any(), any());
         assertThat(request.getSession(false)).isNull();
         verify(auditService).record(isNull(), eq("테스트사원 (" + EMAIL + ")"), eq("LOGIN"), eq("auth"), isNull(),
@@ -252,7 +257,8 @@ class AuthServiceLoginTest {
 
     @Test
     void 막힌_IP에서_있는_계정으로_시도하면_사용자_칸에_이름과_아이디를_남기고_그_직원에_연결하지_않는다() {
-        when(loginAttemptService.lockRemaining(IP)).thenReturn(Optional.of(java.time.Duration.ofMinutes(3)));
+        when(loginAttemptService.tryAcquire(IP, EMAIL)).thenReturn(Optional.of(
+                new LoginAttemptService.Block(java.time.Duration.ofMinutes(3), true)));
         when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(직원(EmployeeStatus.ACTIVE)));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), request, response))
@@ -263,8 +269,33 @@ class AuthServiceLoginTest {
     }
 
     @Test
+    void 막힌_동안_두_번째부터는_DB를_쓰지_않고_감사_기록도_남기지_않는다() {
+        when(loginAttemptService.tryAcquire(IP, EMAIL)).thenReturn(Optional.of(
+                new LoginAttemptService.Block(java.time.Duration.ofMinutes(3), false)));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), request, response))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS));
+
+        verifyNoInteractions(employeeRepository, auditService, authenticationManager);
+    }
+
+    @Test
+    void 시도는_비밀번호_비교_전에_먼저_세고_성공하면_되돌린다() {
+        인증에_성공하는_직원(직원(EmployeeStatus.ACTIVE));
+
+        authService.login(new LoginRequest(EMAIL, PASSWORD), request, response);
+
+        InOrder order = inOrder(loginAttemptService, authenticationManager);
+        order.verify(loginAttemptService).tryAcquire(IP, EMAIL);
+        order.verify(authenticationManager).authenticate(any());
+        order.verify(loginAttemptService).loginSucceeded(IP, EMAIL);
+    }
+
+    @Test
     void 접속_IP가_막혀_있으면_인증을_시도하지_않고_남은_시간을_알려준다() {
-        when(loginAttemptService.lockRemaining(IP)).thenReturn(java.util.Optional.of(java.time.Duration.ofSeconds(14 * 60 + 5)));
+        when(loginAttemptService.tryAcquire(IP, EMAIL)).thenReturn(Optional.of(
+                new LoginAttemptService.Block(java.time.Duration.ofSeconds(14 * 60 + 5), true)));
 
         assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), request, response))
                 .isInstanceOfSatisfying(BusinessException.class, ex -> {
