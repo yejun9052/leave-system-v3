@@ -229,8 +229,8 @@ class AuthServiceLoginTest {
         verify(loginAttemptService).loginFailed(IP);
         verify(securityContextRepository, never()).saveContext(any(), any(), any());
         assertThat(request.getSession(false)).isNull();
-        verify(auditService).record(isNull(), eq(EMAIL), eq("LOGIN"), eq("auth"), isNull(),
-                anyString(), eq(false));
+        verify(auditService).record(isNull(), eq("테스트사원 (" + EMAIL + ")"), eq("LOGIN"), eq("auth"), isNull(),
+                eq("로그인 실패: 테스트사원 계정 · IP " + IP), eq(false));
     }
 
     @Test
@@ -267,7 +267,19 @@ class AuthServiceLoginTest {
 
         verify(auditService).record(isNull(), eq("My*** (없는 아이디)"), eq("LOGIN"), eq("auth"), isNull(),
                 eq("로그인 실패: My*** (없는 아이디) · IP " + IP), eq(false));
-        assertThat(authService.loginIdForLog("nobody@company.com")).isEqualTo("no***@company.com");
+        assertThat(authService.loginIdForLog("nobody@company.com").actor()).isEqualTo("no***@company.com");
+    }
+
+    @Test
+    void 막힌_IP에서_있는_계정으로_시도하면_사용자_칸에_이름과_아이디를_남기고_그_직원에_연결하지_않는다() {
+        when(loginAttemptService.lockRemaining(IP)).thenReturn(Optional.of(java.time.Duration.ofMinutes(3)));
+        when(employeeRepository.findByEmail(EMAIL)).thenReturn(Optional.of(직원(EmployeeStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> authService.login(new LoginRequest(EMAIL, PASSWORD), request, response))
+                .isInstanceOf(BusinessException.class);
+
+        verify(auditService).record(isNull(), eq("테스트사원 (" + EMAIL + ")"), eq("LOGIN"), eq("auth"), isNull(),
+                eq("로그인 차단(시도 과다): 테스트사원 계정 · IP " + IP), eq(false));
     }
 
     @Test

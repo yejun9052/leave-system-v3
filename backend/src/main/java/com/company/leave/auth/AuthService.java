@@ -86,9 +86,9 @@ public class AuthService {
         String clientIp = httpRequest.getRemoteAddr();
         java.util.Optional<java.time.Duration> locked = loginAttemptService.lockRemaining(clientIp);
         if (locked.isPresent()) {
-            String who = loginIdForLog(request.email());
-            auditService.record(null, who, "LOGIN", "auth", null,
-                    "로그인 차단(시도 과다): " + who + " · IP " + clientIp, false);
+            LoginLog who = loginIdForLog(request.email());
+            auditService.record(null, who.actor(), "LOGIN", "auth", null,
+                    "로그인 차단(시도 과다): " + who.label() + " · IP " + clientIp, false);
             long minutes = Math.max(1, (locked.get().toSeconds() + 59) / 60);
             throw new BusinessException(ErrorCode.TOO_MANY_LOGIN_ATTEMPTS,
                     "이 PC에서 로그인에 여러 번 실패해 잠시 막혔습니다. " + minutes + "분 후 다시 시도하세요.");
@@ -100,9 +100,9 @@ public class AuthService {
         } catch (AuthenticationException ex) {
             equalizeTiming(ex, request.password());
             loginAttemptService.loginFailed(clientIp);
-            String who = loginIdForLog(request.email());
-            auditService.record(null, who, "LOGIN", "auth", null,
-                    "로그인 실패: " + who + " · IP " + clientIp, false);
+            LoginLog who = loginIdForLog(request.email());
+            auditService.record(null, who.actor(), "LOGIN", "auth", null,
+                    "로그인 실패: " + who.label() + " · IP " + clientIp, false);
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
         Employee employee = employeeRepository.findByEmail(request.email())
@@ -131,18 +131,34 @@ public class AuthService {
     }
 
     /**
-     * 로그인 실패 기록에 남길 아이디. 있는 계정이면 그대로, 없는 아이디면 앞 두 글자만 남기고 가린다:
+     * 로그인 실패·차단 기록의 사용자 칸(actor)과 내용에 넣을 이름(label).
+     * @param actor 사용자 칸: 있는 계정이면 "이름 (아이디)", 없는 아이디면 가린 값
+     * @param label 내용 문구: 있는 계정이면 "이름 계정", 없는 아이디면 가린 값
+     */
+    record LoginLog(String actor, String label) {
+    }
+
+    /**
+     * 로그인 실패 기록에 남길 이름. 실제로 누가 입력했는지 모르므로 그 직원이 한 것으로 연결하지 않고(actorId 없음)
+     * "어느 계정에 대한 시도인지"만 이름과 아이디로 보여 준다. 없는 아이디면 앞 두 글자만 남기고 가린다:
      * 아이디 칸에 비밀번호를 잘못 넣은 경우 평문 비밀번호가 이벤트 로그에 남지 않게.
      */
-    String loginIdForLog(String typed) {
+    LoginLog loginIdForLog(String typed) {
         String id = typed == null ? "" : typed.trim();
-        if (!id.isEmpty() && employeeRepository.findByEmail(id).isPresent()) {
-            return id;
+        if (!id.isEmpty()) {
+            java.util.Optional<Employee> account = employeeRepository.findByEmail(id);
+            if (account.isPresent()) {
+                String name = account.get().getName();
+                String actor = name + " (" + id + ")";
+                // audit_logs.actor_name 은 100자
+                return new LoginLog(actor.length() > 100 ? actor.substring(0, 100) : actor, name + " 계정");
+            }
         }
         int at = id.indexOf('@');
         String local = at >= 0 ? id.substring(0, at) : id;
         String masked = local.substring(0, Math.min(2, local.length())) + "***";
-        return at >= 0 ? masked + id.substring(at) : masked + " (없는 아이디)";
+        String hidden = at >= 0 ? masked + id.substring(at) : masked + " (없는 아이디)";
+        return new LoginLog(hidden, hidden);
     }
 
     /** 현재 세션 삭제 + CSRF 토큰 폐기. */
